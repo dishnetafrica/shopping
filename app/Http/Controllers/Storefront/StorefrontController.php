@@ -835,7 +835,8 @@ class StorefrontController extends Controller
         $floor = \App\Services\Pricing\PriceResolver::floorFor($tenant);
         $hasDlr = \Illuminate\Support\Facades\Schema::hasColumn('products', 'dealer_price');
         $prices = [];
-        $q = Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)->whereNull('archived_at');
+        // v4.54 — dealers are customers. A hidden line is not priced for them either.
+        $q = \App\Services\Catalog\Visibility::scope(Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)->whereNull('archived_at'), $tenant);
         foreach ($q->get(array_merge(['id', 'price', 'cost_price'], $hasDlr ? ['dealer_price'] : [])) as $p) {
             [$dp, $src] = \App\Services\Pricing\PriceResolver::compute(
                 (float) ($p->price ?? 0),
@@ -937,7 +938,11 @@ class StorefrontController extends Controller
                 $specMap = [];
             }
 
-            return Product::where('active', true)->orderByDesc('display_order')->orderBy('name')
+            // v4.54 — hidden products never enter the public feed. This one query feeds the
+            // product grid, the storefront's own search box and the category tiles, so filtering
+            // here covers all three; anything added downstream inherits it for free.
+            return \App\Services\Catalog\Visibility::scope(Product::where('active', true), $tenant)
+                ->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
                 ->get(array_merge(
                     ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at', 'sku',
@@ -1483,7 +1488,7 @@ class StorefrontController extends Controller
     {
         try {
             return \Illuminate\Support\Facades\Cache::remember('trending:' . $tenant->id, now()->addMinutes(10), function () use ($tenant) {
-                return \Illuminate\Support\Facades\DB::table('product_events')
+                $ids = \Illuminate\Support\Facades\DB::table('product_events')
                     ->where('tenant_id', $tenant->id)
                     ->where('created_at', '>=', now()->subDays(3))
                     ->whereNotNull('product_id')
@@ -1495,6 +1500,11 @@ class StorefrontController extends Controller
                     ->pluck('product_id')
                     ->map(fn ($x) => (int) $x)
                     ->all();
+
+                // v4.54 — this rail counts EVENTS and never joins products, so on its own it would
+                // happily publish a hidden id that no other surface exposes. A product hidden AFTER
+                // people had already viewed it is exactly the case that leaks here.
+                return \App\Services\Catalog\Visibility::visibleIds($tenant, $ids);
             });
         } catch (\Throwable $e) {
             return [];
@@ -1573,8 +1583,10 @@ class StorefrontController extends Controller
     private function liveCategories(Tenant $tenant): array
     {
         return \Illuminate\Support\Facades\Cache::remember('sf_cats:'.$tenant->id, 600, function () use ($tenant) {
-            return \App\Models\Product::withoutGlobalScopes()
-                ->where('tenant_id', $tenant->id)->where('active', true)
+            // v4.54 — a hidden department must not appear as a chip, must not get a /c/ landing
+            // page, and must not inflate a public count.
+            return \App\Services\Catalog\Visibility::scope(\App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true), $tenant)
                 ->whereNotNull('category')->where('category', '!=', '')
                 ->selectRaw('category, count(*) as n')->groupBy('category')
                 ->orderBy('category')->pluck('n', 'category')->all();
@@ -1683,7 +1695,9 @@ class StorefrontController extends Controller
         }
         // v4.27 — every active product on a normal shop has its own page at /p/{slug}-{id}.
         if (\App\Support\Vertical::of($tenant) !== \App\Support\Vertical::AUTO_PARTS) {
-            Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)
+            // v4.54 — a hidden product must not be handed to Google. The sitemap leaks harder
+            // than any other surface: it publishes the URL even when nothing links to it.
+            \App\Services\Catalog\Visibility::scope(Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true), $tenant)
                 ->orderBy('id')->limit(5000)->get(['id', 'name'])
                 ->each(function ($p) use (&$urls) {
                     $urls[] = '<url><loc>' . e(url('/p/' . self::productSlug($p))) . '</loc><changefreq>weekly</changefreq></url>';

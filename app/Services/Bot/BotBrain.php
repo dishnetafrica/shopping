@@ -1714,7 +1714,8 @@ class BotBrain
     /** List a whole category's items when the customer names a category. */
     protected function tryCategoryName(Tenant $tenant, Conversation $convo, string $text, array $catalogue): ?string
     {
-        $res = (new \App\Services\Bot\CatalogueMatcher())->categoryByName($text, $catalogue);
+        // v4.54 — browsing a category never lists a hidden line, even if the category itself is open.
+        $res = (new \App\Services\Bot\CatalogueMatcher())->categoryByName($text, \App\Services\Catalog\Visibility::filterRows($tenant, $catalogue));
         if ($res === null || count($res['products']) === 0) return null;
 
         $cur   = $this->currencyFor($tenant);
@@ -1738,7 +1739,7 @@ class BotBrain
 
     protected function tryCategoryBrowse(Tenant $tenant, Conversation $convo, string $text, array $catalogue): ?string
     {
-        $res = (new \App\Services\Bot\CatalogueMatcher())->categoryBrowse($text, $catalogue, 20);
+        $res = (new \App\Services\Bot\CatalogueMatcher())->categoryBrowse($text, \App\Services\Catalog\Visibility::filterRows($tenant, $catalogue), 20);
         if ($res === null) return null;
 
         $cur   = $this->currencyFor($tenant);
@@ -2593,6 +2594,11 @@ class BotBrain
                 'product_type' => (string) ($p->product_type ?? ''),   // drives matcher +250 tier
                 'price'        => Pricing::net($tenant, (float) $p->price),
                 'stock'        => $p->stock ?? 1,
+                // v4.54 — hidden rows STAY in this array on purpose. Searching by name has to find
+                // them ("do you have two apple?" is a customer asking, and asking gets answered);
+                // it is BROWSING that must not list them, so the flag rides along and the browse
+                // call sites drop it. Removing them here would make the bot deny stock it holds.
+                'hidden'       => \App\Services\Catalog\Visibility::hides($tenant, $p),
             ])->all();
     }
 

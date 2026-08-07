@@ -43,6 +43,17 @@ final class CategoryListCapability implements ProcessCapability
                 'catalog'  => $n > 0
                     ? ['value' => 'Catalogue', 'href' => '/api/v1/doc/catalog?category=' . rawurlencode((string) $c->name), 'icon' => 'download']
                     : ['value' => ''],
+                // v4.54 — the switch that takes a whole department off the shelf. It stays in stock,
+                // in reports and in campaigns; it stops appearing anywhere a customer can browse.
+                'visible'  => [
+                    'value' => $isActive ? 'Hide' : 'Show',
+                    'icon'  => $isActive ? 'eye-off' : 'eye',
+                    'post'  => '/api/v1/workspace/categories/_/toggle_visible',
+                    'body'  => ['name' => (string) $c->name],
+                    'confirm' => $isActive
+                        ? 'Hide "' . $c->name . '" from customers? It stays in stock and in your reports, and you can still sell it by WhatsApp — it just stops showing on the website, in the catalogue and in the bot\'s suggestions.'
+                        : 'Show "' . $c->name . '" to customers again?',
+                ],
                 // Clicking the row opens the Products list, server-filtered to this category (like the panel).
                 'link'     => $n > 0 ? 'scope:products:category:' . rawurlencode((string) $c->name) : null,
             ];
@@ -54,6 +65,7 @@ final class CategoryListCapability implements ProcessCapability
             ['key' => 'category', 'label' => 'Category', 'type' => 'avatar', 'sortable' => true],
             ['key' => 'products', 'label' => 'Products', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',   'type' => 'badge', 'sortable' => true],
+            ['key' => 'visible',  'label' => 'Customers', 'type' => 'action', 'sortable' => false],
             ['key' => 'catalog',  'label' => 'Catalogue', 'type' => 'action', 'sortable' => false],
         ];
 
@@ -95,6 +107,21 @@ final class CategoryListCapability implements ProcessCapability
             );
 
             return ['ok' => true, 'id' => (int) $c->id, 'message' => 'Category "' . $c->name . '" ' . ($c->wasRecentlyCreated ? 'added' : 'already exists') . '.'];
+        }
+
+        if ($action === 'toggle_visible') {
+            $name = trim((string) ($input['name'] ?? ''));
+            $c = Category::where('tenant_id', $ctx->tenantId())->where('name', $name)->first();
+            if (! $c) {
+                return ['ok' => false, 'error' => 'not_found', 'message' => 'No category called "' . $name . '".'];
+            }
+            // The model's own saved() hook drops every cached product list, so the change is live on
+            // the storefront and in the bot on the next request rather than up to ten minutes later.
+            $c->active = ! ($c->active !== false);
+            $c->save();
+
+            return ['ok' => true, 'message' => '"' . $c->name . '" is now ' .
+                ($c->active ? 'visible to customers.' : 'hidden from customers — still yours to sell by WhatsApp.')];
         }
 
         return ['ok' => false, 'error' => 'unknown_action'];

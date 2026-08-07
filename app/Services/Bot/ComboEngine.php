@@ -109,7 +109,8 @@ class ComboEngine
             try {
                 $cat = Product::where('id', $productId)->value('category');
                 if (! $cat) return [];
-                $ids = Product::where('active', true)
+                // v4.54 — an upsell is an offer, and a hidden line is never offered.
+                $ids = \App\Services\Catalog\Visibility::scope(Product::where('active', true), $tenantId)
                     ->whereRaw('LOWER(TRIM(category)) = ?', [mb_strtolower(trim((string) $cat))])
                     ->pluck('id')->map(fn ($v) => (int) $v)->all();
                 $pop = array_flip($this->popularIds($tenantId));
@@ -127,7 +128,7 @@ class ComboEngine
         $orderedIds = array_values(array_filter(array_map('intval', $orderedIds), fn ($id) => $id > 0 && ! isset($exclude[$id])));
         if (! $orderedIds) return [];
 
-        $byId = Product::where('active', true)->whereIn('id', $orderedIds)
+        $byId = \App\Services\Catalog\Visibility::scope(Product::where('active', true)->whereIn('id', $orderedIds), $tenantId)
             ->get(['id', 'name', 'base_price', 'price'])->keyBy('id');
 
         $out = [];

@@ -94,7 +94,8 @@ final class DocumentController extends Controller
     public function priceList(Request $r)
     {
         $t = $r->user()->tenant;
-        $products = Product::where('tenant_id', $t->id)->where('active', true)
+        // v4.54 — a price list is a customer document, whoever pressed the button.
+        $products = \App\Services\Catalog\Visibility::scope(Product::where('tenant_id', $t->id)->where('active', true), $t)
             ->orderBy('category')->orderBy('name')->get();
         if ($products->isEmpty()) {
             abort(404, 'No active products');
@@ -127,7 +128,7 @@ final class DocumentController extends Controller
         $t = $r->user()->tenant;
         $one = trim((string) $r->query('category', ''));
 
-        $q = Product::where('tenant_id', $t->id)->where('active', true);
+        $q = \App\Services\Catalog\Visibility::scope(Product::where('tenant_id', $t->id)->where('active', true), $t);   // v4.54
         if ($one !== '') {
             $q->whereRaw('LOWER(COALESCE(category, \'\')) = ?', [mb_strtolower($one)]);
         }

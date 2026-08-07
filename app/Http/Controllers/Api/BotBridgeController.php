@@ -104,9 +104,10 @@ class BotBridgeController extends Controller
         if (! $t) return response()->json(['ok' => false, 'error' => 'unauthorized'], 401);
 
         $products = Cache::remember("bot_catalog:{$t->id}", 60, function () use ($t) {
-            return \App\Models\Product::withoutGlobalScopes()
+            // v4.54 — this whole-catalogue dump answers customers through the external bot.
+            return \App\Services\Catalog\Visibility::scope(\App\Models\Product::withoutGlobalScopes()
                 ->where('tenant_id', $t->id)
-                ->where('active', true)
+                ->where('active', true), $t)
                 ->orderBy('name')
                 ->get()
                 ->map(fn ($p) => [

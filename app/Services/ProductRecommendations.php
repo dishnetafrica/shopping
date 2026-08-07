@@ -30,10 +30,15 @@ class ProductRecommendations
     /** Base "buyable" filter: explicit tenant, live, priced, not archived. */
     private static function buyable($query, int $tenantId)
     {
-        return $query->where('products.tenant_id', $tenantId)
-            ->where('products.active', true)
-            ->where('products.price', '>', 0)
-            ->whereNull('products.archived_at');
+        // v4.54 — the single gate for similar / top-in-category / also-bought. A hidden product is
+        // never recommended, which is why this one edit covers all three rails.
+        return \App\Services\Catalog\Visibility::scope(
+            $query->where('products.tenant_id', $tenantId)
+                ->where('products.active', true)
+                ->where('products.price', '>', 0)
+                ->whereNull('products.archived_at'),
+            $tenantId
+        );
     }
 
     /** Same category, excluding the current product. Ordered by units sold, then newest. */

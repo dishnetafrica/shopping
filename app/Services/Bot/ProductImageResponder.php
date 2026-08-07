@@ -70,7 +70,8 @@ class ProductImageResponder
         // ---- CATEGORY browse: "show sweets" / a bare category name -> up to 5 short cards.
         $cat = $this->matchCategory($tenant, $t);
         if ($cat !== null) {
-            $rows = Product::where('active', true)
+            // v4.54 — browsing a category never sends photos of a hidden line.
+            $rows = \App\Services\Catalog\Visibility::scope(Product::where('active', true), $tenant)
                 ->whereRaw('LOWER(TRIM(category)) = ?', [mb_strtolower($cat)])
                 ->whereNotNull('image_url')->where('image_url', '<>', '')
                 ->orderByDesc('display_order')->orderBy('name')
@@ -256,7 +257,8 @@ class ProductImageResponder
         $body = trim((string) preg_replace('/^(show me|show|see|browse|view|list)\s+/u', '', $t));
         if ($body === '') return null;
 
-        $cats = Product::where('active', true)->whereNotNull('category')
+        // v4.54 — a hidden department is not offered as something to browse.
+        $cats = \App\Services\Catalog\Visibility::scope(Product::where('active', true), $tenant)->whereNotNull('category')
             ->distinct()->pluck('category')->filter()->values()->all();
         $extra = $tenant->setting('category_extra', []);
         if (is_array($extra)) $cats = array_merge($cats, $extra);

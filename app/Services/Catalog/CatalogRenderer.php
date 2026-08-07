@@ -251,8 +251,10 @@ final class CatalogRenderer
                 }
             }
 
-            $products = \App\Models\Product::withoutGlobalScopes()
-                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0)
+            // v4.54 — this catalogue goes straight to customers on WhatsApp. A hidden line printed
+            // here is the same leak as one on the website, only harder to notice.
+            $products = \App\Services\Catalog\Visibility::scope(\App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0), $tenant)
                 ->orderBy('category')->orderBy('name')->get();
             if ($products->isEmpty()) return null;
 
@@ -319,8 +321,9 @@ final class CatalogRenderer
                 }
             }
 
-            $products = \App\Models\Product::withoutGlobalScopes()
-                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0)
+            // v4.54 — asking for a hidden category by name must produce nothing, not a PDF of it.
+            $products = \App\Services\Catalog\Visibility::scope(\App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0), $tenant)
                 ->whereRaw("LOWER(COALESCE(category, '')) = ?", [mb_strtolower($cat, 'UTF-8')])
                 ->orderBy('name')->get();
             if ($products->isEmpty()) {

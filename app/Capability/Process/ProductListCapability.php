@@ -167,6 +167,12 @@ final class ProductListCapability implements ProcessCapability
      * UNION of the Category table and every category string actually used on products — so a product's
      * own category is never missing from the list, and a brand-new category can be typed in freely.
      */
+    /**
+     * v4.54 — 'Hide from customers' on the product form. The category switch covers a whole
+     * department; this covers the one-off — a restricted line sitting in an otherwise ordinary
+     * category. Hidden means off every customer-facing surface, not inactive: it keeps its stock,
+     * its cost, its margin, its reports, and it can still be sold by WhatsApp and by campaign.
+     */
     public static function formSchema(int $tenantId): array
     {
         $fromTable = Category::where('tenant_id', $tenantId)->pluck('name');
@@ -191,6 +197,7 @@ final class ProductListCapability implements ProcessCapability
             'sku'            => 'text',
             'barcode'        => 'text',
             'description'    => 'text',
+            'hidden'         => \Illuminate\Support\Facades\Schema::hasColumn('products', 'hidden') ? 'enum:no,yes' : null,
             'photos'         => 'gallery',
         ]);
     }

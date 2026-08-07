@@ -1785,6 +1785,12 @@ class AiBrain
             $products = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('active', true)
                 ->orderBy('name')->limit($lim)->get();
+            // v4.54 — stamp each row so the line builder can mark the off-catalogue ones. Deliberately
+            // NOT filtered: a customer who was sent an advert and asks by name must get an answer.
+            $hiddenCats = \App\Services\Catalog\Visibility::hiddenCategories($tenant);
+            foreach ($products as $p) {
+                $p->hidden = \App\Services\Catalog\Visibility::isHidden((string) ($p->category ?? ''), $p->hidden ?? null, $hiddenCats);
+            }
             $inv->prime($products);   // one query for all snapshots
             return $products->map(function ($p) use ($inv) {
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
@@ -1802,7 +1808,9 @@ class AiBrain
                 if ($note !== '') {
                     $use = ' — ' . $note;
                 }
-                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$use} [{$inv->botTag($p)}]";
+                $off = ($p->hidden ?? false) ? ' [OFF-CATALOGUE: never mention or list this unless the customer names it first]' : '';
+
+                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$use} [{$inv->botTag($p)}]{$off}";
             })->all();
         });
         return implode("\n", $rows);
@@ -1818,8 +1826,10 @@ class AiBrain
     private function catalogueOverview(Tenant $tenant): string
     {
         return Cache::remember("ai_catalogue_overview:{$tenant->id}", 300, function () use ($tenant) {
-            $products = Product::withoutGlobalScopes()
-                ->where('tenant_id', $tenant->id)->where('active', true)
+            // v4.54 — this is the "here is what we sell" summary. A hidden department named here
+            // is the bot volunteering it, which is exactly what hidden means it must not do.
+            $products = \App\Services\Catalog\Visibility::scope(Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true), $tenant)
                 ->get(['name', 'category']);
             $total = $products->count();
             if ($total === 0) return '';

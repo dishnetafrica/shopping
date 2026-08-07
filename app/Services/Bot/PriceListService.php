@@ -29,9 +29,10 @@ class PriceListService
     {
         if (! $this->available()) return null;
 
-        $products = Product::withoutGlobalScopes()
+        // v4.54 — sent to a customer on request; hidden lines stay off it.
+        $products = \App\Services\Catalog\Visibility::scope(Product::withoutGlobalScopes()
             ->where('tenant_id', $tenant->id)
-            ->where('active', true)
+            ->where('active', true), $tenant)
             ->orderBy('name')
             ->limit(300)
             ->get();

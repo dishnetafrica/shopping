@@ -92,7 +92,7 @@ class DailyOfferService
         }
 
         // Priority 2 — Fresh Today products (no live poster, but items flagged fresh).
-        $fresh = Product::where('active', true)->where('is_fresh_today', true)->orderBy('name')->limit(8)->get();
+        $fresh = \App\Services\Catalog\Visibility::scope(Product::where('active', true)->where('is_fresh_today', true), $tenant)->orderBy('name')->limit(8)->get();
         if ($fresh->isNotEmpty()) {
             $lines = ['🔥 *Fresh today:*'];
             foreach ($fresh as $p) {

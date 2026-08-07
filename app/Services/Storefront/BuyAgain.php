@@ -73,9 +73,11 @@ final class BuyAgain
 
         // Keep only products that still exist and are active, so the rail never shows a dead item.
         $ids = array_values(array_filter(array_map(fn ($r) => $r['id'], $rows)));
+        // v4.54 — a hidden line stays off the rail even for someone who bought it before, so the
+        // storefront never lists it back to them.
         $activeIds = $ids
-            ? Product::where('tenant_id', $tenantId)->whereIn('id', $ids)
-                ->where('active', true)->whereNull('archived_at')->pluck('id')->all()
+            ? \App\Services\Catalog\Visibility::scope(Product::where('tenant_id', $tenantId)->whereIn('id', $ids)
+                ->where('active', true)->whereNull('archived_at'), $tenantId)->pluck('id')->all()
             : [];
         $activeIds = array_flip($activeIds);
 

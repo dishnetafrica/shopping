@@ -56,6 +56,15 @@ final class ProductWriteService
     private function detailColumns(array $d, bool $onlyPresent = false): array
     {
         $out = [];
+
+        // v4.54 — 'hidden' takes the product off every customer-facing surface without deactivating
+        // it. Handled ahead of the string columns because it is a boolean, and the loop below writes
+        // '' as null, which for this column would read as visible and quietly un-hide things.
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'hidden')
+            && (! $onlyPresent || array_key_exists('hidden', $d))) {
+            $out['hidden'] = in_array(mb_strtolower(trim((string) ($d['hidden'] ?? ''))), ['1', 'yes', 'y', 'true', 'on', 'hidden'], true);
+        }
+
         foreach (['brand', 'sku', 'barcode', 'description', 'unit_size', 'origin_country'] as $col) {
             if ($onlyPresent && ! array_key_exists($col, $d)) {
                 continue;

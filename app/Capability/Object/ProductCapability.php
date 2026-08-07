@@ -53,7 +53,10 @@ final class ProductCapability implements ObjectCapability
 
         $edit = ['key' => 'edit_product', 'label' => 'Edit', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/update_product', 'actor' => 'human', 'tone' => 'primary',
             'schema' => ProductListCapability::formSchema($ctx->tenantId()),
-            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'photos' => $photos]];
+            // v4.54 — spelled out rather than labelled "Hidden", because the two things staff get
+            // wrong here are thinking it deletes the product and thinking it stops them selling it.
+            'labels' => ['hidden' => 'Hide from customers (stays in stock and reports; still sellable on WhatsApp)'],
+            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'hidden' => ($p->hidden ?? false) ? 'yes' : 'no', 'photos' => $photos]];
         $archive = ['key' => 'archive_product', 'label' => 'Archive', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/archive_product', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Archive "' . $p->name . '"? It will be hidden from the catalogue but kept for order history.'];
 
         // Asset Lifecycle · Product Specifications (S1b) — show this product's specs on the detail page
