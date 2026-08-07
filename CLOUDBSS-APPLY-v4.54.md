@@ -1,4 +1,10 @@
-# v4.54 — Hidden products
+# v4.54.1 — Hidden products
+
+> **v4.54 broke the storefront. This is the fix.** The catalogue closure had no `use` list — it had
+> never needed the tenant, because the global scope supplied it — so the visibility filter I added
+> inside it referenced an undefined variable. Laravel turns that warning into an exception, and
+> `/{shop}/catalogue` answered 500 to every customer. One line. If you applied v4.54, apply this
+> immediately; if you have not, apply this instead of it.
 
 **Needs a migration.** Unzip, `php artisan migrate`, `php artisan optimize:clear`.
 

@@ -896,7 +896,11 @@ class StorefrontController extends Controller
 
         // Cache the built feed for a few minutes so a large catalogue is not re-hydrated
         // on every page load, and use toBase()+column select to avoid loading full models.
-        $rows = \Illuminate\Support\Facades\Cache::remember('catalogue:' . $tenant->id, now()->addMinutes(5), function () {
+        // v4.54 — `use ($tenant)` added. This closure never needed the tenant before (the global scope
+        // supplied it), and the visibility filter below is the first thing inside it to name $tenant.
+        // Without this the variable is undefined, Laravel promotes the warning to an ErrorException,
+        // and the whole catalogue endpoint answers 500 — which is exactly what happened.
+        $rows = \Illuminate\Support\Facades\Cache::remember('catalogue:' . $tenant->id, now()->addMinutes(5), function () use ($tenant) {
             // Modifier groups per product (restaurant customisation), keyed by product id.
             $mods = [];
             try {
