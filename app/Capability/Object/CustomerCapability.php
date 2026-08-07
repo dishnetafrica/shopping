@@ -325,6 +325,16 @@ final class CustomerCapability implements ObjectCapability
         $held     = \App\Services\Money\CreditOnAccount::heldFor($ctx->tenant, $phone);
         $heldText = $held ? \App\Services\Money\CreditOnAccount::describe($held) : '';
 
+        // v4.56 — what this customer does not buy that customers like them do. Every row carries the
+        // raw counts rather than a score, because "7 of the 9 customers who buy Aluminium Foil also
+        // buy Cling Film" can be argued with and "78% confidence" cannot.
+        $gaps = [];
+        try {
+            $gaps = app(\App\Services\Growth\CrossSellService::class)->forCustomer($ctx->tenant, $phone);
+        } catch (\Throwable $e) {
+            $gaps = [];   // a suggestion is never worth breaking the customer record for
+        }
+
         // Account statement tab = running ledger + any credit notes + any credit we are sitting on.
         $financialsCards = [];
         if ($cnRows) {
@@ -354,6 +364,18 @@ final class CustomerCapability implements ObjectCapability
             'balance' => $r['balanceText'] ?? '', 'link' => $r['link'],
         ], $stmt['rows']);
 
+        if ($gaps) {
+            $overviewCards[] = ['kind' => 'table', 'title' => 'Not buying yet',
+                'sub' => 'Bought by customers who buy what they buy — worth asking about',
+                'columns' => [['label' => 'Product'], ['label' => 'Why'], ['label' => 'Price', 'align' => 'right']],
+                'rows' => array_map(fn ($g) => [
+                    (string) $g['product'],
+                    (string) $g['sentence'],
+                    $fmt((float) $g['value']),
+                ], $gaps),
+                'empty' => 'Nothing obvious'];
+        }
+
         // --- next best action ---
         if ($balance > 0 && $heldText !== '') {
             // Both at once is the case worth catching. Chasing someone for money while sitting on
@@ -366,6 +388,10 @@ final class CustomerCapability implements ObjectCapability
             $nbaAction = $payAction;
         } elseif ($heldText !== '') {
             $nbaText = 'Nothing owing, but we are holding ' . $heldText . ' of their money. It will go against their next invoice.';
+            $nbaAction = $newQuote;
+        } elseif ($gaps) {
+            $nbaText = ($c->name ?: 'This customer') . ' does not buy ' . $gaps[0]['product'] . '. '
+                . $gaps[0]['sentence'] . ' Worth raising on the next call.';
             $nbaAction = $newQuote;
         } elseif ($ins['status'] === 'prospect') {
             $nbaText = ($c->name ?: 'This prospect') . ' has no orders yet. Send an opening quotation to win the first order.';
