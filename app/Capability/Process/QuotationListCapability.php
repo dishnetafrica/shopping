@@ -40,7 +40,25 @@ final class QuotationListCapability implements ProcessCapability
             ->limit(self::MAX_ROWS)
             ->get();
 
+        // v4.57 — the quotation's own status stops being maintained the moment an order exists, so the
+        // outcome is read from the money instead: quote → order → invoice → what was actually paid.
+        // Two queries for the whole page rather than one per quote.
+        $orderIds = $quotes->pluck('order_id')->filter()->unique()->values();
+        $paidByOrder = [];
+        if ($orderIds->isNotEmpty()) {
+            \App\Models\Invoice::where('tenant_id', $t)
+                ->whereIn('order_id', $orderIds)->where('status', '!=', 'void')
+                ->get(['order_id', 'total', 'amount_paid'])
+                ->each(function ($inv) use (&$paidByOrder) {
+                    $k = (int) $inv->order_id;
+                    $paidByOrder[$k] ??= ['total' => 0.0, 'paid' => 0.0];
+                    $paidByOrder[$k]['total'] += (float) $inv->total;
+                    $paidByOrder[$k]['paid']  += (float) $inv->amount_paid;
+                });
+        }
+
         $awaiting = 0; $accepted = 0; $converted = 0; $openRows = [];
+        $stageRows = []; $stuckCount = 0; $uninvoiced = 0;
         $rows = [];
 
         foreach ($quotes as $q) {
@@ -51,6 +69,21 @@ final class QuotationListCapability implements ProcessCapability
             if (in_array($status, ['sent', 'revised', 'customer_revised'], true)) { $awaiting++; $openRows[] = ['amount' => (float) $q->total, 'currency' => $qcur, 'date' => $qdate]; }
             if (in_array($status, ['accepted', 'converted'], true)) { $accepted++; }
             if ($status === 'converted') { $converted++; }
+
+            $inv = $q->order_id ? ($paidByOrder[(int) $q->order_id] ?? null) : null;
+            $stage = \App\Services\Growth\QuoteToCash::stage([
+                'status' => $status,
+                'sent' => (int) ($q->send_count ?? 0) > 0 || $q->last_sent_at !== null,
+                'viewed' => $q->viewed_at !== null,
+                'accepted' => $q->accepted_at !== null,
+                'orderId' => $q->order_id,
+                'invoiced' => $inv !== null,
+                'invoiceTotal' => (float) ($inv['total'] ?? 0),
+                'invoicePaid' => (float) ($inv['paid'] ?? 0),
+            ]);
+            $stageRows[] = ['stage' => $stage, 'value' => $rc->consolidate([['amount' => (float) $q->total, 'currency' => $qcur, 'date' => $qdate]])['amount']];
+            if (\App\Services\Growth\QuoteToCash::isStuck($stage)) { $stuckCount++; }
+            if ($stage === 'won_uninvoiced') { $uninvoiced++; }
 
             $label = ucfirst(str_replace('_', ' ', $status));   // "customer_revised" → "Customer revised"
             $badge = match ($status) {
@@ -75,6 +108,17 @@ final class QuotationListCapability implements ProcessCapability
                 'value'    => ['value' => $rc->line((float) $q->total, $qcur, null, $qdate)['text'], 'sort' => (float) $rc->consolidate([['amount' => (float) $q->total, 'currency' => $qcur, 'date' => $qdate]])['amount']],
                 'valid'    => ['value' => $valid ? $valid->format('d M Y') : '—', 'sort' => $valid ? $valid->timestamp : 0],
                 'status'   => ['value' => $label, 'badge' => $badge],
+                // v4.57 — what happened to the MONEY, which the status field stops tracking once an
+                // order exists. "Ordered, never invoiced" is the one nothing else in the system shows:
+                // Collections reads invoices, and for these there is no invoice to read.
+                'outcome'  => ['value' => \App\Services\Growth\QuoteToCash::LABEL[$stage] ?? '—',
+                               'badge' => match ($stage) {
+                                   'paid' => 'ok',
+                                   'won_uninvoiced', 'invoiced_unpaid' => 'danger',
+                                   'part_paid' => 'warn',
+                                   'lost', 'expired' => 'default',
+                                   default => 'info',
+                               }],
                 'created'  => ['value' => $created ? $created->format('d M Y') : '—', 'sort' => $created ? $created->timestamp : 0],
                 'act'      => ['buttons' => $rowBtns],
                 'link'     => $q->order_id ? '/api/v1/workspace/salesOrder/' . $q->order_id : '/api/v1/workspace/quotation/' . $q->id,
@@ -85,6 +129,9 @@ final class QuotationListCapability implements ProcessCapability
         $total = $quotes->count();
         $conv = $total > 0 ? round($converted / $total * 100) : 0;
 
+        $funnel = \App\Services\Growth\QuoteToCash::funnel($stageRows);
+        $cash   = \App\Services\Growth\QuoteToCash::collected($funnel);
+
         $columns = [
             ['key' => 'quote',    'label' => 'Quote #',    'type' => 'strong', 'sortable' => true],
             ['key' => 'customer', 'label' => 'Customer',   'type' => 'avatar', 'sortable' => true],
@@ -92,6 +139,7 @@ final class QuotationListCapability implements ProcessCapability
             ['key' => 'value',    'label' => 'Value',      'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'valid',    'label' => 'Valid until', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',     'type' => 'badge', 'sortable' => true],
+            ['key' => 'outcome',  'label' => 'Outcome',    'type' => 'badge', 'sortable' => true],
             ['key' => 'created',  'label' => 'Created',    'sortable' => true],
             ['key' => 'act',      'label' => '',           'type' => 'action', 'sortable' => false],
         ];
@@ -117,7 +165,15 @@ final class QuotationListCapability implements ProcessCapability
             ->financials([
                 ['key' => 'awaiting', 'label' => 'Awaiting reply', 'value' => $awaiting, 'tone' => $awaiting > 0 ? 'warn' : 'ok', 'foot' => 'sent, no reply'],
                 ['key' => 'accepted', 'label' => 'Accepted', 'value' => $accepted, 'tone' => 'ok', 'foot' => 'accepted or converted'],
-                ['key' => 'conversion', 'label' => 'Conversion rate', 'value' => $conv, 'format' => 'pct', 'foot' => $converted . ' converted to orders'],
+                ['key' => 'conversion', 'label' => 'Turned into orders', 'value' => $conv, 'format' => 'pct', 'foot' => $converted . ' of ' . $quotes->count() . ' quotations'],
+                // The number that was missing. The one above counts orders; this one counts money that
+                // arrived, so a quote that became an order nobody invoiced stops reading as a win.
+                ['key' => 'banked', 'label' => 'Actually paid', 'value' => round($cash['rate'] * 100, 1), 'format' => 'pct',
+                 'tone' => $cash['rate'] >= 0.5 ? 'ok' : 'warn',
+                 'foot' => 'of quoted value, collected'],
+                ['key' => 'stuck', 'label' => 'Won but not collected', 'value' => \App\Capability\Support\Money::fmt($cash['stuck'], $cur),
+                 'tone' => $cash['stuck'] > 0 ? 'danger' : 'ok',
+                 'foot' => $stuckCount . ' quotations' . ($uninvoiced > 0 ? ' · ' . $uninvoiced . ' never invoiced' : '')],
                 ['key' => 'openvalue', 'label' => 'Open value', 'value' => $rc->totalText($openRows), 'foot' => 'awaiting reply'],
             ])
             ->table($columns, $rows, [], [
