@@ -169,19 +169,21 @@ final class CustomerInsight
 
         $rows = [];
         $tenant = $ctx->tenant;
+        // v4.51 — `with('items')` so the description below can name the goods without a query per
+        // invoice. A statement of twenty lines was otherwise twenty extra round trips.
         $byPhone(Invoice::where('tenant_id', $t))
-            ->where('status', '!=', 'void')->get()
+            ->where('status', '!=', 'void')->with('items')->get()
             ->each(function ($i) use (&$rows, $native, $tenant) {
                 // Derive the invoice's true currency from its order — the stored tag is unreliable.
                 $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $tenant);
                 $rows[] = ['t' => $i->issued_at ? Carbon::parse($i->issued_at) : Carbon::parse($i->created_at),
-                    'detail' => 'Invoice ' . $i->invoice_no, 'amt' => (float) $i->total, 'side' => 'dr',
+                    'detail' => self::invoiceDetail($i), 'amt' => (float) $i->total, 'side' => 'dr',
                     'cur' => $icur, 'usd' => null,
                     'link' => '/api/v1/workspace/invoice/' . $i->id];
             });
         $byPhone(CustomerPayment::where('tenant_id', $t))->get()
             ->each(function ($p) use (&$rows, $native) {
-                $rows[] = ['t' => Carbon::parse($p->created_at), 'detail' => 'Payment · ' . ($p->method ?: 'cash'),
+                $rows[] = ['t' => Carbon::parse($p->created_at), 'detail' => self::paymentDetail($p),
                     'amt' => (float) $p->amount, 'side' => 'cr',
                     'cur' => (string) ($p->currency ?: $native), 'usd' => (float) ($p->usd_amount ?? 0) ?: null,
                     'link' => null];
@@ -206,5 +208,91 @@ final class CustomerInsight
         }
 
         return ['rows' => $out, 'balance' => round($bal, 2), 'balanceText' => \App\Capability\Support\Money::fmt(round($bal, 2), $base), 'currency' => $base];
+    }
+
+    /** How long a statement description may run before it starts wrapping the column. */
+    public const DETAIL_MAX = 72;
+
+    /**
+     * v4.51 — what the customer actually bought, not just a document number.
+     *
+     * "Invoice INV-2026-0068" tells the person being asked for money nothing at all; they have to
+     * find the invoice to know what the charge was for, which is exactly the friction that turns a
+     * statement into a phone call. The invoice's own title wins when someone wrote one; otherwise
+     * the goods are named from the lines, longest-carrying first, with a count for the rest.
+     */
+    public static function invoiceDetail($i): string
+    {
+        $base = 'Invoice ' . ($i->invoice_no ?: '');
+        $what = trim((string) ($i->title ?? ''));
+
+        if ($what === '') {
+            try {
+                $names = [];
+                foreach ($i->items as $it) {
+                    $n = trim((string) ($it->name ?? ''));
+                    if ($n === '') continue;
+                    $q = (float) ($it->qty ?? 0);
+                    $names[] = $q > 1 ? ($n . ' ×' . rtrim(rtrim(number_format($q, 2, '.', ''), '0'), '.')) : $n;
+                }
+                if ($names) {
+                    $shown = array_slice($names, 0, 2);
+                    $rest  = count($names) - count($shown);
+                    $what  = implode(', ', $shown) . ($rest > 0 ? ' +' . $rest . ' more' : '');
+                }
+            } catch (\Throwable $e) { /* a description is never worth an error page */ }
+        }
+        if ($what === '') {
+            $what = trim((string) ($i->order_no ?? ''));   // last resort: the order it came from
+        }
+
+        return $what === '' ? $base : self::clip($base . ' · ' . $what);
+    }
+
+    /**
+     * A payment line says how it arrived, its reference, and what it was set against — the three
+     * things a customer checks when they think a payment is missing.
+     */
+    public static function paymentDetail($p): string
+    {
+        $bits = ['Payment · ' . self::methodWords((string) ($p->method ?? ''))];
+        $ref = trim((string) ($p->reference ?? ''));
+        if ($ref !== '') {
+            $bits[] = 'ref ' . $ref;
+        }
+        $against = trim((string) ($p->invoice_no ?? '')) ?: trim((string) ($p->order_no ?? ''));
+        if ($against !== '') {
+            $bits[] = 'against ' . $against;
+        }
+
+        return self::clip(implode(' · ', $bits));
+    }
+
+    /** Stored codes are for us; the customer reading this has never seen the word "momo". */
+    public static function methodWords(string $m): string
+    {
+        $m = strtolower(trim($m));
+        if ($m === '') return 'cash';
+
+        return match (true) {
+            str_contains($m, 'momo') || str_contains($m, 'mobile') => 'Mobile Money',
+            str_contains($m, 'bank')  => 'bank transfer',
+            str_contains($m, 'cash')  => 'cash',
+            str_contains($m, 'cheque') || str_contains($m, 'check') => 'cheque',
+            str_contains($m, 'card')  => 'card',
+            default => $m,
+        };
+    }
+
+    /** Trim on a word boundary — a description cut mid-word reads like a bug. */
+    public static function clip(string $s): string
+    {
+        $s = trim((string) preg_replace('/\s+/u', ' ', $s));
+        if (mb_strlen($s) <= self::DETAIL_MAX) return $s;
+        $cut = mb_substr($s, 0, self::DETAIL_MAX - 1);
+        $sp  = mb_strrpos($cut, ' ');
+        if ($sp !== false && $sp > self::DETAIL_MAX * 0.6) $cut = mb_substr($cut, 0, $sp);
+
+        return rtrim($cut, " ,·") . '…';
     }
 }
