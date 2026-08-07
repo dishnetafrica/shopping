@@ -24,7 +24,22 @@ class SendCampaign implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $timeout = 3600;   // long-running by design (throttled)
+    /**
+     * v4.49 — this used to be one 3600s job for the whole list. At a deliberate 4-9s throttle plus
+     * the send itself, ~15s a message, an hour buys about 240 of them: a 666-person campaign was
+     * being cut off two-thirds of the way through and the run either died or was retried, while
+     * `stats['sent']` — a LOCAL counter that resets every attempt — recorded only the last
+     * attempt's share against the full audience. That is why campaigns read 236/666.
+     *
+     * Now the job sends for a bounded stretch, then hands off to a fresh copy of itself. The
+     * recipient claim already makes that safe: a re-dispatched job skips everyone handled and
+     * carries on where the last one stopped. Status stays 'sending' until the list is genuinely
+     * exhausted, so "Sent" starts meaning sent.
+     */
+    public int $timeout = 900;
+
+    /** Stop sending and hand off after this long, well inside the job timeout. */
+    private const BUDGET_SECONDS = 600;
 
     public function __construct(public int $tenantId, public int $campaignId) {}
 
@@ -42,17 +57,22 @@ class SendCampaign implements ShouldQueue
         $inst = $t->sendInstance();
 
         $stats = is_array($c->stats) ? $c->stats : [];
-        $stats['targeted']   = count($phones);
-        $stats['started_at'] = now()->toIso8601String();
+        $stats['targeted'] = count($phones);
+        if (empty($stats['started_at'])) {
+            $stats['started_at'] = now()->toIso8601String();   // the FIRST chunk starts the clock
+        }
         $c->update(['status' => 'sending', 'stats' => $stats]);
 
-        $sent = 0; $failed = 0; $skipped = 0;
+        $startedAt = time();
+        $moreToDo  = false;
         foreach ($phones as $to) {
+            // Hand off rather than run to the timeout. Everything already claimed is skipped
+            // instantly by the next copy, so it resumes exactly where this one stopped.
+            if (time() - $startedAt >= self::BUDGET_SECONDS) { $moreToDo = true; break; }
             $recipient = \App\Support\Idempotency::recipient((string) $to);
             // 2D — claim this recipient. A retried/restarted job skips anyone already handled.
             if (! \App\Models\CampaignMessage::claim($t->id, $c->id, $recipient)) {
-                $skipped++;
-                continue;
+                continue;   // an earlier chunk already handled this person
             }
             try {
                 if ($c->image_url) {
@@ -62,19 +82,47 @@ class SendCampaign implements ShouldQueue
                 }
                 MessageLog::record($t->id, $to, $inst, 'out', 'system', '[campaign] ' . $caption);
                 \App\Models\CampaignMessage::markSent($c->id, $recipient, null, 'sent');
-                $sent++;
             } catch (\Throwable $e) {
                 \App\Models\CampaignMessage::markSent($c->id, $recipient, null, 'failed');
-                $failed++;
             }
             // Throttle: 4–9s jitter between messages (ban-risk mitigation).
             usleep(random_int(4, 9) * 1000000);
         }
 
-        $stats['sent']        = $sent;
-        $stats['failed']      = $failed;
+        // Counted from campaign_messages, never from a local variable. A local counter restarts at
+        // zero on every chunk and every retry, so the last attempt's total was overwriting the real
+        // one — the single reason a campaign that reached most of its audience reported a third of it.
+        $stats = array_merge($stats, self::tally($c->id));
+
+        if ($moreToDo) {
+            $c->update(['status' => 'sending', 'stats' => $stats]);
+            self::dispatch($this->tenantId, $this->campaignId)->delay(now()->addSeconds(5));
+
+            return;
+        }
+
         $stats['finished_at'] = now()->toIso8601String();
         $c->update(['status' => 'sent', 'stats' => $stats]);
+    }
+
+    /**
+     * The real numbers, straight from the per-recipient ledger.
+     *
+     * `pending` is a claimed recipient whose send never resolved — a job killed mid-flight. It is
+     * surfaced rather than folded into anything else, because a number nobody can explain is how a
+     * campaign report stops being believed.
+     */
+    public static function tally(int $campaignId): array
+    {
+        $by = \Illuminate\Support\Facades\DB::table('campaign_messages')
+            ->where('campaign_id', $campaignId)
+            ->selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status');
+
+        return [
+            'sent'    => (int) ($by['sent'] ?? 0),
+            'failed'  => (int) ($by['failed'] ?? 0),
+            'pending' => (int) ($by['pending'] ?? 0),
+        ];
     }
 
     protected function compose(Campaign $c, ?Tenant $t = null): string

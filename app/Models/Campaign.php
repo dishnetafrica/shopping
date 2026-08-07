@@ -9,7 +9,7 @@ class Campaign extends Model
     use BelongsToTenant;
 
     protected $fillable = [
-        'tenant_id', 'name', 'type', 'audience', 'category', 'message',
+        'tenant_id', 'name', 'campaign_no', 'type', 'audience', 'category', 'message',
         'image_url', 'product_ids', 'cta', 'status', 'scheduled_for', 'stats',
     ];
 

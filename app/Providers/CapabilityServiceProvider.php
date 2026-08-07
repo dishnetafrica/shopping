@@ -53,6 +53,25 @@ final class CapabilityServiceProvider extends ServiceProvider
         // Only when the switch is on, only when a tenant can be resolved, and never fatal: a
         // quotation that cannot be numbered keeps whatever number it already had rather than
         // failing to save. A customer-facing document is worth more than a tidy sequence.
+        // v4.49 — campaigns get CMP-2026-0001 from today onwards. No switch and no legacy mode:
+        // campaigns never had numbering, so there is nothing to preserve and nothing to opt into.
+        // Everything already sent keeps campaign_no null and is left exactly as it was.
+        \App\Models\Campaign::creating(function (\App\Models\Campaign $c) {
+            try {
+                if (trim((string) ($c->campaign_no ?? '')) !== '') {
+                    return;                                  // already numbered (a restore, an import)
+                }
+                $t = $c->tenant_id ? \App\Models\Tenant::find($c->tenant_id) : null;
+                if ($t) {
+                    $c->campaign_no = \App\Services\Marketing\CampaignNumber::next($t);
+                }
+            } catch (\Throwable $e) {
+                // A campaign that cannot be numbered still saves. Losing the send would be worse
+                // than losing the reference.
+                \Log::warning('CampaignNumber: saved without a number — ' . $e->getMessage());
+            }
+        });
+
         \App\Models\Quotation::creating(function (\App\Models\Quotation $q) {
             try {
                 $t = $q->tenant_id ? \App\Models\Tenant::find($q->tenant_id) : null;

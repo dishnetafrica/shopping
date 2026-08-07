@@ -66,13 +66,31 @@ final class CampaignListCapability implements ProcessCapability
             $name = (string) ($c->name ?: ($typeLabels[$c->type] ?? 'Campaign'));
 
             $statusBadge = ['draft' => 'default', 'scheduled' => 'info', 'sending' => 'warn', 'sent' => 'ok'][$status] ?? 'default';
+            // v4.49 — "236 / 666" read as two-thirds of the audience never getting the message. It
+            // was the reporting: `sent` was a per-attempt counter overwritten by the last chunk.
+            // Failures and still-pending sends now show beside it, so the number can be checked
+            // instead of guessed at.
+            $failedN  = (int) ($stats['failed'] ?? 0);
+            $pendingN = (int) ($stats['pending'] ?? 0);
+            $reachSub = trim(implode(' · ', array_filter([
+                $failedN > 0 ? $failedN . ' failed' : '',
+                $pendingN > 0 ? $pendingN . ' unresolved' : '',
+            ]))) ?: null;
             $reach = $status === 'sent'
-                ? ['value' => number_format($sent) . ($targeted ? ' / ' . number_format($targeted) : ''), 'tone' => 'ok', 'sort' => $sent]
-                : ($status === 'sending' ? ['value' => 'sending…', 'tone' => 'warn', 'sort' => 0] : ['value' => '—', 'sort' => 0]);
+                ? array_filter(['value' => number_format($sent) . ($targeted ? ' / ' . number_format($targeted) : ''),
+                                'sub' => $reachSub, 'tone' => ($failedN > 0 || $pendingN > 0) ? 'warn' : 'ok', 'sort' => $sent])
+                : ($status === 'sending' ? ['value' => 'sending…', 'sub' => $sent ? number_format($sent) . ' so far' : null, 'tone' => 'warn', 'sort' => 0] : ['value' => '—', 'sort' => 0]);
 
             $btns = [];
             if ($canEdit) {
                 $btns[] = ['icon' => 'edit', 'title' => 'Edit campaign', 'action' => $this->editForm($c, $comboCats, $typeLabels, $audLabels, $business, $curCode, $curDec)];
+            }
+            // v4.49 — a SENT campaign cannot be re-sent: the per-recipient claim would skip
+            // everyone and quietly deliver nothing. Duplicating makes a NEW campaign — new id, new
+            // number, fresh claims — which is the only thing that actually sends again.
+            if ($canEdit) {
+                $btns[] = ['icon' => 'copy', 'title' => 'Duplicate for another day',
+                    'action' => $this->editForm($c, $comboCats, $typeLabels, $audLabels, $business, $curCode, $curDec, true)];
             }
             if ($canSend && in_array($status, ['draft', 'scheduled'], true)) {
                 $btns[] = ['icon' => 'bolt', 'title' => 'Send now', 'tone' => 'primary', 'action' => [
@@ -121,14 +139,18 @@ final class CampaignListCapability implements ProcessCapability
     }
 
     /** Create (null) or edit a campaign — POST JSON to the proven /papi/campaign/save endpoint. */
-    private function editForm(?Campaign $c, string $comboCats, array $typeLabels, array $audLabels, string $business = 'Your business', string $curCode = 'UGX', int $curDec = 0): array
+    private function editForm(?Campaign $c, string $comboCats, array $typeLabels, array $audLabels, string $business = 'Your business', string $curCode = 'UGX', int $curDec = 0, bool $asCopy = false): array
     {
-        $isEdit = $c !== null;
+        // A copy prefills from an existing campaign but saves as a NEW one: no id in the body, and
+        // the schedule deliberately blank so a date has to be chosen rather than inherited from a
+        // send that already happened.
+        $isEdit = $c !== null && ! $asCopy;
         $whenPrefill = ($isEdit && $c->scheduled_for) ? Carbon::parse($c->scheduled_for)->format('Y-m-d\TH:i') : '';
+        $src = $c;   // the record to prefill FROM, even when saving as new
 
         // On edit, resolve any already-attached products so the picker shows them as chips (with photos).
         $attached = [];
-        if ($isEdit && is_array($c->product_ids) && $c->product_ids) {
+        if ($src && is_array($src->product_ids) && $src->product_ids) {
             $attached = Product::where('tenant_id', $c->tenant_id)->whereIn('id', $c->product_ids)
                 ->get(['id', 'name', 'price', 'image_url'])
                 ->map(fn ($p) => ['id' => (int) $p->id, 'name' => (string) $p->name, 'price' => round((float) $p->price, 2), 'image' => (string) ($p->image_url ?: '')])
@@ -136,8 +158,9 @@ final class CampaignListCapability implements ProcessCapability
         }
 
         return [
-            'key' => $isEdit ? 'edit_campaign' : 'new_campaign',
-            'label' => $isEdit ? ('Edit campaign — ' . ($c->name ?: 'Campaign')) : 'New campaign',
+            'key' => $asCopy ? 'copy_campaign' : ($isEdit ? 'edit_campaign' : 'new_campaign'),
+            'label' => $asCopy ? ('Send again — ' . ($src->name ?: 'Campaign'))
+                : ($isEdit ? ('Edit campaign — ' . ($c->name ?: 'Campaign')) : 'New campaign'),
             'method' => 'POST', 'endpoint' => '/papi/campaign/save', 'actor' => 'human', 'tone' => 'primary',
             'schema' => [
                 'name' => 'text', 'type' => 'enum:' . self::TYPES, 'audience' => 'enum:' . self::AUDIENCES,
@@ -165,9 +188,11 @@ final class CampaignListCapability implements ProcessCapability
                 'currency'     => $curCode,
                 'dec'          => $curDec,
             ],
-            'prefill' => $isEdit
-                ? ['name' => (string) $c->name, 'type' => (string) ($c->type ?: 'promotion'), 'audience' => (string) ($c->audience ?: 'all'), 'category' => (string) $c->category, 'message' => (string) $c->message, 'cta' => (string) ($c->cta ?: 'Reply BUY to order instantly.'), 'image_url' => (string) $c->image_url, 'scheduled_for' => $whenPrefill]
+            'prefill' => $src
+                ? ['name' => (string) $src->name, 'type' => (string) ($src->type ?: 'promotion'), 'audience' => (string) ($src->audience ?: 'all'), 'category' => (string) $src->category, 'message' => (string) $src->message, 'cta' => (string) ($src->cta ?: 'Reply BUY to order instantly.'), 'image_url' => (string) $src->image_url, 'scheduled_for' => $asCopy ? '' : $whenPrefill]
                 : ['type' => 'promotion', 'audience' => 'all', 'cta' => 'Reply BUY to order instantly.'],
+            // No id when copying — that is what makes the save create a new campaign with its own
+            // number and its own recipient claims, instead of overwriting the one being copied.
             'body' => $isEdit ? ['id' => $c->id] : [],
         ];
     }
