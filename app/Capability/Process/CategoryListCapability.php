@@ -45,15 +45,21 @@ final class CategoryListCapability implements ProcessCapability
                     : ['value' => ''],
                 // v4.54 — the switch that takes a whole department off the shelf. It stays in stock,
                 // in reports and in campaigns; it stops appearing anywhere a customer can browse.
-                'visible'  => [
-                    'value' => $isActive ? 'Hide' : 'Show',
-                    'icon'  => $isActive ? 'eye-off' : 'eye',
+                //
+                // v4.54.2 — wrapped in `buttons`. An action cell carrying a bare post/body/confirm is
+                // not a shape the table renderer knows: it looks for `buttons` first, then `href`, and
+                // falls through to an em-dash. The first version of this rendered as a silent dash in
+                // a column nobody could tell from empty, which is exactly how it was reported.
+                'visible'  => ['buttons' => [[
+                    'icon'  => $isActive ? 'ban' : 'check',
+                    'title' => $isActive ? 'Hide "' . $c->name . '" from customers' : 'Show "' . $c->name . '" to customers',
+                    'tone'  => $isActive ? 'danger' : 'default',
                     'post'  => '/api/v1/workspace/categories/_/toggle_visible',
                     'body'  => ['name' => (string) $c->name],
                     'confirm' => $isActive
                         ? 'Hide "' . $c->name . '" from customers? It stays in stock and in your reports, and you can still sell it by WhatsApp — it just stops showing on the website, in the catalogue and in the bot\'s suggestions.'
                         : 'Show "' . $c->name . '" to customers again?',
-                ],
+                ]]],
                 // Clicking the row opens the Products list, server-filtered to this category (like the panel).
                 'link'     => $n > 0 ? 'scope:products:category:' . rawurlencode((string) $c->name) : null,
             ];
