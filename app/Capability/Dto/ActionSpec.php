@@ -16,6 +16,8 @@ final class ActionSpec
         public ?string $confirm = null,
         public ?float $confidence = null,
         public ?string $rationale = null,
+        /** v4.52 — POST payload, for briefs that call an endpoint outside their own capability. */
+        public ?array $body = null,
     ) {}
 
     public function toArray(): array
@@ -23,7 +25,7 @@ final class ActionSpec
         return array_filter([
             'key' => $this->key, 'label' => $this->label, 'method' => $this->method, 'endpoint' => $this->endpoint,
             'actor' => $this->actor, 'tone' => $this->tone, 'schema' => $this->schema, 'confirm' => $this->confirm,
-            'confidence' => $this->confidence, 'rationale' => $this->rationale,
+            'confidence' => $this->confidence, 'rationale' => $this->rationale, 'body' => $this->body,
         ], fn ($v) => $v !== null);
     }
 }

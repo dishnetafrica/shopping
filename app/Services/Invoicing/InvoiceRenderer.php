@@ -629,6 +629,14 @@ HTML;
                 $sub = trim((string) ($l['reason'] ?? 'Credit note'));
                 if (($l['against'] ?? '') !== '') $sub .= ' · ' . $l['against'];
                 $label .= '<div style="font-size:8.5px;color:#C0392B;">Credit note — ' . e($sub) . '</div>';
+            } else {
+                // v4.52 — what the charge was for, in the same sub-line shape credit notes have
+                // always used. Grey, so the number still reads as the reference; omitted entirely
+                // when there is nothing to say, rather than printing an empty row.
+                $detail = trim((string) ($l['detail'] ?? ''));
+                if ($detail !== '') {
+                    $label .= '<div style="font-size:8.5px;color:#555;">' . e($detail) . '</div>';
+                }
             }
             $balTxt = $isCredit ? '(' . number_format(abs($bal), $dec) . ')' : number_format($bal, $dec);
             $totTxt = $isCredit ? '(' . number_format(abs((float) $l['total']), $dec) . ')' : number_format((float) $l['total'], $dec);

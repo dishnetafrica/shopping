@@ -395,33 +395,41 @@ class InvoiceController extends Controller
     /** POST /papi/statement-send — WhatsApp the statement PDF to the customer. */
     public function statementSend(Request $request)
     {
+        // v4.52 — every reply now carries a human `message` as well as its `error` code. V3 calls this
+        // same endpoint from the customer record and shows `message` in the toast; the old codes read
+        // as gibberish to whoever pressed the button. The codes are unchanged, so the panel is untouched.
         $t = $request->user()->tenant;
         if (! $t) return response()->json(['ok' => false], 401);
-        if (! class_exists(\Dompdf\Dompdf::class)) return response()->json(['ok' => false, 'error' => 'pdf_unavailable'], 503);
+        if (! class_exists(\Dompdf\Dompdf::class)) return response()->json(['ok' => false, 'error' => 'pdf_unavailable', 'message' => 'The PDF engine is not installed on this server, so no statement can be built.'], 503);
 
         $s = $this->stmt->for($t, (string) $request->input('phone', ''));
-        if (empty($s['lines'])) return response()->json(['ok' => false, 'error' => 'nothing_to_send'], 422);
+        if (empty($s['lines'])) return response()->json(['ok' => false, 'error' => 'nothing_to_send', 'message' => 'This customer has no invoices yet, so there is nothing to put on a statement.'], 422);
         $phone = preg_replace('/[^0-9+]/', '', (string) ($request->input('phone', '') ?: $s['phone']));
-        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone'], 422);
+        if ($phone === '') return response()->json(['ok' => false, 'error' => 'no_phone', 'message' => 'This customer has no phone number on file.'], 422);
 
         $gw = app(WhatsAppManager::class)->forTenant($t);
         if (! method_exists($gw, 'sendDocument') || ! $t->whatsapp_instance) {
-            return response()->json(['ok' => false, 'error' => 'whatsapp_off'], 422);
+            return response()->json(['ok' => false, 'error' => 'whatsapp_off', 'message' => 'WhatsApp is not connected, so the statement could not be sent.'], 422);
         }
         try {
             $pdf = $this->renderer->statementPdf($t, $s);
             $owe = StatementService::fmtMap($s['outstanding']);
+            // A paid-up customer still gets their statement — asking for one is not the same as owing.
             $caption = $owe === '0'
                 ? "🧾 Statement of account — no outstanding balance. Thank you!"
                 : "🧾 Statement of account — total outstanding: {$owe}. Please quote the invoice numbers on payment.";
-            $gw->sendDocument($t->whatsapp_instance, $phone, base64_encode($pdf), 'Statement.pdf', $caption);
+            // Named, so it does not land in the customer's phone as the fourth "Statement.pdf".
+            $who = preg_replace('/[^A-Za-z0-9]+/', '', (string) ($s['name'] ?: $s['phone'])) ?: 'Account';
+            $file = 'Statement-' . $who . '-' . now()->format('Y-m-d') . '.pdf';
+            $gw->sendDocument($t->whatsapp_instance, $phone, base64_encode($pdf), $file, $caption);
             MessageLog::record($t->id, $phone, $t->whatsapp_instance, 'out', 'panel',
                 "[statement] " . $caption, null, null, ['via' => 'panel', 'kind' => 'statement']);
         } catch (\Throwable $e) {
             \Log::warning('statement send failed: ' . $e->getMessage());
-            return response()->json(['ok' => false, 'error' => 'send_failed'], 500);
+            return response()->json(['ok' => false, 'error' => 'send_failed', 'message' => 'WhatsApp refused the statement — try again shortly.'], 500);
         }
-        return response()->json(['ok' => true, 'sent_to' => $phone]);
+        return response()->json(['ok' => true, 'sent_to' => $phone,
+            'message' => 'Statement sent to ' . ($s['name'] ?: $phone) . ' on WhatsApp.']);
     }
 
     /** POST /papi/invoice-void — void an invoice (kept for the record). Owner/manager only. */

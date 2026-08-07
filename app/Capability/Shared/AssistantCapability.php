@@ -12,7 +12,7 @@ use App\Capability\Dto\Brief;
 final class AssistantCapability
 {
     /**
-     * @param array $s ['overdue','overdueCount','maxDaysLate','exposure','name','balance','endpoint']
+     * @param array $s ['overdue','overdueCount','maxDaysLate','exposure','name','balance','endpoint','phone']
      */
     public function customerBrief(array $s): Brief
     {
@@ -33,7 +33,20 @@ final class AssistantCapability
             'currency' => 'enum:UGX,USD,SSP',
             'method' => 'enum:cash,bank,mobile',
         ]) : null;
-        $remind = fn () => $ep ? new ActionSpec('send_reminder', 'Send reminder', $ep . '/send_reminder', 'POST', 'human') : null;
+        // v4.52 — this was `send_reminder`, which answered "Reminder sent." and sent nothing at all.
+        // Chasing an overdue account now attaches the real statement PDF through the same panel
+        // endpoint the customer record's ⋯ menu uses, and is offered only when there is a number to
+        // send it to. Still pure: the phone arrives as a signal, nothing is looked up here.
+        $phone = trim((string) ($s['phone'] ?? ''));
+        $chase = fn () => $phone !== '' ? new ActionSpec(
+            key: 'send_statement',
+            label: 'Send statement',
+            endpoint: '/papi/statement-send',
+            method: 'POST',
+            actor: 'human',
+            confirm: 'Send the account statement to ' . $name . ' on WhatsApp?',
+            body: ['phone' => $phone],
+        ) : null;
 
         if ($count >= 2) {
             $level = $maxLate > 30 ? 'high' : 'med';
@@ -43,8 +56,8 @@ final class AssistantCapability
                 "Oldest is {$maxLate} days late. Collection risk rises the longer it sits.",
                 ['label' => "{$count} overdue", 'tone' => $maxLate > 30 ? 'danger' : 'warn'],
                 $metrics,
-                "Call once and discuss all {$count} invoices together. Offer a payment plan; hold new orders until at least " . $money(round($overdue / 2)) . ' is collected.',
-                array_values(array_filter([$pay(), $remind()])),
+                "Send the statement, then call once and discuss all {$count} invoices together. Offer a payment plan; hold new orders until at least " . $money(round($overdue / 2)) . ' is collected.',
+                array_values(array_filter([$pay(), $chase()])),
                 ['StatementService', 'HealthCapability'],
             );
         }
@@ -57,8 +70,8 @@ final class AssistantCapability
                 "Oldest invoice is {$maxLate} days past due.",
                 ['label' => $maxLate . 'd overdue', 'tone' => $maxLate > 30 ? 'danger' : 'warn'],
                 $metrics,
-                'Send a reminder now; call if unpaid within 3 days.',
-                array_values(array_filter([$pay(), $remind()])),
+                'Send the statement now so they can see exactly what is outstanding; call if unpaid within 3 days.',
+                array_values(array_filter([$pay(), $chase()])),
                 ['StatementService', 'HealthCapability'],
             );
         }

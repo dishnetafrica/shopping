@@ -25,7 +25,11 @@ class StatementService
                     'paid' => [], 'credited' => [], 'credit_balance' => [], 'count' => 0];
         }
 
+        // v4.52 — `items` is eager-loaded because every line now carries a description built from
+        // the goods. Without this, a customer with forty invoices costs forty extra queries to
+        // print one statement.
         $invoices = Invoice::where('tenant_id', $t->id)
+            ->with('items')
             ->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits])
             ->where('status', '!=', 'void')
             ->orderBy('id')->get();
@@ -47,6 +51,9 @@ class StatementService
                 'kind'     => 'invoice',
                 'id'       => $inv->id,
                 'due'      => optional($inv->due_at)->format('d M Y'),
+                // v4.52 — what the charge was for. A customer asked for money against
+                // "INV-2026-0068" has to go and find the invoice before they can agree they owe it.
+                'detail'   => LineDescription::forPrint($inv),
             ];
             $out[$cur]    = round(($out[$cur] ?? 0) + (float) $inv->balance, 2);
             $billed[$cur] = round(($billed[$cur] ?? 0) + (float) $inv->total, 2);

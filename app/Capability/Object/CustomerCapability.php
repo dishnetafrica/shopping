@@ -66,7 +66,9 @@ final class CustomerCapability implements ObjectCapability
 
         // --- assistant brief (existing knowledge-graph reasoning) ---
         $sig = ['overdue' => $ins['overdue'], 'overdueCount' => $ins['overdueCount'], 'maxDaysLate' => $ins['maxDaysLate'], 'exposure' => $ins['exposure']];
-        $brief = $this->assistant->customerBrief($sig + ['name' => (string) $c->name, 'balance' => $balance, 'endpoint' => $endpoint]);
+        // `phone` rides along so the brief can offer a real statement send on an overdue account
+        // instead of the no-op reminder it used to offer (v4.52).
+        $brief = $this->assistant->customerBrief($sig + ['name' => (string) $c->name, 'balance' => $balance, 'endpoint' => $endpoint, 'phone' => (string) $c->phone]);
 
         // --- action specs ---
         // People pick-list so a payment is credited to whoever actually received it (their cashbook).
@@ -90,14 +92,22 @@ final class CustomerCapability implements ObjectCapability
             'schema' => \App\Capability\Process\CustomerListCapability::formSchema(),
             'prefill' => ['business_name' => (string) $c->name, 'contact_person' => (string) $c->contact_person, 'phone' => $phone, 'email' => (string) $c->email, 'segment' => (string) $c->segment, 'city' => (string) $c->city, 'country' => (string) $c->country, 'credit_limit' => $c->credit_limit !== null ? (float) $c->credit_limit : ''],
         ];
-        $reminder = ['key' => 'send_reminder', 'label' => 'Send reminder', 'method' => 'POST', 'endpoint' => $endpoint . '/send_reminder', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send a payment reminder to ' . ($c->name ?: 'this customer') . '?'];
+        // v4.52 — "Send reminder" is gone. It answered "Reminder sent." and sent nothing, for as long
+        // as it existed. The honest version of chasing a customer is the statement below, which puts
+        // the actual document in their hand; a button that lies about a send is worse than no button.
         $setFollow = ['key' => 'set_followup', 'label' => 'Set follow-up', 'method' => 'POST', 'endpoint' => $endpoint . '/set_followup', 'actor' => 'human', 'tone' => 'default', 'schema' => ['follow_up' => 'text'], 'prefill' => ['id' => (int) $c->id, 'follow_up' => (string) ($c->follow_up ?? '')]];
         $assignRep = ['key' => 'assign_rep', 'label' => 'Assign rep', 'method' => 'POST', 'endpoint' => $endpoint . '/assign_rep', 'actor' => 'human', 'tone' => 'default', 'schema' => ['assigned_rep' => 'text'], 'prefill' => ['id' => (int) $c->id, 'assigned_rep' => (string) ($c->assigned_rep ?? '')]];
-        // Statement: download the PDF (GET href → doc endpoint) and send it to the customer on WhatsApp
-        // (POST → frozen StatementMessenger). Both need a phone; hidden for phone-less prospects.
+        // Statement: download the PDF (GET href → doc endpoint) and send that same PDF to the customer
+        // on WhatsApp. Both need a phone; hidden for phone-less prospects.
+        //
+        // v4.52 — the send now goes to /papi/statement-send, the panel's proven sender, exactly as the
+        // invoice's "Send on WhatsApp" does. It attaches the real statement PDF. What it replaced sent
+        // a plain-text summary built from the accounting ledger whose lines read "• Invoice: USD 1,234"
+        // with no invoice number in them — unusable for a customer trying to work out what to pay — and
+        // refused outright to send anything to a customer who was paid up.
         $hasPhone = preg_replace('/[^0-9]/', '', (string) $phone) !== '';   // $digits isn't computed until later
         $dlStatement = ['key' => 'statement_pdf', 'label' => 'Download statement (PDF)', 'href' => '/api/v1/doc/customer-statement?phone=' . rawurlencode($phone)];
-        $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement on WhatsApp', 'method' => 'POST', 'endpoint' => $endpoint . '/send_statement', 'actor' => 'human', 'tone' => 'default', 'confirm' => 'Send the account statement to ' . ($c->name ?: 'this customer') . ' on WhatsApp?'];
+        $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement on WhatsApp', 'method' => 'POST', 'endpoint' => '/papi/statement-send', 'actor' => 'human', 'tone' => 'default', 'body' => ['phone' => $phone], 'confirm' => 'Send the account statement to ' . ($c->name ?: 'this customer') . ' on WhatsApp?'];
         $newQuote = [
             'key' => 'new_quotation', 'label' => 'New quotation', 'method' => 'POST', 'endpoint' => $endpoint . '/create_quotation',
             'actor' => 'human', 'tone' => 'primary', 'builder' => 'quotation',
@@ -404,7 +414,7 @@ final class CustomerCapability implements ObjectCapability
                 ] : null,
                 $hasPhone ? $dlStatement : null,
                 $hasPhone ? $sendStatement : null,
-                $reminder, $setFollow, $assignRep,
+                $setFollow, $assignRep,
             ])))
             ->meta(['capability' => 'customer', 'ttl' => 60, 'layout' => 'record', 'permissions' => ['menu:customers']]);
     }
@@ -480,8 +490,9 @@ final class CustomerCapability implements ObjectCapability
             'log_whatsapp' => $this->touch($ctx, $input, 'whatsapp'),
             'create_quotation' => $this->createQuotation($ctx, $input),
             'assign_task' => $this->assignTask($ctx, $input),
-            'send_statement' => $this->sendStatement($ctx, $input),
-            'send_reminder' => ['ok' => true, 'sent' => true, 'message' => 'Reminder sent.'],
+            // v4.52 — send_statement now posts straight to /papi/statement-send (see actions above),
+            // and send_reminder is gone rather than left answering "Reminder sent." to a send that
+            // never happened. Anything still calling either name gets an honest unknown_action.
             'timeline' => $this->bosTimeline($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
@@ -624,29 +635,6 @@ final class CustomerCapability implements ObjectCapability
         $kind === 'whatsapp' ? $svc->logWhatsapp($ctx->tenant, $c) : $svc->logContact($ctx->tenant, $c);
 
         return ['ok' => true, 'message' => $kind === 'whatsapp' ? 'WhatsApp contact logged.' : 'Call logged.'];
-    }
-
-    /** Send the account statement to the customer via the FROZEN StatementMessenger (WhatsApp). */
-    private function sendStatement(CapabilityContext $ctx, array $in): array
-    {
-        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($in['id'] ?? $in['customer_id'] ?? 0));
-        if (! $c) {
-            return ['ok' => false, 'error' => 'not_found'];
-        }
-        $phone = trim((string) $c->phone);
-        if ($phone === '') {
-            return ['ok' => false, 'error' => 'no_phone', 'message' => 'This customer has no phone number on file.'];
-        }
-        try {
-            $res = app(\App\Services\Ledger\StatementMessenger::class)->send($ctx->tenant, $phone);
-            if (is_array($res) && ($res['ok'] ?? false) === false) {
-                return ['ok' => false, 'error' => 'send_failed', 'message' => 'Could not send the statement (' . (string) ($res['reason'] ?? 'WhatsApp channel unavailable') . ').'];
-            }
-
-            return ['ok' => true, 'message' => 'Statement sent to ' . ($c->name ?: $phone) . ' on WhatsApp.'];
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'error' => 'send_failed', 'message' => $e->getMessage()];
-        }
     }
 
     /** Delegates to the frozen engine. No model writes, no business logic here. */
