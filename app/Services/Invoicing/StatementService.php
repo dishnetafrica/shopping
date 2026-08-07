@@ -87,6 +87,37 @@ class StatementService
             $credited[$cur] = round(($credited[$cur] ?? 0) + $amt, 2);
         }
 
+        // v4.53 — money this customer has handed over that is not settling anything yet: an overpayment
+        // they asked us to keep, or a deposit taken before delivery. It belongs on the statement for
+        // the same reason a credit note does — it changes what they owe — and it was missing entirely.
+        // Held credit reduces `$out`, and the existing split below turns a net-negative into
+        // "Credit in your favour", so no new total is invented here.
+        foreach (\App\Services\Money\CreditOnAccount::rowsFor($t, $digits) as $p) {
+            $cur = strtoupper((string) ($p->currency ?: ''));
+            if ($cur === '') {
+                continue;
+            }
+            $amt = round((float) $p->amount, 2);
+            if ($amt <= 0.005) {
+                continue;
+            }
+            $lines[] = [
+                'no'       => $p->receipt_no,
+                'date'     => optional($p->created_at)->format('d M Y'),
+                'currency' => $cur,
+                'total'    => -$amt,
+                'paid'     => 0.0,
+                'balance'  => -$amt,
+                'status'   => 'credit',
+                'kind'     => 'advance',
+                'reason'   => 'Paid and held for your next order',
+                'against'  => '',
+                'id'       => $p->id,
+                'due'      => '',
+            ];
+            $out[$cur] = round(($out[$cur] ?? 0) - $amt, 2);
+        }
+
         if ($name === '') {
             $cp = CustomerProfile::where('tenant_id', $t->id)
                 ->whereRaw("regexp_replace(coalesce(phone,''),'[^0-9]','','g') = ?", [$digits])->first();

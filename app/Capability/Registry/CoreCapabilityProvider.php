@@ -94,7 +94,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // swapped that stub for a real "Send on WhatsApp" that posts to the panel endpoint. Nothing
         // dispatches off this list, but a manifest naming a command the capability cannot answer is
         // the next person's wild goose. These two are what its command() actually handles.
-        $r->register(new InvoiceCapability(), new CapabilityManifest(key: 'invoice', type: 'object', owner: 'accounts', permission: 'menu:finance', commands: [['key' => 'record_payment', 'actor' => 'human'], ['key' => 'resync', 'actor' => 'human']], api: '/api/v1/workspace/invoice/{id}'));
+        $r->register(new InvoiceCapability(), new CapabilityManifest(key: 'invoice', type: 'object', owner: 'accounts', permission: 'menu:finance', commands: [['key' => 'record_payment', 'actor' => 'human'], ['key' => 'apply_credit', 'actor' => 'human'], ['key' => 'resync', 'actor' => 'human']], api: '/api/v1/workspace/invoice/{id}'));
         $r->register(new PaymentCapability(), new CapabilityManifest(key: 'payment', type: 'object', owner: 'accounts', permission: 'menu:finance', api: '/api/v1/workspace/payment/{id}'));
         $r->register(new SupplierCapability(), new CapabilityManifest(key: 'supplier', type: 'object', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/supplier/{id}'));
         $r->register(new ProductCapability($reco), new CapabilityManifest(key: 'product', type: 'object', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/product/{id}'));

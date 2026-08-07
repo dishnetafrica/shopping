@@ -318,12 +318,32 @@ final class CustomerCapability implements ObjectCapability
             $overviewCards[] = ['kind' => 'dl', 'title' => 'Relationship (AI memory)', 'rows' => $rrows];
         }
 
-        // Account statement tab = running ledger + any credit notes.
+        // v4.53 — money of theirs that we are holding: an overpayment they asked us to keep, or a
+        // deposit taken before delivery. Shown in the currency it was received in, never converted,
+        // because that is the money they will expect back.
+        $heldRows = \App\Services\Money\CreditOnAccount::rowsFor($ctx->tenant, $phone);
+        $held     = \App\Services\Money\CreditOnAccount::heldFor($ctx->tenant, $phone);
+        $heldText = $held ? \App\Services\Money\CreditOnAccount::describe($held) : '';
+
+        // Account statement tab = running ledger + any credit notes + any credit we are sitting on.
         $financialsCards = [];
         if ($cnRows) {
             $financialsCards[] = ['kind' => 'table', 'title' => 'Credit notes', 'sub' => count($cnRows) . ' total',
                 'columns' => [['label' => 'Credit note'], ['label' => 'Issued'], ['label' => 'Against invoice'], ['label' => 'Amount', 'align' => 'right']],
                 'rows' => $cnRows, 'empty' => 'No credit notes'];
+        }
+        // Where the credit came from, so the headline figure never has to be taken on trust.
+        if ($heldRows->isNotEmpty()) {
+            $financialsCards[] = ['kind' => 'table', 'title' => 'Credit on account',
+                'sub' => 'We are holding ' . $heldText . ' of this customer\'s money',
+                'columns' => [['label' => 'Receipt'], ['label' => 'Received'], ['label' => 'How'], ['label' => 'Amount', 'align' => 'right']],
+                'rows' => $heldRows->map(fn ($p) => [
+                    (string) $p->receipt_no,
+                    optional($p->created_at)->format('d M Y'),
+                    CustomerInsight::methodWords((string) $p->method),
+                    strtoupper((string) $p->currency) . ' ' . number_format((float) $p->amount, strtoupper((string) $p->currency) === 'USD' ? 2 : 0),
+                ])->all(),
+                'empty' => 'None'];
         }
 
         // --- statement (Financials tab) ---
@@ -335,9 +355,18 @@ final class CustomerCapability implements ObjectCapability
         ], $stmt['rows']);
 
         // --- next best action ---
-        if ($balance > 0) {
-            $nbaText = ($c->name ?: 'This customer') . ' has ' . $fmt($balance) . ' outstanding' . ($ins['overdue'] > 0 ? ', ' . $fmt($ins['overdue']) . ' overdue' : '') . '. Record a payment or send a reminder.';
+        if ($balance > 0 && $heldText !== '') {
+            // Both at once is the case worth catching. Chasing someone for money while sitting on
+            // their money is the kind of thing that loses a customer for a reason nobody writes down.
+            $nbaText = ($c->name ?: 'This customer') . ' has ' . $fmt($balance) . ' outstanding, and we are holding '
+                . $heldText . ' of theirs. Put the credit against an open invoice before asking for anything.';
             $nbaAction = $payAction;
+        } elseif ($balance > 0) {
+            $nbaText = ($c->name ?: 'This customer') . ' has ' . $fmt($balance) . ' outstanding' . ($ins['overdue'] > 0 ? ', ' . $fmt($ins['overdue']) . ' overdue' : '') . '. Record a payment or send them their statement.';
+            $nbaAction = $payAction;
+        } elseif ($heldText !== '') {
+            $nbaText = 'Nothing owing, but we are holding ' . $heldText . ' of their money. It will go against their next invoice.';
+            $nbaAction = $newQuote;
         } elseif ($ins['status'] === 'prospect') {
             $nbaText = ($c->name ?: 'This prospect') . ' has no orders yet. Send an opening quotation to win the first order.';
             $nbaAction = $newQuote;
@@ -359,14 +388,17 @@ final class CustomerCapability implements ObjectCapability
             ])
             ->headline($fmt($balance), $balance > 0 ? 'outstanding balance' : 'no balance due', $balance > 0 ? 'warn' : 'ok')
             ->brief($brief)
-            ->financials([
+            ->financials(array_values(array_filter([
                 ['key' => 'balance', 'label' => 'Current balance', 'value' => $fmt($balance), 'tone' => $balance > 0 ? 'danger' : 'ok'],
+                // Only when there is some. A permanent "Credit held: none" tile trains everyone to
+                // stop reading the row, which defeats the point of showing it at all.
+                $heldText !== '' ? ['key' => 'held', 'label' => 'Credit we hold', 'value' => $heldText, 'tone' => 'ok'] : null,
                 ['key' => 'credit', 'label' => 'Credit limit', 'value' => $ins['credit'] ? $fmt($ins['credit']) : 'None'],
                 ['key' => 'overdue', 'label' => 'Overdue', 'value' => $ins['overdue'] > 0 ? $fmt($ins['overdue']) : '—', 'tone' => $ins['overdue'] > 0 ? 'danger' : ''],
                 ['key' => 'spend', 'label' => 'Lifetime spend', 'value' => $fmt($ins['spend'])],
                 ['key' => 'avg', 'label' => 'Avg order', 'value' => $fmt($ins['avgOrder'])],
                 ['key' => 'orders', 'label' => 'Orders', 'value' => number_format($ins['orders'])],
-            ])
+            ])))
             ->stats($stats)
             ->answers($answers)
             ->health($health)

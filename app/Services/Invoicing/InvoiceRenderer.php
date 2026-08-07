@@ -626,9 +626,15 @@ HTML;
             $col = $isCredit ? '#15803D' : ($bal > 0.005 ? '#C0392B' : '#15803D');
             $label = e($l['no']);
             if ($isCredit) {
-                $sub = trim((string) ($l['reason'] ?? 'Credit note'));
+                // v4.53 — two different things reduce what a customer owes, and calling both of them
+                // "Credit note" would have the statement claim we issued paperwork we never issued.
+                // A held payment is their own money sitting with us, which reads very differently to
+                // the person checking the page.
+                $isHeld = ($l['kind'] ?? '') === 'advance';
+                $sub = trim((string) ($l['reason'] ?? '')) ?: ($isHeld ? 'Paid and held' : 'Credit note');
                 if (($l['against'] ?? '') !== '') $sub .= ' · ' . $l['against'];
-                $label .= '<div style="font-size:8.5px;color:#C0392B;">Credit note — ' . e($sub) . '</div>';
+                $label .= '<div style="font-size:8.5px;color:#C0392B;">'
+                    . ($isHeld ? 'Credit on account — ' : 'Credit note — ') . e($sub) . '</div>';
             } else {
                 // v4.52 — what the charge was for, in the same sub-line shape credit notes have
                 // always used. Grey, so the number still reads as the reference; omitted entirely
@@ -701,7 +707,7 @@ table.tot tr.grand td { font-weight:bold; font-size:12px; background:#f0f0f0; }
   <td width="40%" style="vertical-align:top;text-align:right;font-size:10.5px;">Statement date: <b>{$date}</b></td>
 </tr></table>
 <table class="items">
-  <tr><th style="width:22px;">#</th><th>Invoice</th><th style="width:78px;">Date</th><th style="width:44px;">Cur</th><th style="width:80px;">Total</th><th style="width:80px;">Paid</th><th style="width:88px;">Balance</th></tr>
+  <tr><th style="width:22px;">#</th><th>Document</th><th style="width:78px;">Date</th><th style="width:44px;">Cur</th><th style="width:80px;">Total</th><th style="width:80px;">Paid</th><th style="width:88px;">Balance</th></tr>
   {$rows}
 </table>
 <table width="100%"><tr><td width="55%">&nbsp;</td><td width="45%">

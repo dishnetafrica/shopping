@@ -163,6 +163,31 @@ class CustomerBillingNotifier
     }
 
     /**
+     * The held half of a split receipt, if this payment has one.
+     *
+     * A receipt that was split writes two payment rows against ONE cash row: the part that settled an
+     * invoice and the part being held. Same `order_cost_id`, so the sibling is a single lookup. Null
+     * for every ordinary payment, which is almost all of them.
+     */
+    private function heldSibling(CustomerPayment $p): ?CustomerPayment
+    {
+        if (! $p->order_cost_id || strtolower((string) $p->kind) !== 'settlement') {
+            return null;
+        }
+
+        try {
+            return CustomerPayment::where('tenant_id', $p->tenant_id)
+                ->where('order_cost_id', $p->order_cost_id)
+                ->where('id', '!=', $p->id)
+                ->where('kind', 'advance')
+                ->where('applied', false)
+                ->first();
+        } catch (\Throwable $e) {
+            return null;   // a receipt that cannot find its sibling still sends, just less completely
+        }
+    }
+
+    /**
      * The receipt message — the one that stops "how much do I still owe?" phone calls.
      * Partial payments spell out all three numbers: paid now, paid in total, still due.
      */
@@ -179,7 +204,15 @@ class CustomerBillingNotifier
         if ($name !== '') {
             $lines[] = 'Hello ' . $this->firstName($name) . ',';
         }
-        $lines[] = 'We have received *' . $this->money($amount, $cur) . '*'
+        // v4.53 — when a receipt was split (they paid more than was due and asked us to keep the
+        // rest), this row is only the part that settled the invoice. Telling a customer who handed
+        // over USD 200 that we received USD 170 is the fastest way to lose their trust, so the
+        // sibling row is found and the full handover is stated first. Both legs share one cash row,
+        // which is exactly what makes them findable.
+        $heldLeg = $this->heldSibling($p);
+        $handed  = $amount + ($heldLeg ? (float) $heldLeg->amount : 0.0);
+
+        $lines[] = 'We have received *' . $this->money($handed, $cur) . '*'
             . ($p->method ? ' by ' . $this->methodName((string) $p->method) : '') . '.';
         $lines[] = '🧾 Receipt no: ' . $p->receipt_no;
         if ($p->reference) {
@@ -210,7 +243,11 @@ class CustomerBillingNotifier
             $lines[] = 'For order ' . $p->order_no . '.';
         }
 
-        if ($isAdvance) {
+        if ($heldLeg) {
+            $lines[] = '';
+            $lines[] = '💰 *' . $this->money((float) $heldLeg->amount, $cur) . ' is held on your account* — '
+                . 'it will come off your next invoice. Nothing to do; it is not lost.';
+        } elseif ($isAdvance) {
             $lines[] = '';
             $lines[] = 'This is an advance — it will be set against your invoice when your order is completed.';
         }

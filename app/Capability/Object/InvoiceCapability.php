@@ -75,6 +75,21 @@ final class InvoiceCapability implements ObjectCapability
             'prefill' => ['id' => (int) $i->id, 'amount' => round($balance, 2), 'discount' => 0, 'received_by' => $meName, 'method' => 'cash'],
         ];
         $isVoid = strtolower((string) $i->status) === 'void';
+        // v4.53 — this customer's own money, already received, sitting unallocated. Offered only in the
+        // invoice's own currency: spending UGX credit on a USD invoice is an exchange decision with a
+        // rate and a date in it, and a one-tap button is the wrong place to make one silently.
+        $invCur = strtoupper((string) \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $ctx->tenant));
+        $heldHere = 0.0;
+        foreach (\App\Services\Money\CreditOnAccount::rowsFor($ctx->tenant, (string) $i->customer_phone, $invCur) as $hp) {
+            $heldHere = round($heldHere + (float) $hp->amount, 2);
+        }
+        $useCredit = (! $isVoid && $balance > 0.01 && $heldHere > 0.005) ? [
+            'key' => 'apply_credit', 'label' => 'Use credit (' . $invCur . ' ' . number_format($heldHere, $invCur === 'USD' ? 2 : 0) . ')',
+            'method' => 'POST', 'endpoint' => $ep . '/apply_credit', 'actor' => 'human', 'tone' => 'primary',
+            'body' => ['id' => (int) $i->id],
+            'confirm' => 'Put ' . $invCur . ' ' . number_format(min($heldHere, $balance), $invCur === 'USD' ? 2 : 0)
+                . ' of credit already held for ' . ($i->customer_name ?: 'this customer') . ' against invoice ' . $i->invoice_no . '?',
+        ] : null;
         // Real WhatsApp send via the panel's proven endpoint (replaces the old no-op "Send reminder" stub).
         $sendInvoice = ! $isVoid ? ['key' => 'send_invoice', 'label' => 'Send on WhatsApp', 'method' => 'POST', 'endpoint' => '/papi/invoice-send', 'actor' => 'human', 'tone' => 'default', 'body' => ['id' => (int) $i->id], 'confirm' => 'Send invoice ' . $i->invoice_no . ' to ' . ($i->customer_name ?: 'the customer') . ' on WhatsApp?'] : null;
         // Void (kept for records) via the panel's owner/manager-gated endpoint.
@@ -84,8 +99,9 @@ final class InvoiceCapability implements ObjectCapability
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
         $openOrder = $order ? ['key' => 'open_order', 'label' => 'Open order', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrder/' . $order->id, 'actor' => 'human', 'tone' => 'default'] : null;
 
-        $primary = (! $isVoid && $balance > 0.01) ? $recordPay : $downloadPdf;
-        $quick = array_values(array_filter([(! $isVoid && $balance > 0.01) ? $recordPay : null, $downloadPdf, $sendInvoice, $openOrder, $openCustomer]));
+        // Credit already in hand beats asking for money again, so it leads when there is any.
+        $primary = $useCredit ?: ((! $isVoid && $balance > 0.01) ? $recordPay : $downloadPdf);
+        $quick = array_values(array_filter([$useCredit, (! $isVoid && $balance > 0.01) ? $recordPay : null, $downloadPdf, $sendInvoice, $openOrder, $openCustomer]));
 
         // --- pipeline ---
         $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');
@@ -249,12 +265,41 @@ final class InvoiceCapability implements ObjectCapability
     {
         return match ($action) {
             'record_payment' => $this->recordPayment($ctx, $input),
+            'apply_credit' => $this->applyCredit($ctx, $input),
             'resync' => $this->resync($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
     }
 
     /** Re-run the frozen payment→invoice reconciliation for this invoice (self-heal a stale balance). */
+    /**
+     * v4.53 — put credit this customer is already holding against this invoice.
+     *
+     * No money is received here. The service re-tags payments that were taken earlier from held to
+     * settled, so the cash book is untouched and the invoice balance re-derives from the payment
+     * rows exactly as it does after a normal payment.
+     */
+    private function applyCredit(CapabilityContext $ctx, array $in): array
+    {
+        $i = Invoice::where('tenant_id', $ctx->tenantId())->find((int) ($in['id'] ?? 0));
+        if (! $i) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        if (strtolower((string) $i->status) === 'void') {
+            return ['ok' => false, 'error' => 'void', 'message' => 'This invoice is void — nothing can be applied to it.'];
+        }
+        try {
+            $res = app(\App\Services\Money\CreditOnAccount::class)->applyTo($ctx->tenant, $i);
+
+            return ['ok' => (bool) ($res['ok'] ?? false), 'message' => (string) ($res['message'] ?? '')]
+                + (($res['ok'] ?? false) ? [] : ['error' => 'not_applied']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('apply credit failed: ' . $e->getMessage(), ['invoice' => $i->id]);
+
+            return ['ok' => false, 'error' => 'apply_failed', 'message' => 'Could not apply the credit — nothing was changed.'];
+        }
+    }
+
     private function resync(CapabilityContext $ctx, array $in): array
     {
         $i = Invoice::where('tenant_id', $ctx->tenantId())->find((int) ($in['id'] ?? 0));
