@@ -82,23 +82,73 @@ final class PurchaseNameMatch
      */
     public static function sharedCodes(string $a, string $b): array
     {
-        $codes = function (string $s): array {
-            $out = [];
-            foreach (preg_split('/[^a-z0-9]+/i', mb_strtolower($s)) as $tok) {
-                // A token with digits in it and enough length to be a code rather than a size or a
-                // count. "6pc" and "1l" are packaging; "8389" and "45cm" identify a thing.
-                if (mb_strlen($tok) >= 4 && preg_match('/\d/', $tok)) {
-                    $out[$tok] = true;
-                }
+        return array_values(array_intersect(self::codesIn($a), self::codesIn($b)));
+    }
+
+    /**
+     * A SIZE is not a code, and telling them apart is the difference between a good suggestion and
+     * a dangerous one.
+     *
+     * `Lids 500ml` and `Methylated Spirit 500ml` share "500ml" and are not remotely the same thing.
+     * `Silver Plate (8389)` and `Aluminum Foil Container Medium-8389` share "8389" and almost
+     * certainly are. The first is a measurement that half a catalogue has in common; the second
+     * identifies one item.
+     *
+     * Both still count — a shared size IS weak evidence — but a size must never carry a suggestion
+     * to the top of the list on its own, which is exactly what it did on the first run.
+     */
+    public static function sharedSizes(string $a, string $b): array
+    {
+        return array_values(array_intersect(self::sizesIn($a), self::sizesIn($b)));
+    }
+
+    /** Bare-digit or code-shaped tokens: 8389, sku2231. Never a measurement. */
+    private static function codesIn(string $s): array
+    {
+        $out = [];
+        foreach (self::numericTokens($s) as $tok) {
+            // A code needs length: "26" out of a date, or "5" out of "MIN 5", identifies nothing.
+            if (mb_strlen($tok) >= 4 && ! self::isSize($tok)) {
+                $out[$tok] = true;
             }
+        }
 
-            // Cast: PHP turns a numeric-string array key back into an int, so a code of "8389"
-            // would come out typed differently from "45cm" and a strict in_array() against it
-            // would quietly fail.
-            return array_map('strval', array_keys($out));
-        };
+        // Cast: PHP turns a numeric-string array key back into an int, so a code of "8389" would
+        // come out typed differently from "sku2231" and a strict in_array() against it would fail.
+        return array_map('strval', array_keys($out));
+    }
 
-        return array_values(array_intersect($codes($a), $codes($b)));
+    /** Measurements: 500ml, 45cm, 4l, 1000pc, 3ltr. */
+    private static function sizesIn(string $s): array
+    {
+        $out = [];
+        foreach (self::numericTokens($s) as $tok) {
+            if (self::isSize($tok)) {
+                $out[$tok] = true;
+            }
+        }
+
+        return array_map('strval', array_keys($out));
+    }
+
+    /** @return array<int,string> */
+    private static function numericTokens(string $s): array
+    {
+        $out = [];
+        foreach (preg_split('/[^a-z0-9]+/i', mb_strtolower($s)) as $tok) {
+            // Two characters is enough for a SIZE (4l, 1l) and never enough for a code, which
+            // is why the length bar lives in codesIn() rather than here.
+            if (mb_strlen($tok) >= 2 && preg_match('/\d/', $tok)) {
+                $out[] = $tok;
+            }
+        }
+
+        return $out;
+    }
+
+    private static function isSize(string $tok): bool
+    {
+        return (bool) preg_match('/^\d+(?:\.\d+)?(ml|l|ltr|lt|cm|mm|m|kg|g|gm|gr|pc|pcs|pack|oz|in|inch)$/', $tok);
     }
 
     /**
@@ -125,7 +175,10 @@ final class PurchaseNameMatch
         $hit = count(array_intersect($A, $B));
         $jac = $hit / (count($A) + count($B) - $hit);
 
-        $bonus = self::sharedCodes($a, $b) ? 0.45 : 0.0;
+        // A shared CODE is strong evidence; a shared SIZE is weak. Before this was split, "Lids
+        // 500ml" was suggested against "Methylated Spirit 500ml" at 70% — the top of the list, and
+        // completely wrong.
+        $bonus = self::sharedCodes($a, $b) ? 0.45 : (self::sharedSizes($a, $b) ? 0.12 : 0.0);
 
         return (int) round(100 * min(1.0, $jac + $bonus));
     }

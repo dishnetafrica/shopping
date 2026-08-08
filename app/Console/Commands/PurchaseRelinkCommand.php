@@ -34,6 +34,7 @@ class PurchaseRelinkCommand extends Command
     protected $signature = 'purchase:relink
         {tenant? : Tenant id (omit for all)}
         {--alias=* : "purchase wording=Exact Product Name" — teach a product another name. Repeatable.}
+        {--line=* : "lineId=Exact Product Name" — link ONE line, teaching nothing. Repeatable.}
         {--apply : Actually write. Without this it only reports.}';
 
     protected $description = 'Link purchase lines to products by name or alias. Dry run unless --apply.';
@@ -48,6 +49,9 @@ class PurchaseRelinkCommand extends Command
             $this->info($t->name . ' (tenant ' . $t->id . ')');
 
             if (! $this->applyAliases($t, (array) $this->option('alias'), $apply)) {
+                return self::FAILURE;
+            }
+            if (! $this->applyLines($t, (array) $this->option('line'), $apply)) {
                 return self::FAILURE;
             }
 
@@ -142,6 +146,54 @@ class PurchaseRelinkCommand extends Command
     }
 
     /**
+     * `--line="310=ALUMINIUM FOIL 45CM GOLDEN (…)"` — one line, no alias written.
+     *
+     * The right tool for a wording that will never occur again. `Aluminium foil (AVION Vch 243
+     * 17-Jul-26)` carries a voucher number and a date, so it is unique by construction: teaching it
+     * as an alias would put a dead string into the keywords field for ever, where it can never match
+     * another purchase and can only make the bot's product search worse.
+     */
+    private function applyLines(Tenant $t, array $specs, bool $apply): bool
+    {
+        foreach (array_filter($specs) as $spec) {
+            $bits = explode('=', $spec, 2);
+            if (count($bits) !== 2 || ! ctype_digit(trim($bits[0])) || trim($bits[1]) === '') {
+                $this->error('  Bad --line. Use  --line="310=Exact Product Name"');
+
+                return false;
+            }
+            [$lineId, $productName] = [(int) trim($bits[0]), trim($bits[1])];
+
+            $line = OrderCost::withoutGlobalScopes()->where('tenant_id', $t->id)
+                ->where('stage', 'purchase')->find($lineId);
+            if (! $line) {
+                $this->error('  No purchase line ' . $lineId . ' for this tenant.');
+
+                return false;
+            }
+
+            $matches = Product::withoutGlobalScopes()->where('tenant_id', $t->id)
+                ->get(['id', 'name'])
+                ->filter(fn ($p) => PurchaseNameMatch::key($p->name) === PurchaseNameMatch::key($productName));
+            if ($matches->count() !== 1) {
+                $this->error('  ' . ($matches->isEmpty() ? 'No product named' : 'More than one product named')
+                    . ' "' . $productName . '" — copy the name exactly as it appears in Products.');
+
+                return false;
+            }
+
+            $this->info('  ' . ($apply ? 'LINKED' : 'would link') . ' line ' . $lineId
+                . ' (' . $line->note . ', ' . (float) $line->qty . ')  →  ' . $matches->first()->name);
+            if ($apply) {
+                OrderCost::withoutGlobalScopes()->where('id', $lineId)
+                    ->update(['product_id' => (int) $matches->first()->id]);
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * For everything still unmatched: the closest products, and the exact command to fix it.
      *
      * Grouped by wording, so ten lines saying "Golden Cling Film 45cm" are one decision worth 190
@@ -152,9 +204,10 @@ class PurchaseRelinkCommand extends Command
         $groups = [];
         foreach ($stuck as $r) {
             $k = PurchaseNameMatch::key((string) $r->note) ?: '(no item name)';
-            $groups[$k] ??= ['name' => (string) $r->note ?: '(no item name)', 'qty' => 0.0, 'lines' => 0];
+            $groups[$k] ??= ['name' => (string) $r->note ?: '(no item name)', 'qty' => 0.0, 'lines' => 0, 'ids' => []];
             $groups[$k]['qty'] += (float) $r->qty;
             $groups[$k]['lines']++;
+            $groups[$k]['ids'][] = (int) $r->id;
         }
         uasort($groups, fn ($a, $b) => $b['qty'] <=> $a['qty']);
 
@@ -171,10 +224,12 @@ class PurchaseRelinkCommand extends Command
             $note = $resolver->isAmbiguous($g['name']) ? 'AMBIGUOUS — two products claim this name' : '';
             $table[] = [
                 $g['name'], (int) $g['qty'], $g['lines'],
+                // The ids, because --line needs them and going to look them up is friction.
+                implode(' ', array_slice($g['ids'], 0, 6)) . (count($g['ids']) > 6 ? ' …' : ''),
                 $note ?: (($best && $best['s'] >= 25) ? $best['n'] . '  (' . $best['s'] . '%)' : '— nothing close'),
             ];
         }
-        $this->table(['Item as recorded', 'Qty', 'Lines', 'Closest product'], array_slice($table, 0, 40));
+        $this->table(['Item as recorded', 'Qty', 'Lines', 'Line ids', 'Closest product'], array_slice($table, 0, 40));
 
         $top = reset($groups);
         if ($top) {
@@ -187,6 +242,11 @@ class PurchaseRelinkCommand extends Command
             $this->line('    php artisan purchase:relink ' . $t->id
                 . ' --alias="' . $top['name'] . '=' . ($best['n'] ?? 'Exact Product Name') . '" --apply');
             $this->line('  Repeat --alias as many times as you need in one command.');
+            $this->line('');
+            $this->comment('  For a wording that will never occur again — one carrying a voucher number '
+                . 'or a date — link the LINE instead, so no dead alias is left behind:');
+            $this->line('    php artisan purchase:relink ' . $t->id
+                . ' --line="<line id>=Exact Product Name" --apply');
             $this->comment('  Anything that is not goods — fuel, freight, a fee — should stay unlinked.');
         }
     }
