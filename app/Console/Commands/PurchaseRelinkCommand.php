@@ -39,6 +39,14 @@ class PurchaseRelinkCommand extends Command
 
     protected $description = 'Link purchase lines to products by name or alias. Dry run unless --apply.';
 
+    /**
+     * Below this, a suggestion is shown in the table but never offered as a command to run.
+     *
+     * A printed command is a recommendation whatever the table beside it says — somebody will paste
+     * it — so the bar for printing one is higher than the bar for listing a candidate.
+     */
+    private const CONFIDENT = 60;
+
     public function handle(): int
     {
         $apply = (bool) $this->option('apply');
@@ -231,23 +239,42 @@ class PurchaseRelinkCommand extends Command
         }
         $this->table(['Item as recorded', 'Qty', 'Lines', 'Line ids', 'Closest product'], array_slice($table, 0, 40));
 
-        $top = reset($groups);
-        if ($top) {
+        // v4.65.2 — the example command must come from the best MATCH, not the biggest quantity.
+        //
+        // On the first real run this printed, ready to paste:
+        //     --alias="Lids 500ml=Methylated Spirit 500ml"
+        // because Lids was the largest remaining quantity — while being a 37% match to a completely
+        // different product. A tool that prints a copy-pasteable command is making a recommendation
+        // whatever its table says, and it must only do that when it is actually confident.
+        $strong = null;
+        foreach ($groups as $g) {
             $best = $products->map(fn ($p) => ['n' => (string) $p->name,
-                                               's' => PurchaseNameMatch::similarity($top['name'], (string) $p->name)])
+                                               's' => PurchaseNameMatch::similarity($g['name'], (string) $p->name)])
                 ->sortByDesc('s')->first();
-            $this->line('');
-            $this->comment('  If the closest product is the right one, teach it that name and every '
-                . 'line using that wording links at once:');
-            $this->line('    php artisan purchase:relink ' . $t->id
-                . ' --alias="' . $top['name'] . '=' . ($best['n'] ?? 'Exact Product Name') . '" --apply');
-            $this->line('  Repeat --alias as many times as you need in one command.');
-            $this->line('');
-            $this->comment('  For a wording that will never occur again — one carrying a voucher number '
-                . 'or a date — link the LINE instead, so no dead alias is left behind:');
-            $this->line('    php artisan purchase:relink ' . $t->id
-                . ' --line="<line id>=Exact Product Name" --apply');
-            $this->comment('  Anything that is not goods — fuel, freight, a fee — should stay unlinked.');
+            if ($best && $best['s'] >= self::CONFIDENT && (! $strong || $best['s'] > $strong['s'])) {
+                $strong = ['wording' => $g['name'], 'n' => $best['n'], 's' => $best['s']];
+            }
         }
+
+        $this->line('');
+        if ($strong) {
+            $this->comment('  The closest match left is ' . $strong['s'] . '%. If it is right, teach it '
+                . 'that name and every line using that wording links at once:');
+            $this->line('    php artisan purchase:relink ' . $t->id
+                . ' --alias="' . $strong['wording'] . '=' . $strong['n'] . '" --apply');
+        } else {
+            $this->comment('  Nothing left is a confident match — every suggestion above is under '
+                . self::CONFIDENT . '%, so read the table rather than pasting a command. Most of what '
+                . 'reaches this point is either a product you have not created yet, or not goods at all.');
+            $this->line('    php artisan purchase:relink ' . $t->id
+                . ' --alias="<wording as recorded>=<Exact Product Name>" --apply');
+        }
+        $this->line('  Repeat --alias as many times as you need in one command.');
+        $this->line('');
+        $this->comment('  For a wording that will never occur again — one carrying a voucher number '
+            . 'or a date — link the LINE instead, so no dead alias is left behind:');
+        $this->line('    php artisan purchase:relink ' . $t->id
+            . ' --line="<line id>=Exact Product Name" --apply');
+        $this->comment('  Anything that is not goods — fuel, freight, a fee — should stay unlinked.');
     }
 }
