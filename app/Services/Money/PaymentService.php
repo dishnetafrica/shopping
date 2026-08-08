@@ -157,6 +157,12 @@ class PaymentService
             try { $this->syncOrderPaid($t, $orderNo); } catch (\Throwable $e) {}
         }
 
+        // v4.61 — the Growth screen ranks customers by money COLLECTED, so its cached figures move
+        // when a receipt lands, not when an order does. Dropped here, in the one recorder, for the
+        // same reason the two syncs above live here. Never fatal: a stale list is a nuisance, and a
+        // payment that fails to record because a cache key would not clear is not.
+        try { \App\Services\Growth\GrowthSignalsService::forget((int) $t->id); } catch (\Throwable $e) {}
+
         // v4.25 — the customer's side of the loop: receipt PDF + what they paid now, what they have
         // paid in total against the invoice, and what is still due. Dispatched AFTER the sync above so
         // the balance quoted to them is the real one. Never inside the transaction, never fatal:

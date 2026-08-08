@@ -17,6 +17,11 @@ use App\Services\Growth\ReorderSignals;
  * Every row carries its own reasoning: how often that customer normally buys, how far past it they
  * are, and how much to trust the answer. A row that says "43 days late, usually every 2 weeks" can
  * be argued with; a row that says "at risk" cannot, and gets ignored by the second week.
+ *
+ * v4.61 — the value column and the "at risk" total are money COLLECTED, not money ordered. A
+ * customer who took USD 7,836 of stock and paid USD 3,000 is worth USD 3,000 to this shop; the rest
+ * is a receivable, and there is a screen for those. Ranking a call list by what was ordered puts the
+ * customer who does not pay at the top of it.
  */
 final class GrowthCapability implements ProcessCapability
 {
@@ -78,20 +83,28 @@ final class GrowthCapability implements ProcessCapability
             ['key' => 'state',    'label' => 'Status',   'type' => 'badge',  'sortable' => true],
             ['key' => 'reason',   'label' => 'Why',      'sortable' => false],
             ['key' => 'last',     'label' => 'Days since order', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'value',    'label' => 'Last 12 months', 'align' => 'right', 'sortable' => true],
+            ['key' => 'value',    'label' => 'Collected 12m', 'align' => 'right', 'sortable' => true],
             ['key' => 'trust',    'label' => 'Confidence', 'type' => 'badge', 'sortable' => true],
         ];
 
-        // A number nobody can check is a number nobody should trust. If some orders could not be
-        // priced in one currency, the total says so rather than quietly understating itself.
-        $foot = $data['unpriced'] > 0
-            ? number_format($data['unpriced']) . ' orders not counted (no base-currency value)'
-            : 'trailing 12 months';
+        // A number nobody can check is a number nobody should trust, so the tile says which of the
+        // two ways it could be understated actually applies.
+        //
+        // `unpaid` is the one worth reading. It counts customers who ordered inside the window with
+        // no receipt recorded at all — normally credit, and occasionally a shop banking its cash
+        // somewhere this system cannot see, in which case every figure in the column is low.
+        if ($data['unpriced'] > 0) {
+            $foot = number_format($data['unpriced']) . ' receipts not counted (no base-currency value)';
+        } elseif (($data['unpaid'] ?? 0) > 0) {
+            $foot = 'collected · ' . number_format($data['unpaid']) . ' ordered but never paid';
+        } else {
+            $foot = 'collected, trailing 12 months';
+        }
 
         return (new WorkspacePayload)
             ->object([
                 'type' => 'list:growth', 'title' => 'Growth',
-                'subtitle' => count($act) . ' customers worth a call · from your order book, nothing external',
+                'subtitle' => count($act) . ' customers worth a call · ranked by money collected, not money ordered',
             ])
             ->headline($money($atRisk), 'at risk — late or gone quiet', $atRisk > 0 ? 'warn' : 'ok')
             ->financials([
