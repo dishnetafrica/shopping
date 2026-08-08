@@ -68,6 +68,11 @@ final class NavCountsCapability implements Capability
             // sidebar) alive on a server where the migration has not run yet.
             'discovery'         => $safe(fn () => (int) \App\Models\BusinessSuggestion::withoutGlobalScopes()
                                         ->where('tenant_id', $t)->where('status', 'pending')->count()),
+            // v4.63 — the badge is OVERDUE follow-ups, not visits. A count of visits is a number
+            // nobody acts on; a count of promises already late is the only one worth a red dot.
+            'visits'            => $safe(fn () => (int) \App\Models\Visit::withoutGlobalScopes()
+                                        ->where('tenant_id', $t)->where('next_action_done', false)
+                                        ->whereNotNull('next_action_at')->where('next_action_at', '<', now())->count()),
             'chats'             => $safe(fn () => $c(Conversation::query()->where('unread', '>', 0))),
             'salesOrder'        => $safe(fn () => $c(Order::query())),
             'quotations'        => $safe(fn () => $c(Quotation::query()->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending','revised','customer_revised')")->whereNull('order_id'))),   // revised quotes stay in the "waiting" badge (v4.6.3)

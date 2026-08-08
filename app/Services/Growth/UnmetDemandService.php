@@ -4,6 +4,7 @@ namespace App\Services\Growth;
 
 use App\Models\FollowupProposal;
 use App\Models\SearchEvent;
+use App\Models\VisitItem;
 use App\Models\Tenant;
 use App\Services\Bot\PartRequestService;
 use Illuminate\Support\Facades\Cache;
@@ -19,6 +20,10 @@ use Illuminate\Support\Facades\Cache;
  *   ASKS      `FollowupProposal` rows with trigger `part_request` — the bot noticing a customer
  *             asked for something not in the catalogue. **Recorded one row per customer**, which is
  *             right for following that person up and useless for deciding what to stock.
+ *   VISITS    `visit_items` with `stocked = false` (v4.63) — something a rep was asked for standing
+ *             in the shop. The best of the three: a person said it to another person, and the
+ *             business it came from has a phone on its record, so it arrives with a caller already
+ *             attached.
  *
  * The second is the one worth combining. "Musa asked for brake pads" is a follow-up. "Nine
  * customers asked for brake pads this month, and here are their numbers" is a purchase decision
@@ -100,6 +105,22 @@ final class UnmetDemandService
                     $add($part, (string) $p->customer_phone, $p->created_at, 'asked');
                 });
         } catch (\Throwable $e) {
+        }
+
+        // Things a rep was asked for standing in the shop. The third source, and the best of the
+        // three: a person said it out loud to another person, and the business it came from has a
+        // phone number on its record — so this demand arrives with a callback list already attached.
+        try {
+            VisitItem::withoutGlobalScopes()
+                ->where('visit_items.tenant_id', $t->id)
+                ->where('visit_items.stocked', false)
+                ->where('visit_items.created_at', '>=', $since)
+                ->join('visits', 'visits.id', '=', 'visit_items.visit_id')
+                ->leftJoin('customer_profiles', 'customer_profiles.id', '=', 'visits.customer_profile_id')
+                ->get(['visit_items.name', 'visit_items.created_at', 'customer_profiles.phone'])
+                ->each(fn ($i) => $add((string) $i->name, (string) ($i->phone ?? ''), $i->created_at, 'visit'));
+        } catch (\Throwable $e) {
+            // the visits tables may not be migrated yet; the screen must still render
         }
 
         $rows = [];

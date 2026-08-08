@@ -28,6 +28,7 @@ use App\Capability\Process\CashbookCapability;
 use App\Capability\Process\CategoryListCapability;
 use App\Capability\Process\DemandCapability;
 use App\Capability\Process\DiscoveryCapability;
+use App\Capability\Process\VisitsCapability;
 use App\Capability\Process\GrowthCapability;
 use App\Capability\Process\CollectionsCapability;
 use App\Capability\Process\CustomerListCapability;
@@ -169,6 +170,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // v4.55 — Growth: who has gone quiet and who is about to, derived from the order book.
         // Read-only and self-contained; the only command is a manual recalculate.
         $r->register(new GrowthCapability(), new CapabilityManifest(key: 'growth', type: 'process', owner: 'sales', permission: 'menu:customers', commands: [['key' => 'refresh', 'actor' => 'human']], api: '/api/v1/workspace/growth'));
+        // v4.63 — Visits: where a rep went and what came of it. The gap everything downstream was
+        // waiting on — a shop with 676 positives and no negatives cannot be scored against anything.
+        $r->register(new VisitsCapability(), new CapabilityManifest(key: 'visits', type: 'process', owner: 'sales', permission: 'menu:customers', commands: [['key' => 'log_visit', 'actor' => 'human'], ['key' => 'close_action', 'actor' => 'human']], api: '/api/v1/workspace/visits'));
         // v4.62 — Businesses found: the discovery review queue. Nothing a provider finds reaches a
         // customer record until somebody says yes here.
         $r->register(new DiscoveryCapability(), new CapabilityManifest(key: 'discovery', type: 'process', owner: 'sales', permission: 'menu:customers', commands: [['key' => 'approve', 'actor' => 'human'], ['key' => 'reject', 'actor' => 'human'], ['key' => 'approve_all', 'actor' => 'human'], ['key' => 'import_csv', 'actor' => 'human']], api: '/api/v1/workspace/discovery'));
