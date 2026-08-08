@@ -64,6 +64,10 @@ final class NavCountsCapability implements Capability
             // live in this table and are not customers; counting them here would be the single
             // most visible way ADR-016 could go wrong.
             'customers'         => $safe(fn () => $c(BusinessStage::scope(CustomerProfile::query()))),
+            // v4.62 — businesses waiting for a decision. $safe keeps the badge (and the whole
+            // sidebar) alive on a server where the migration has not run yet.
+            'discovery'         => $safe(fn () => (int) \App\Models\BusinessSuggestion::withoutGlobalScopes()
+                                        ->where('tenant_id', $t)->where('status', 'pending')->count()),
             'chats'             => $safe(fn () => $c(Conversation::query()->where('unread', '>', 0))),
             'salesOrder'        => $safe(fn () => $c(Order::query())),
             'quotations'        => $safe(fn () => $c(Quotation::query()->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending','revised','customer_revised')")->whereNull('order_id'))),   // revised quotes stay in the "waiting" badge (v4.6.3)
