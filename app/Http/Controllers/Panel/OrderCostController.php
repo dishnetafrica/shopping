@@ -370,7 +370,11 @@ class OrderCostController extends Controller
                     try {
                         $pid = (int) (\App\Models\Product::withoutGlobalScopes()
                             ->where('tenant_id', $t->id)
-                            ->whereRaw('lower(trim(name)) = ?', [mb_strtolower(trim($name))])
+                            // Normalised identically to purchase:relink — lowercase, trimmed, inner
+                            // whitespace collapsed — so a name does not link on one path and fail on
+                            // the other, which would be the most confusing possible outcome.
+                            ->whereRaw("lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) = ?",
+                                [mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $name)))])
                             ->value('id') ?? 0) ?: null;
                     } catch (\Throwable $e) {
                         $pid = null;
