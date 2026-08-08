@@ -23,7 +23,7 @@ class ProductStockObserver
         if (abs($stock) < 0.0001) return;
         try {
             StockLedger::forTenant($p->tenant)->receive([
-                'product_id' => $p->id, 'sku' => $p->sku, 'location' => StockLedger::LOC_KAMPALA,
+                'product_id' => $p->id, 'sku' => $p->sku, 'location' => StockLedger::home($p->tenant),
                 'qty' => $stock, 'ref_type' => 'product_create', 'ref_id' => $p->id,
                 'note' => 'Opening stock: ' . $p->name,
             ]);
@@ -40,7 +40,7 @@ class ProductStockObserver
         if (abs($delta) < 0.0001) return;
         try {
             StockLedger::forTenant($p->tenant)->adjust([
-                'product_id' => $p->id, 'sku' => $p->sku, 'location' => StockLedger::LOC_KAMPALA,
+                'product_id' => $p->id, 'sku' => $p->sku, 'location' => StockLedger::home($p->tenant),
                 'qty' => $delta, 'ref_type' => 'product_edit', 'ref_id' => $p->id,
                 'note' => 'Stock adjusted: ' . $p->name,
             ]);

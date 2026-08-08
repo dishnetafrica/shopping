@@ -656,7 +656,7 @@ class PosController extends Controller
                     if ($l['product_id'] > 0) {
                         $sl->receive([
                             'product_id' => $l['product_id'], 'sku' => null,
-                            'location'   => \App\Services\Inventory\StockLedger::LOC_KAMPALA,
+                            'location'   => \App\Services\Inventory\StockLedger::home($t),
                             'qty'        => $l['qty'],
                             'ref_type'   => 'pos_return', 'ref_id' => $ret->id,
                             'note'       => 'POS return ' . ($cnNo ?: ('#' . $ret->id)) . ' on ' . $o->order_no . ' — ' . $l['name'],

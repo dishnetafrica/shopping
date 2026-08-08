@@ -145,7 +145,7 @@ class TrustReceivingController extends Controller
                 // legacy on-hand truthfulness (see class docblock)
                 if (StockLedger::readsFromLedger($tenant)) {
                     $ledger->syncProductStockCache((int) $ln['product_id']);
-                } elseif ($s->location === StockLedger::LOC_KAMPALA) {
+                } elseif ($s->location === StockLedger::home($tenant)) {
                     Product::where('tenant_id', $tenant->id)->where('id', (int) $ln['product_id'])
                         ->increment('stock', (int) round((float) $ln['qty']));
                 }

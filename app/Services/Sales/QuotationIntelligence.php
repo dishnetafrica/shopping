@@ -28,7 +28,8 @@ class QuotationIntelligence
         $q->loadMissing('items');
         $names    = $q->items->pluck('name')->all();
         $products = $this->resolveProducts($t, $names);
-        $kMap     = $this->safeMap(fn () => StockLedger::forTenant($t)->onHandMap(StockLedger::LOC_KAMPALA));
+        // v4.64.2 — can we ship it? From the warehouse the goods are actually in.
+        $kMap     = $this->safeMap(fn () => StockLedger::forTenant($t)->onHandMap(StockLedger::home($t)));
 
         $shipToday = [];
         $awaiting  = [];
@@ -74,7 +75,8 @@ class QuotationIntelligence
     {
         $q->loadMissing('items');
         $products = $this->resolveProducts($t, $q->items->pluck('name')->all());
-        $kMap     = $this->safeMap(fn () => StockLedger::forTenant($t)->onHandMap(StockLedger::LOC_KAMPALA));
+        // v4.64.2 — can we ship it? From the warehouse the goods are actually in.
+        $kMap     = $this->safeMap(fn () => StockLedger::forTenant($t)->onHandMap(StockLedger::home($t)));
 
         $out = [];
         foreach ($q->items as $it) {
@@ -101,7 +103,8 @@ class QuotationIntelligence
     {
         $q->loadMissing('items');
         $products = $this->resolveProducts($t, $q->items->pluck('name')->all());
-        $kMap     = $this->safeMap(fn () => StockLedger::forTenant($t)->onHandMap(StockLedger::LOC_KAMPALA));
+        // v4.64.2 — can we ship it? From the warehouse the goods are actually in.
+        $kMap     = $this->safeMap(fn () => StockLedger::forTenant($t)->onHandMap(StockLedger::home($t)));
         $names    = [];
         foreach ($q->items as $it) {
             $p = $products[mb_strtolower((string) $it->name)] ?? null;

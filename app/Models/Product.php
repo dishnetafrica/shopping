@@ -102,7 +102,9 @@ class Product extends Model
         $t = $this->tenant;
         if ($t && \App\Services\Inventory\StockLedger::readsFromLedger($t)) {
             return \App\Services\Inventory\StockLedger::forTenant($t)
-                ->onHandFor($this->id, null, \App\Services\Inventory\StockLedger::LOC_KAMPALA);
+                // v4.64.2 — the shop's own warehouse, not Kampala by assumption. Otherwise a Juba
+                // shop reads on-hand from a location nothing ever receives into.
+                ->onHandFor($this->id, null, \App\Services\Inventory\StockLedger::home($t));
         }
         return (float) ($this->stock ?? 0);
     }

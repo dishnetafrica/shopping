@@ -98,7 +98,7 @@ class PanelApiController extends Controller
         // fall back to the legacy column, so nothing shows a spurious 0 mid-cutover.
         $t = $r->user()->tenant;
         $ohMap = ($t && \App\Services\Inventory\StockLedger::readsFromLedger($t))
-            ? \App\Services\Inventory\StockLedger::forTenant($t)->onHandMap(\App\Services\Inventory\StockLedger::LOC_KAMPALA)
+            ? \App\Services\Inventory\StockLedger::forTenant($t)->onHandMap(\App\Services\Inventory\StockLedger::home($t))
             : [];
 
         $rows = $q->get()->map(function (Product $p) use ($ohMap) {
@@ -2064,7 +2064,7 @@ class PanelApiController extends Controller
                     try {
                         $sl->adjust([
                             'product_id' => $id, 'sku' => $d['sku'] ?: null,
-                            'location' => \App\Services\Inventory\StockLedger::LOC_KAMPALA,
+                            'location' => \App\Services\Inventory\StockLedger::home($t),
                             'qty' => $delta, 'ref_type' => 'stock_sync', 'ref_id' => $id,
                             'note' => 'CSV stock sync', 'created_by' => (string) ($r->user()->name ?? ''),
                         ]);
