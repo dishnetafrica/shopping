@@ -353,6 +353,29 @@ class OrderCostController extends Controller
                 $unit = (float) ($ln['unit_cost'] ?? 0);
                 $pid  = (int) ($ln['product_id'] ?? 0) ?: null;
                 $name = trim((string) ($ln['name'] ?? ''));
+
+                // v4.64.3 — resolve the NAME to a product when the browser could not.
+                //
+                // The Buy stock form maps a typed item to an id from a datalist and sends null when
+                // the text does not match a key exactly. So "Golden Foil 45cm " with a trailing
+                // space, or a name whose product was renamed since, recorded the quantity with no
+                // product attached — and from v4.64 that means the goods never reach the warehouse
+                // count. The purchase looks perfectly correct on every screen; the stock simply does
+                // not move, and nothing says so.
+                //
+                // The flat-slot path below has always done this. The multi-line path never did.
+                // EXACT match only, case and whitespace insensitive. No fuzzy matching: attaching a
+                // carton of foil to the wrong product is worse than not attaching it at all.
+                if (! $pid && $name !== '') {
+                    try {
+                        $pid = (int) (\App\Models\Product::withoutGlobalScopes()
+                            ->where('tenant_id', $t->id)
+                            ->whereRaw('lower(trim(name)) = ?', [mb_strtolower(trim($name))])
+                            ->value('id') ?? 0) ?: null;
+                    } catch (\Throwable $e) {
+                        $pid = null;
+                    }
+                }
                 if ($qty <= 0 || $unit < 0) continue;
                 $native = round($qty * $unit, 2);
                 if ($native <= 0) continue;
@@ -400,8 +423,18 @@ class OrderCostController extends Controller
         if (! count($out)) return response()->json(['ok'=>false,'error'=>'no_valid_lines'],422);
         // v4.35 — every line id, so ONE supplier invoice can be attached to the whole purchase
         // in a single upload rather than photographed again for each line.
+        // v4.64.3 — say out loud how many lines will actually move stock. A purchase whose item name
+        // matched nothing is recorded correctly as money and moves no goods, and until now the only
+        // way to discover that was to count the shelf.
+        $linked = count(array_filter($out, fn ($l) => ! empty($l['product_id'])));
+        $msg = $linked === count($out)
+            ? 'Purchase recorded · ' . $linked . ' line(s), stock updated.'
+            : 'Purchase recorded · ' . $linked . ' of ' . count($out) . ' line(s) linked to a product. '
+              . (count($out) - $linked) . ' recorded as money only — check the item name matches a product exactly.';
+
         return response()->json(['ok'=>true,'group_id'=>$group,'count'=>count($out),
             'total_native'=>round($totalNative,2),'currency'=>$cur,'pay_status'=>$payStatus,'lines'=>$out,
+            'linked'=>$linked,'message'=>$msg,
             'ids'=>array_values(array_map(fn($l)=>(int)$l['id'], $out)),'evidence_type'=>'purchase']);
     }
 
@@ -423,6 +456,9 @@ class OrderCostController extends Controller
             $voided = strtolower((string)$r->status) === 'void';
             if (! $voided) $groups[$g]['total'] += (float)$r->native_amount;   // voided lines don't count toward the total
             $groups[$g]['items'][] = ['id'=>$r->id,'name'=>$r->note,
+                // v4.64.3 — the product link, so anything reconciling this can match on the id
+                // rather than guessing from a name that carries voucher numbers and typos.
+                'product_id'=>$r->product_id===null?null:(int)$r->product_id,
                 'qty'=>$r->qty===null?null:(float)$r->qty,'unit_cost'=>$r->unit_cost===null?null:(float)$r->unit_cost,
                 'native'=>(float)$r->native_amount,'currency'=>$r->currency,'pay_status'=>$r->pay_status,'status'=>$r->status];
             $seenIds[] = (int)$r->id;
