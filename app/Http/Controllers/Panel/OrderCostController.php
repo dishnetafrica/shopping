@@ -378,6 +378,21 @@ class OrderCostController extends Controller
                         if ($p) { $p->cost_price = round($toUgx($unit), 2); $p->save(); }
                     } catch (\Throwable $e) {}
                 }
+
+                // v4.64 — a purchase IS a goods receipt. Until now this recorded only the money, so
+                // the shop could say what it spent and not what arrived. Inside the same transaction
+                // as the money: a receipt whose stock movement failed to write is worse than no
+                // receipt, because the books and the warehouse would disagree with nobody told.
+                //
+                // Not fatal on its own, though — the ledger is off by default for most tenants, and
+                // an inventory error must never be the reason a bill fails to record.
+                if (\App\Services\Inventory\PurchaseStock::receivable($pid, $qty)) {
+                    try {
+                        \App\Services\Inventory\StockReceiver::forPurchase($t, $created, (float) $qty, (string) ($u->name ?? ''));
+                    } catch (\Throwable $e) {
+                        \Log::warning('purchase stock not received: ' . $e->getMessage());
+                    }
+                }
                 $out[] = ['id'=>(int)$created->id,'product_id'=>$pid,'name'=>$name,'qty'=>$qty,'unit_cost'=>$unit,'native'=>$native];
             }
         });
@@ -578,6 +593,16 @@ class OrderCostController extends Controller
         $c->void_reason = trim((string)$request->input('reason','')) ?: null;
         $c->save();
         \App\Services\AuditLogger::log($t->id,'order_cost',$c->id,'void',$u,$before,['status'=>'void'],$c->void_reason);
+
+        // v4.64 — a voided purchase never happened, so the goods it received come back out. Handled
+        // as "the wanted quantity is now zero", which is the same arithmetic as an edit and needs no
+        // separate reversal path: StockReceiver posts the difference, whatever direction that is.
+        try {
+            \App\Services\Inventory\StockReceiver::forPurchase($t, $c, 0.0, (string) ($u->name ?? ''));
+        } catch (\Throwable $e) {
+            \Log::warning('voided purchase stock not reversed: ' . $e->getMessage());
+        }
+
         return response()->json(['ok'=>true,'voided'=>true]);
     }
 

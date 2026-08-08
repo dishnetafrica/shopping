@@ -30,6 +30,28 @@ class StockLedger
     public const LOC_JUBA = 'juba-consignment';
     public const LOCATIONS = [self::LOC_KAMPALA, self::LOC_JUBA];
 
+    /**
+     * v4.64 - which of the two locations is THIS shop's own warehouse.
+     *
+     * Four separate places used to hard-code Kampala as the one that matters: where a sale is issued
+     * from, where an opening balance is seeded, which projection `products.stock` mirrors, and where
+     * a receipt lands. That is right for a shop whose goods are in Kampala and wrong in a way that
+     * cannot be noticed for a shop whose goods are in Juba - it would receive into one location and
+     * sell out of the other, so Juba would climb for ever while Kampala went negative on every sale,
+     * and the number on the product screen would drift below zero within a week.
+     *
+     * Defaults to Kampala, because every tenant before this release was implicitly Kampala.
+     */
+    public static function home(Tenant $t): string
+    {
+        return PurchaseStock::homeLocation($t->setting('stock_home_location', self::LOC_KAMPALA));
+    }
+
+    public function homeLocation(): string
+    {
+        return self::home($this->tenant);
+    }
+
     public function __construct(private Tenant $tenant) {}
 
     public static function forTenant(Tenant $t): self
@@ -125,7 +147,9 @@ class StockLedger
     }
 
     /**
-     * E6.5 — derive the legacy `products.stock` cache from the ledger projection (Kampala), so the
+     * E6.5 — derive the legacy `products.stock` cache from the ledger projection at THIS SHOP'S
+     * OWN warehouse (v4.64 — was hard-coded to Kampala, which for a Juba shop mirrored a location
+     * nothing ever received into), so the
      * column reflects the ledger truth. Raw DB update (no model events → no observer loop). CRITICAL:
      * only products that ACTUALLY have ledger movements are touched — a product absent from the ledger
      * is left alone rather than being zeroed, so this can never wipe stock for a product whose opening
@@ -134,7 +158,7 @@ class StockLedger
      */
     public function syncProductStockCache(?int $productId = null): int
     {
-        $map = $this->onHandMap(self::LOC_KAMPALA);
+        $map = $this->onHandMap($this->homeLocation());
         if ($productId !== null) {
             $map = array_key_exists($productId, $map) ? [$productId => $map[$productId]] : [];
         }

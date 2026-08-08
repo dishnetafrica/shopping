@@ -181,6 +181,47 @@ final class ProductCapability implements ObjectCapability
             $fins[] = new Financial('pack', 'Pack size', (int) $p->pack_size);
         }
 
+        // v4.64 — where this stock came from. `order_costs` has carried `product_id`, `qty` and
+        // `unit_cost` on every Buy stock line since that form was built, and the product record has
+        // never shown any of it — so "170 on hand" stood on the page with nothing behind it and no
+        // way to ask where it came from or what it cost.
+        $buyRows = []; $lastBuy = null; $boughtAll = 0.0;
+        try {
+            $unit = trim((string) ($p->unit_label ?: '')) ?: 'units';
+            foreach (\App\Models\OrderCost::withoutGlobalScopes()
+                ->where('tenant_id', $ctx->tenantId())->where('product_id', $p->id)
+                ->where('stage', 'purchase')->whereNull('voided_at')
+                ->orderByDesc('created_at')->orderByDesc('id')->limit(25)->get() as $oc) {
+                $q = (float) ($oc->qty ?? 0);
+                if ($q <= 0) { continue; }
+                $boughtAll += $q;
+                $lastBuy ??= $oc;
+                $buyRows[] = ['cells' => [
+                    $oc->created_at ? $oc->created_at->format('d M Y') : '—',
+                    (string) ($oc->supplier_name ?: '—'),
+                    ['value' => \App\Services\Inventory\PurchaseStock::number($q) . ' ' . $unit, 'align' => 'right'],
+                    ['value' => \App\Services\Inventory\PurchaseStock::number((float) $oc->unit_cost)
+                                . ' ' . strtoupper((string) $oc->currency), 'align' => 'right'],
+                ], 'link' => $oc->supplier_id ? '/api/v1/workspace/supplier/' . (int) $oc->supplier_id : null];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        if ($lastBuy) {
+            $fins[] = new Financial('last_buy', 'Last bought',
+                \App\Services\Inventory\PurchaseStock::number((float) $lastBuy->qty) . ' ' . ($p->unit_label ?: 'units')
+                . ' · ' . ($lastBuy->created_at ? $lastBuy->created_at->format('d M') : ''));
+        }
+
+        $buyCard = ['kind' => 'table', 'title' => 'Purchase history',
+            'sub' => $buyRows
+                ? \App\Services\Inventory\PurchaseStock::number($boughtAll) . ' ' . ($p->unit_label ?: 'units') . ' bought, all time'
+                : 'nothing recorded against this product yet',
+            'columns' => [['label' => 'Date'], ['label' => 'Supplier'], ['label' => 'Qty', 'align' => 'right'], ['label' => 'Unit cost', 'align' => 'right']],
+            'rows' => $buyRows,
+            'empty' => 'No purchases linked to this product. Use Buy stock on a supplier to link one.',
+            'pageSize' => 10];
+
         return (new WorkspacePayload)
             ->object([
                 'type' => 'product', 'id' => (string) $p->id, 'ref' => (string) $p->sku, 'title' => (string) $p->name,
@@ -189,6 +230,7 @@ final class ProductCapability implements ObjectCapability
             ])
             ->headline(number_format($stock) . ' ' . (string) ($p->unit_label ?: 'units'), 'on hand', $status === 'out' ? 'danger' : ($status === 'low' ? 'warn' : 'ok'))
             ->financials($fins)
+            ->overviewCards([$buyCard])
             ->related($p->category ? $this->reco->topInCategory($ctx, (string) $p->category, 6, (int) $p->id) : [])
             ->stats(array_merge($serialStats, $warrantyStats, $kitStats))
             ->answers(array_merge($specAnswers, $warrantyAnswers, $kitAnswers))

@@ -81,7 +81,20 @@ final class SupplierCapability implements ObjectCapability
         // --- purchases (bills) list with edit/delete per row ---
         $bills = OrderCost::where('tenant_id', $t)->where('supplier_id', $s->id)
             ->where('stage', '!=', 'supplier_payment')->orderByDesc('id')->limit(100)->get();
+        // v4.64 — unit labels in one query, so a row can say "50 CTN" instead of only the money.
+        $units = [];
+        try {
+            $pids = $bills->pluck('product_id')->filter()->unique()->values()->all();
+            if ($pids) {
+                \App\Models\Product::withoutGlobalScopes()->where('tenant_id', $t)->whereIn('id', $pids)
+                    ->get(['id', 'unit_label'])
+                    ->each(fn ($p) => $units[(int) $p->id] = trim((string) ($p->unit_label ?: '')) ?: 'units');
+            }
+        } catch (\Throwable $e) {
+        }
+
         $billRows = [];
+        $boughtByProduct = [];
         foreach ($bills as $c) {
             $voided = in_array((string) $c->status, ['void', 'rejected'], true);
             $ref = (string) ($c->order_no ?: ('PUR-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)));
@@ -97,17 +110,46 @@ final class SupplierCapability implements ObjectCapability
                 ]];
                 $btns[] = ['icon' => 'trash', 'title' => 'Delete purchase', 'tone' => 'danger', 'post' => '/papi/order-costs/' . $c->id . '/delete', 'confirm' => 'Delete purchase ' . $ref . '? (voided, kept in the audit trail)'];
             }
+            $qtyText = \App\Services\Inventory\PurchaseStock::describe(
+                $c->qty, $units[(int) $c->product_id] ?? null, $c->unit_cost, (string) $c->currency
+            );
+            // How much of each product has ever come from this supplier — the summary underneath.
+            if (! $voided && $c->product_id && (float) $c->qty > 0) {
+                $k = (int) $c->product_id;
+                $boughtByProduct[$k] ??= ['name' => (string) $c->note, 'qty' => 0.0, 'unit' => $units[$k] ?? 'units'];
+                $boughtByProduct[$k]['qty'] += (float) $c->qty;
+            }
+
             $billRows[] = ['cells' => [
                 $when ? $when->format('d M Y') : '—',
                 $ref,
                 (string) ($c->note ?: ucfirst((string) $c->stage)),
+                ['value' => $qtyText ?: '—', 'align' => 'right'],
                 ['value' => ($voided ? '(void) ' : '') . Money::fmt((float) $c->native_amount, (string) $c->currency), 'tone' => $voided ? '' : 'danger'],
                 ['value' => $isCredit ? 'Credit' : 'Cash', 'badge' => $isCredit ? 'warn' : 'ok'],
                 ['buttons' => $btns],
             ], 'ts' => $when ? $when->timestamp : 0, 'link' => null];
         }
+        // v4.64 — what this supplier has actually supplied, added up. A year of bills tells you what
+        // you spent; this tells you what they are FOR, which is the thing worth knowing before the
+        // next order.
+        uasort($boughtByProduct, fn ($a, $b) => $b['qty'] <=> $a['qty']);
+        $boughtRows = [];
+        foreach (array_slice($boughtByProduct, 0, 20, true) as $pid => $b) {
+            $boughtRows[] = ['cells' => [
+                (string) $b['name'],
+                ['value' => \App\Services\Inventory\PurchaseStock::number($b['qty']) . ' ' . $b['unit'], 'align' => 'right'],
+            ], 'link' => '/api/v1/workspace/product/' . $pid];
+        }
+        $boughtCard = ['kind' => 'table', 'title' => 'What you buy from them',
+            'sub' => $boughtRows ? count($boughtRows) . ' product(s)' : 'no product-linked purchases yet',
+            'columns' => [['label' => 'Product'], ['label' => 'Bought, all time', 'align' => 'right']],
+            'rows' => $boughtRows,
+            'empty' => 'Purchases recorded as money only. Use Buy stock to link a purchase to a product.',
+            'pageSize' => 20];
+
         $billsCard = ['kind' => 'table', 'title' => 'Purchases (bills)', 'sub' => count($billRows) . ' recorded', 'searchable' => true,
-            'columns' => [['label' => 'Date'], ['label' => 'Ref'], ['label' => 'Item'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Pay'], ['label' => '', 'align' => 'right']],
+            'columns' => [['label' => 'Date'], ['label' => 'Ref'], ['label' => 'Item'], ['label' => 'Quantity', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Pay'], ['label' => '', 'align' => 'right']],
             'rows' => $billRows, 'empty' => 'No purchases recorded for this supplier yet', 'pageSize' => 25];
 
         // --- payments list ---
@@ -209,7 +251,7 @@ final class SupplierCapability implements ObjectCapability
                 ['key' => 'last', 'label' => 'Last order', 'value' => $lastOrder],
             ])
             ->quickActions($quick)
-            ->tabSections(['overview' => [$contactCard], 'purchases' => [$billsCard], 'payments' => [$paysCard]])
+            ->tabSections(['overview' => [$contactCard], 'purchases' => [$boughtCard, $billsCard], 'payments' => [$paysCard]])
             ->tabs([
                 ['key' => 'overview', 'label' => 'Overview'],
                 ['key' => 'purchases', 'label' => 'Purchases', 'count' => count($billRows)],

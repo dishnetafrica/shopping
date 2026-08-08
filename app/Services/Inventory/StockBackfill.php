@@ -37,19 +37,27 @@ class StockBackfill
         $now = now();
         $inserted = 0;
 
+        // v4.64 — the opening balance has to land in the SAME location the shop sells out of and
+        // receives purchases into, or the ledger starts life split across two warehouses and every
+        // figure disagrees from the first day.
+        $home = PurchaseStock::homeLocation(
+            data_get(json_decode((string) DB::table('tenants')->where('id', $tenantId)->value('settings'), true) ?: [],
+                     'stock_home_location', StockLedger::LOC_KAMPALA)
+        );
+
         // --- Kampala: each stocked product's current stock is its opening on-hand ---
         $seenProduct = array_flip(array_map('intval',
             DB::table('stock_movements')->where('tenant_id', $tenantId)
                 ->where('ref_type', self::REF_PRODUCT)->pluck('ref_id')->all()));
 
         DB::table('products')->where('tenant_id', $tenantId)->where('stock', '>', 0)
-            ->orderBy('id')->chunkById(500, function ($rows) use (&$inserted, $tenantId, $now, $seenProduct) {
+            ->orderBy('id')->chunkById(500, function ($rows) use (&$inserted, $tenantId, $now, $seenProduct, $home) {
                 $batch = [];
                 foreach ($rows as $p) {
                     if (isset($seenProduct[(int) $p->id])) continue;
                     $batch[] = [
                         'tenant_id' => $tenantId, 'product_id' => $p->id, 'sku' => $p->sku,
-                        'location' => StockLedger::LOC_KAMPALA, 'type' => StockLedger::IN, 'qty' => (float) $p->stock,
+                        'location' => $home, 'type' => StockLedger::IN, 'qty' => (float) $p->stock,
                         'ref_type' => self::REF_PRODUCT, 'ref_id' => $p->id, 'note' => 'Opening balance',
                         'created_by' => 'backfill', 'created_at' => $now, 'updated_at' => $now,
                     ];

@@ -157,7 +157,9 @@ final class OrderStockIssuer
         foreach (self::lines($order) as $ln) {
             $sl->issue([
                 'product_id' => $ln['product_id'], 'sku' => null,
-                'location'   => StockLedger::LOC_KAMPALA, 'qty' => $ln['qty'],
+                // v4.64 - the shop's own warehouse, which is where the purchase put the goods. A
+                // sale issued from a location nothing receives into is how a ledger goes negative.
+                'location'   => StockLedger::home($t), 'qty' => $ln['qty'],
                 'ref_type'   => self::REF_ISSUE, 'ref_id' => $order->id,
                 'note'       => 'Delivered ' . $order->order_no . ' — ' . $ln['name'],
                 'created_by' => (string) ($order->delivered_by ?? 'system'),
@@ -183,7 +185,7 @@ final class OrderStockIssuer
             if ($pid <= 0 || $q <= 0.0001) continue;   // nothing outstanding to reverse
             $sl->receive([
                 'product_id' => $pid, 'sku' => null,
-                'location'   => StockLedger::LOC_KAMPALA, 'qty' => $q,
+                'location'   => StockLedger::home($t), 'qty' => $q,
                 'ref_type'   => self::REF_REVERSAL, 'ref_id' => $order->id,
                 'note'       => 'Reversed delivery ' . $order->order_no,
                 'created_by' => 'system',

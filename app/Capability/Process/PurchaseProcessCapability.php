@@ -65,6 +65,23 @@ final class PurchaseProcessCapability implements ProcessCapability
             ->orderByDesc('created_at')->orderByDesc('id')
             ->limit(self::MAX_ROWS)->get();
 
+        // v4.64 — unit labels and current on-hand for every product on this page, in two queries
+        // rather than two per row. `stock` is the legacy column, which since this release mirrors the
+        // ledger at the shop's own warehouse.
+        $units = []; $onHand = [];
+        $pids = $purchases->pluck('product_id')->filter()->unique()->values()->all();
+        if ($pids) {
+            try {
+                \App\Models\Product::withoutGlobalScopes()->where('tenant_id', $t)->whereIn('id', $pids)
+                    ->get(['id', 'unit_label', 'stock'])
+                    ->each(function ($p) use (&$units, &$onHand) {
+                        $units[(int) $p->id]  = trim((string) ($p->unit_label ?: '')) ?: 'units';
+                        $onHand[(int) $p->id] = (float) $p->stock;
+                    });
+            } catch (\Throwable $e) {
+            }
+        }
+
         $monthStart = Carbon::now()->startOfMonth();
         $totalSpendUsd = 0.0; $payableUsd = 0.0; $monthSpendUsd = 0.0; $creditCount = 0; $cashCount = 0;
         $rows = [];
@@ -110,6 +127,17 @@ final class PurchaseProcessCapability implements ProcessCapability
                 $btns[] = ['icon' => 'trash', 'title' => 'Delete purchase', 'tone' => 'danger', 'post' => '/papi/order-costs/' . $c->id . '/delete', 'confirm' => 'Delete purchase ' . $ref . '? (voided, kept in the audit trail)'];
             }
 
+            // "50 CTN @ 98,000" — quantity first, because that is the part nobody could see.
+            $qtyText = \App\Services\Inventory\PurchaseStock::describe(
+                $c->qty, $units[(int) $c->product_id] ?? null, $c->unit_cost, $ccur
+            );
+            // And what that product is standing at NOW, which is the question the quantity is
+            // usually being read in order to answer.
+            $onHandText = ($c->product_id && isset($onHand[(int) $c->product_id]))
+                ? 'now ' . \App\Services\Inventory\PurchaseStock::number((float) $onHand[(int) $c->product_id])
+                  . ' ' . ($units[(int) $c->product_id] ?? 'in stock')
+                : '';
+
             [$payCell, $payKind] = $voided
                 ? [['value' => 'Void', 'badge' => 'default'], 'Void']
                 : ($isCredit
@@ -121,7 +149,13 @@ final class PurchaseProcessCapability implements ProcessCapability
             $rows[] = [
                 'date'     => ['value' => $when ? $when->format('d M Y') : '—', 'sort' => $when ? $when->timestamp : 0],
                 'supplier' => ['value' => $supName, 'sub' => $ref, 'avatar' => true],
-                'item'     => (string) ($c->note ?: ucfirst((string) $c->stage)),
+                // v4.64 — the quantity has been stored on every one of these rows since the Buy
+                // stock form was built, and this screen has only ever shown the money. "UGX 4,900,000"
+                // cannot tell anybody how many cartons arrived; "50 CTN" can.
+                'item'     => ['value' => (string) ($c->note ?: ucfirst((string) $c->stage)),
+                               'sub'   => $qtyText],
+                'qty'      => ['value' => $qtyText ?: '—', 'align' => 'right',
+                               'sub'   => $onHandText, 'sort' => (float) ($c->qty ?? 0)],
                 'amount'   => ['value' => ($voided ? '(void) ' : '') . Money::fmt($native, $ccur), 'sub' => Money::fmt($usd, 'USD'), 'tone' => $voided ? '' : 'danger', 'sort' => $voided ? 0 : $usd],
                 'pay'      => $payCell,
                 'act'      => ['buttons' => $btns],
@@ -136,6 +170,7 @@ final class PurchaseProcessCapability implements ProcessCapability
             ['key' => 'date',     'label' => 'Date', 'type' => 'num', 'sortable' => true],
             ['key' => 'supplier', 'label' => 'Supplier', 'type' => 'avatar', 'sortable' => true],
             ['key' => 'item',     'label' => 'Item', 'sortable' => true],
+            ['key' => 'qty',      'label' => 'Quantity', 'align' => 'right', 'sortable' => true],
             ['key' => 'amount',   'label' => 'Amount', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'pay',      'label' => 'Status', 'type' => 'badge', 'sortable' => true],
             ['key' => 'act',      'label' => '', 'type' => 'action', 'align' => 'right'],
