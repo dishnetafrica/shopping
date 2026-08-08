@@ -70,11 +70,16 @@ final class DiscoveryCapability implements ProcessCapability
                 // both and nobody has to learn a second scale.
                 'trust'    => ['value' => $conf >= 0.85 ? 'High' : ($conf >= 0.6 ? 'Fair' : 'Low'),
                                'badge' => $conf >= 0.85 ? 'ok' : ($conf >= 0.6 ? 'warn' : 'muted')],
+                // The row id goes in the ROUTE, not the body. CommandController builds its input as
+                // ['id' => $routeId] + $request->all() and the LEFT side wins, so a body-supplied
+                // id is silently discarded — every row action would have run against "_".
                 'act'      => ['buttons' => [
-                    ['label' => 'Add', 'icon' => 'check', 'post' => '/api/v1/workspace/discovery/command',
-                     'body' => ['action' => 'approve', 'id' => (int) $s->id]],
-                    ['label' => 'No', 'icon' => 'ban', 'post' => '/api/v1/workspace/discovery/command',
-                     'body' => ['action' => 'reject', 'id' => (int) $s->id]],
+                    ['label' => 'Add', 'icon' => 'check', 'tone' => 'default',
+                     'title' => 'Add to your customers' . ($isNew ? '' : ' — fills empty fields only'),
+                     'post'  => '/api/v1/workspace/discovery/' . (int) $s->id . '/approve'],
+                    ['label' => 'No', 'icon' => 'ban', 'tone' => 'danger',
+                     'title' => 'Remove from the queue',
+                     'post'  => '/api/v1/workspace/discovery/' . (int) $s->id . '/reject'],
                 ]],
                 'id'       => (int) $s->id,
             ];
@@ -95,11 +100,39 @@ final class DiscoveryCapability implements ProcessCapability
         // and it belongs to a rep rather than to a provider.
         $noPhone = count($rows) - $reachable;
 
+        // v4.62.1 — the screen has to be usable from the screen. Without a primary action the V3
+        // shell renders its own "New — coming soon" button, which on an empty queue is the only
+        // thing to press and does nothing: a review queue with no way to put anything in it.
+        $actions = [[
+            'key' => 'import_csv', 'label' => 'Add from spreadsheet', 'tone' => 'primary', 'actor' => 'human',
+            'endpoint' => '/api/v1/workspace/discovery/_/import_csv',
+            'schema' => ['csv' => 'textarea'],
+            'labels' => ['csv' => 'Paste your spreadsheet, including the header row'
+                . '<br><span class="mut" style="font-weight:400;font-size:12px">'
+                . 'Headings are matched loosely — Business Name, Mobile, Town, Type all work. '
+                . 'Example:<br><code>name,phone,city,category<br>'
+                . 'ABC Supermarket,0921234567,Juba,supermarket</code></span>'],
+            'submitLabel' => 'Find businesses',
+        ]];
+
+        if ($rows) {
+            // Bulk APPROVE, never bulk overwrite: each row still re-checks that every field it
+            // would write is empty, one at a time, exactly as pressing Add does.
+            $actions[] = [
+                'key' => 'approve_all', 'label' => 'Add all ' . count($rows), 'actor' => 'human',
+                'endpoint' => '/api/v1/workspace/discovery/_/approve_all',
+                'confirm' => 'Add all ' . count($rows) . ' businesses? Fields you have already filled in are never changed.',
+            ];
+        }
+
         return (new WorkspacePayload)
             ->object([
                 'type' => 'list:discovery', 'title' => 'Businesses found',
-                'subtitle' => count($rows) . ' waiting · nothing is added to your customers until you say so',
+                'subtitle' => $rows
+                    ? count($rows) . ' waiting · nothing is added to your customers until you say so'
+                    : 'Nothing waiting · paste a spreadsheet to look for businesses',
             ])
+            ->actions($actions)
             ->headline((string) count($rows), 'waiting for a decision', count($rows) > 0 ? 'warn' : 'ok')
             ->financials([
                 ['key' => 'new',    'label' => 'New businesses', 'value' => $new,    'foot' => 'not in your system yet'],
