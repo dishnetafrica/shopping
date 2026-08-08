@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Services\Inventory\LegacySource;
+use App\Services\Inventory\StockBackfill;
 use App\Services\Inventory\StockLedger;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -10,15 +12,20 @@ use Illuminate\Support\Facades\DB;
 /**
  * Constitution v1.0 · P0 Inventory — the safety gate before the Stock Ledger becomes the one truth.
  *
- * READ-ONLY. Compares, per product per location, the legacy on-hand (Kampala = products.stock,
- * Juba = Σ consignment_stock remaining) against the Stock Ledger projection (Σ stock_movements.qty).
- * It writes NOTHING. Run it before flipping `stock_v2`, and on a schedule after, to prove parity
- * (or surface drift) — the ledger may only become the source of on-hand once this reports clean.
+ * READ-ONLY. Compares, per product per location, the legacy on-hand against the Stock Ledger
+ * projection (Σ stock_movements.qty). It writes NOTHING. Run it before flipping `stock_v2`, and on a
+ * schedule after, to prove parity (or surface drift) — the ledger may only become the source of
+ * on-hand once this reports clean.
  *
  * Exit code: 0 = every product within tolerance, 1 = drift found (so cron/CI can alarm).
  *
+ * v4.65.4 — WHICH legacy figure a location is compared against now follows `stock_home_location`
+ * (see LegacySource). It used to be hard-coded kampala←products.stock, juba←consignment_stock, which
+ * on a Juba shop compared both locations against the wrong table and reported an entire catalogue as
+ * drifting in both directions at once. A parity check that cries wolf is worse than no parity check.
+ *
  * Known drift causes it will surface (documented in DEPLOY-STOCK-LEDGER-ENABLE.txt):
- *   • Kampala over/under-count if `stock_ledger` is on but `stock_v2` is off (receipts recorded,
+ *   • Over/under-count at home if `stock_ledger` is on but `stock_v2` is off (receipts recorded,
  *     sales not yet issued) — flip both flags together after a fresh backfill.
  *   • Juba double-count where a demand-plan `procurement_receive` movement and the
  *     `backfill_consignment` opening balance both count the same received quantity.
@@ -41,8 +48,10 @@ class StockReconcile extends Command
         $tol   = max(0.0, (float) $this->option('tolerance'));
         $limit = max(1, (int) $this->option('limit'));
         $loc   = strtolower((string) $this->option('location'));
-        $doKampala = in_array($loc, ['all', 'kampala'], true);
-        $doJuba    = in_array($loc, ['all', 'juba', 'juba-consignment'], true);
+        $want  = [
+            StockLedger::LOC_KAMPALA => in_array($loc, ['all', 'kampala'], true),
+            StockLedger::LOC_JUBA    => in_array($loc, ['all', 'juba', 'juba-consignment'], true),
+        ];
 
         $tenants = $this->tenants();
         if ($tenants->isEmpty()) {
@@ -54,38 +63,37 @@ class StockReconcile extends Command
         $anyDrift = false;
 
         foreach ($tenants as $t) {
+            $home = StockLedger::home($t);
+
             $tenantOut = [
                 'tenant_id' => (int) $t->id,
                 'tenant'    => (string) ($t->name ?? ('#' . $t->id)),
+                'home'      => $home,
                 'flags'     => [
                     'stock_ledger' => (bool) $t->setting('stock_ledger', false),
                     'stock_v2'     => (bool) $t->setting('stock_v2', false),
                     'issue_on_delivery' => (bool) $t->setting('stock_issue_on_delivery', true),
                 ],
                 'locations' => [],
+                'notes'     => $this->notes((int) $t->id, $home),
             ];
 
-            if ($doKampala) {
-                $k = $this->compare(
-                    (int) $t->id,
-                    StockLedger::LOC_KAMPALA,
-                    $this->legacyKampala((int) $t->id),
-                    $this->ledgerMap((int) $t->id, StockLedger::LOC_KAMPALA),
+            // Home first — it is the location that decides whether reads can be switched at all.
+            foreach (LegacySource::locations($home) as $location) {
+                if (! ($want[$location] ?? false)) {
+                    continue;
+                }
+                $source = LegacySource::table($home, $location);
+                $s = $this->compare(
+                    $location,
+                    $source,
+                    $this->legacy($source, (int) $t->id),
+                    $this->ledgerMap((int) $t->id, $location),
                     $tol
                 );
-                $tenantOut['locations']['kampala'] = $k;
-                $anyDrift = $anyDrift || $k['drift_products'] > 0;
-            }
-            if ($doJuba) {
-                $j = $this->compare(
-                    (int) $t->id,
-                    StockLedger::LOC_JUBA,
-                    $this->legacyJuba((int) $t->id),
-                    $this->ledgerMap((int) $t->id, StockLedger::LOC_JUBA),
-                    $tol
-                );
-                $tenantOut['locations']['juba-consignment'] = $j;
-                $anyDrift = $anyDrift || $j['drift_products'] > 0;
+                $s['is_home'] = $location === $home;
+                $tenantOut['locations'][$location] = $s;
+                $anyDrift = $anyDrift || $s['drift_products'] > 0;
             }
 
             $report[] = $tenantOut;
@@ -124,8 +132,25 @@ class StockReconcile extends Command
         return Tenant::whereIn('id', $ids)->orderBy('id')->get();
     }
 
-    /** Legacy Kampala on-hand: products.stock. Returns [product_id => ['qty'=>float,'name'=>..,'sku'=>..]]. */
-    private function legacyKampala(int $tenantId): array
+    /** Dispatch to the legacy table this location's on-hand actually lives in. */
+    private function legacy(string $source, int $tenantId): array
+    {
+        return match ($source) {
+            LegacySource::PRODUCTS    => $this->legacyProducts($tenantId),
+            LegacySource::CONSIGNMENT => $this->legacyConsignment($tenantId),
+            default                   => [],
+        };
+    }
+
+    /**
+     * The shop's own warehouse: products.stock.
+     *
+     * Not "Kampala". This is the column the product screen shows, a sale decrements and the backfill
+     * seeds, and since v4.64 all three follow `stock_home_location` together.
+     *
+     * @return array<int,array{qty:float,name:string,sku:string}>
+     */
+    private function legacyProducts(int $tenantId): array
     {
         $out = [];
         DB::table('products')->where('tenant_id', $tenantId)
@@ -142,8 +167,8 @@ class StockReconcile extends Command
         return $out;
     }
 
-    /** Legacy Juba on-hand: Σ consignment_stock remaining, grouped by product_id. */
-    private function legacyJuba(int $tenantId): array
+    /** Goods out on consignment and not yet sold: Σ consignment_stock remaining, by product_id. */
+    private function legacyConsignment(int $tenantId): array
     {
         $out = [];
         DB::table('consignment_stock')->where('tenant_id', $tenantId)
@@ -182,8 +207,52 @@ class StockReconcile extends Command
         return $out;
     }
 
+    /**
+     * Facts about the openings themselves, which the per-product comparison cannot show.
+     *
+     * Both of these describe a ledger that is internally consistent and still wrong, which is the
+     * only kind of wrong a parity check is blind to by construction.
+     *
+     * @return array<int,string>
+     */
+    private function notes(int $tenantId, string $home): array
+    {
+        $out = [];
+
+        // Openings written by a backfill that ran before v4.65.4, when a Juba-home shop had its
+        // consignment lines seeded into Juba ON TOP of products.stock — the same cartons twice.
+        if (LegacySource::doubleSeeds($home)) {
+            $n = (int) DB::table('stock_movements')->where('tenant_id', $tenantId)
+                ->where('ref_type', StockBackfill::REF_CONSIGNMENT)->count();
+            if ($n > 0) {
+                $out[] = "{$n} consignment opening balance(s) sit at juba-consignment on a shop whose home IS juba — "
+                    . "the same goods are counted twice, once from products.stock and once from the consignment line. "
+                    . "Remove them with:  php artisan stock:backfill {$tenantId} --drop-consignment-openings";
+            }
+        }
+
+        // An opening balance is whatever products.stock happened to say. If one large value repeats
+        // across most of the catalogue it was typed once and copied, and every total built on it is
+        // fiction that looks exactly like data.
+        $openings = DB::table('stock_movements')->where('tenant_id', $tenantId)
+            ->where('ref_type', StockBackfill::REF_PRODUCT)
+            ->pluck('qty', 'ref_id')->map(fn ($v) => (float) $v)->all();
+
+        if ($p = LegacySource::placeholder($openings)) {
+            $out[] = sprintf(
+                '%d of %d opening balances are exactly %s (%d%%). That is a default someone typed, not %d stock counts '
+                . 'that agree — the ledger cannot tell the difference and neither can this check. Count the few products '
+                . 'that matter by value and correct them before trusting any total.',
+                $p['count'], count($openings), $this->num($p['value']),
+                (int) round($p['share'] * 100), $p['count']
+            );
+        }
+
+        return $out;
+    }
+
     /** Compare two on-hand maps; returns summary + the flagged drift rows. */
-    private function compare(int $tenantId, string $location, array $legacy, array $ledger, float $tol): array
+    private function compare(string $location, string $source, array $legacy, array $ledger, float $tol): array
     {
         $ids = array_unique(array_merge(array_keys($legacy), array_keys($ledger)));
         $rows = [];
@@ -209,6 +278,7 @@ class StockReconcile extends Command
 
         return [
             'location'        => $location,
+            'source'          => $source,
             'products'        => count($ids),
             'in_parity'       => $inParity,
             'drift_products'  => count($rows),
@@ -221,7 +291,8 @@ class StockReconcile extends Command
     private function renderTenant(array $r, int $limit): void
     {
         $f = $r['flags'];
-        $flagStr = sprintf('stock_ledger=%s  stock_v2=%s  issue_on_delivery=%s',
+        $flagStr = sprintf('home=%s  stock_ledger=%s  stock_v2=%s  issue_on_delivery=%s',
+            $r['home'],
             $f['stock_ledger'] ? 'ON' : 'off',
             $f['stock_v2'] ? 'ON' : 'off',
             $f['issue_on_delivery'] ? 'ON' : 'off');
@@ -230,11 +301,21 @@ class StockReconcile extends Command
         $this->line("  <fg=gray>{$flagStr}</>");
 
         foreach ($r['locations'] as $loc => $s) {
+            // Naming the source is the whole point of this release: a reader has to be able to see
+            // WHICH two numbers were compared before deciding whether their difference means anything.
+            $against = $s['source'] === LegacySource::NONE
+                ? 'no legacy figure — this shop does not keep stock here'
+                : 'vs ' . $s['source'];
             $tag = $s['drift_products'] === 0
-                ? "<fg=green>parity</>"
+                ? '<fg=green>parity</>'
                 : "<fg=red>{$s['drift_products']} drifting</>";
-            $this->line(sprintf('  %s — %d products · %d in parity · %s · total drift %s · max %s',
-                $loc, $s['products'], $s['in_parity'], $tag, $s['total_abs_drift'], $s['max_abs_drift']));
+            $this->line(sprintf('  %s%s <fg=gray>(%s)</> — %d products · %d in parity · %s · total drift %s · max %s',
+                $loc, $s['is_home'] ? ' <fg=cyan>[home]</>' : '', $against,
+                $s['products'], $s['in_parity'], $tag, $s['total_abs_drift'], $s['max_abs_drift']));
+
+            if ($s['source'] === LegacySource::NONE && $s['drift_products'] > 0) {
+                $this->line("  <fg=yellow>  ↑ these are movements at a location this shop does not use. Not drift — misfiled stock.</>");
+            }
 
             if (! empty($s['rows'])) {
                 $head = ['Product', 'ID', 'Legacy', 'Ledger', 'Drift'];
@@ -251,6 +332,11 @@ class StockReconcile extends Command
                         count($s['rows']) - $limit));
                 }
             }
+        }
+
+        foreach ($r['notes'] as $note) {
+            $this->newLine();
+            $this->line('  <fg=yellow>! ' . wordwrap($note, 96, "\n    ") . '</>');
         }
     }
 
