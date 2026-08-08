@@ -34,6 +34,16 @@ use Illuminate\Support\Facades\DB;
  */
 class StockReconcile extends Command
 {
+    /**
+     * Stamped into the output.
+     *
+     * Not decoration. This command's whole job is to be believed, and twice now a run has been read
+     * as a finding about the shop when it was a finding about which copy of the file was on disk —
+     * output identical to the previous release, discussed at length, from code that had already
+     * been replaced. One line at the top settles it before anybody reads a number.
+     */
+    private const VERSION = 'v4.65.5';
+
     protected $signature = 'stock:reconcile
         {tenant? : Tenant id to check (omit for all tenants with stock data)}
         {--location=all : kampala | juba | all}
@@ -117,11 +127,14 @@ class StockReconcile extends Command
 
         if ($this->option('json')) {
             $this->line((string) json_encode([
+                'version' => self::VERSION,
                 'ok' => $ok, 'home_drift' => $homeDrift, 'misfiled_units' => round($misfiled, 3),
                 'tolerance' => $tol, 'tenants' => $report,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
             return $ok ? self::SUCCESS : self::FAILURE;
         }
+
+        $this->line('<fg=gray>stock:reconcile · ' . self::VERSION . ' · read-only</>');
 
         foreach ($report as $r) {
             $this->renderTenant($r, $limit);
