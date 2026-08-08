@@ -60,7 +60,8 @@ class StockReconcile extends Command
         }
 
         $report = [];
-        $anyDrift = false;
+        $homeDrift = false;      // the ledger disagrees with the shop's own on-hand — reads are unsafe
+        $misfiled  = 0.0;        // units at a location this shop does not use — real, but read by nothing
 
         foreach ($tenants as $t) {
             $home = StockLedger::home($t);
@@ -89,30 +90,55 @@ class StockReconcile extends Command
                     $source,
                     $this->legacy($source, (int) $t->id),
                     $this->ledgerMap((int) $t->id, $location),
-                    $tol
+                    $tol,
+                    $source === LegacySource::NONE ? $this->productNames((int) $t->id) : []
                 );
                 $s['is_home'] = $location === $home;
+
+                // A location with no legacy figure cannot "drift" — there is nothing to drift FROM.
+                // Whatever is there was written by something, and the only useful question is what.
+                $s['wrote'] = $source === LegacySource::NONE && $s['drift_products'] > 0
+                    ? $this->wroteThese((int) $t->id, $location)
+                    : [];
+
                 $tenantOut['locations'][$location] = $s;
-                $anyDrift = $anyDrift || $s['drift_products'] > 0;
+
+                if ($source === LegacySource::NONE) {
+                    $misfiled += $s['total_abs_drift'];
+                } elseif ($s['drift_products'] > 0) {
+                    $homeDrift = true;
+                }
             }
 
             $report[] = $tenantOut;
         }
 
+        $ok = ! $homeDrift && $misfiled <= 0.0;
+
         if ($this->option('json')) {
             $this->line((string) json_encode([
-                'ok' => ! $anyDrift, 'tolerance' => $tol, 'tenants' => $report,
+                'ok' => $ok, 'home_drift' => $homeDrift, 'misfiled_units' => round($misfiled, 3),
+                'tolerance' => $tol, 'tenants' => $report,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-            return $anyDrift ? self::FAILURE : self::SUCCESS;
+            return $ok ? self::SUCCESS : self::FAILURE;
         }
 
         foreach ($report as $r) {
             $this->renderTenant($r, $limit);
         }
 
+        // v4.65.5 — these two are not the same finding and must not share a verdict. Telling a shop
+        // whose on-hand is provably correct not to switch its reads on is how a check gets ignored.
         $this->newLine();
-        if ($anyDrift) {
-            $this->error('DRIFT FOUND — do not switch reads (stock_v2) until this is clean. See DEPLOY-STOCK-LEDGER-ENABLE.txt for the known causes and fixes.');
+        if ($homeDrift) {
+            $this->error('DRIFT AT HOME — the ledger disagrees with the shop\'s own on-hand. Do not switch reads (stock_v2) until this is clean. See DEPLOY-STOCK-LEDGER-ENABLE.txt for the known causes and fixes.');
+            return self::FAILURE;
+        }
+        if ($misfiled > 0.0) {
+            $this->info('HOME PARITY OK — every product matches at the location this shop actually uses, so on-hand reads are correct.');
+            $this->warn(sprintf('MISFILED STOCK — %s unit(s) sit at a location this shop does not use. Nothing reads them and no '
+                . 'screen is affected, but they are a second copy of goods already counted at home. The breakdown above says '
+                . 'what wrote them; decide from that before removing anything.', $this->num($misfiled)));
             return self::FAILURE;
         }
         $this->info('PARITY OK — ledger on-hand matches legacy within tolerance for every product checked.');
@@ -192,6 +218,59 @@ class StockReconcile extends Command
         return $out;
     }
 
+    /**
+     * Product names, for a location that has no legacy map to take them from.
+     *
+     * v4.65.5 — the misfiled rows printed as `#67394` because names had only ever been read off the
+     * legacy side, and a location with no legacy source has no legacy side. A list of bare ids is
+     * not something anybody can act on: the whole decision is "are these the same goods I already
+     * count at home", and that is a question about names.
+     *
+     * @return array<int,string>
+     */
+    private function productNames(int $tenantId): array
+    {
+        $out = [];
+        DB::table('products')->where('tenant_id', $tenantId)->select('id', 'name')
+            ->orderBy('id')->chunkById(1000, function ($rows) use (&$out) {
+                foreach ($rows as $p) { $out[(int) $p->id] = (string) ($p->name ?? ''); }
+            });
+        return $out;
+    }
+
+    /**
+     * What put movements at a location the shop does not use.
+     *
+     * The per-product table cannot answer this and it is the only question worth asking. An opening
+     * balance seeded before the home location was set is dead weight to be withdrawn; a receipt from
+     * a real demand plan is an event that happened and was filed in the wrong place. They look
+     * identical in a quantity column and are not remotely the same decision, so the report groups by
+     * what wrote each row — ref_type, movement type and the hand that made it — with the dates.
+     *
+     * @return array<int,array<string,string>>
+     */
+    private function wroteThese(int $tenantId, string $location): array
+    {
+        return DB::table('stock_movements')
+            ->where('tenant_id', $tenantId)->where('location', $location)
+            ->select('ref_type', 'type', 'created_by',
+                DB::raw('COUNT(*) as n'), DB::raw('SUM(qty) as units'),
+                DB::raw('MIN(created_at) as first_at'), DB::raw('MAX(created_at) as last_at'))
+            ->groupBy('ref_type', 'type', 'created_by')
+            ->orderByRaw('SUM(qty) DESC')
+            ->get()
+            ->map(fn ($r) => [
+                'ref_type'   => (string) ($r->ref_type ?? '—'),
+                'type'       => (string) $r->type,
+                'created_by' => (string) ($r->created_by ?? '—'),
+                'n'          => (string) (int) $r->n,
+                'units'      => $this->num((float) $r->units),
+                'first_at'   => substr((string) $r->first_at, 0, 10),
+                'last_at'    => substr((string) $r->last_at, 0, 10),
+            ])
+            ->all();
+    }
+
     /** Ledger on-hand at a location: Σ stock_movements.qty grouped by product_id (raw, tenant-scoped). */
     private function ledgerMap(int $tenantId, string $location): array
     {
@@ -252,7 +331,7 @@ class StockReconcile extends Command
     }
 
     /** Compare two on-hand maps; returns summary + the flagged drift rows. */
-    private function compare(string $location, string $source, array $legacy, array $ledger, float $tol): array
+    private function compare(string $location, string $source, array $legacy, array $ledger, float $tol, array $names = []): array
     {
         $ids = array_unique(array_merge(array_keys($legacy), array_keys($ledger)));
         $rows = [];
@@ -268,7 +347,7 @@ class StockReconcile extends Command
             $maxAbs = max($maxAbs, $abs);
             $rows[] = [
                 'product_id' => (int) $pid,
-                'name'       => (string) ($legacy[$pid]['name'] ?? ('#' . $pid)),
+                'name'       => (string) ($legacy[$pid]['name'] ?? $names[$pid] ?? ('#' . $pid)),
                 'legacy'     => $l,
                 'ledger'     => $g,
                 'drift'      => $drift,
@@ -308,13 +387,38 @@ class StockReconcile extends Command
                 : 'vs ' . $s['source'];
             $tag = $s['drift_products'] === 0
                 ? '<fg=green>parity</>'
-                : "<fg=red>{$s['drift_products']} drifting</>";
+                : ($s['source'] === LegacySource::NONE
+                    ? "<fg=yellow>{$s['drift_products']} misfiled</>"
+                    : "<fg=red>{$s['drift_products']} drifting</>");
             $this->line(sprintf('  %s%s <fg=gray>(%s)</> — %d products · %d in parity · %s · total drift %s · max %s',
                 $loc, $s['is_home'] ? ' <fg=cyan>[home]</>' : '', $against,
                 $s['products'], $s['in_parity'], $tag, $s['total_abs_drift'], $s['max_abs_drift']));
 
+            // ── a location the shop does not use ───────────────────────────────────────────────
+            // Three hundred rows of "legacy 0, ledger 1000" is the same sentence three hundred
+            // times. What decides the outcome is who wrote them, so that is what gets the table.
             if ($s['source'] === LegacySource::NONE && $s['drift_products'] > 0) {
-                $this->line("  <fg=yellow>  ↑ these are movements at a location this shop does not use. Not drift — misfiled stock.</>");
+                $this->line('  <fg=yellow>  ↑ these are movements at a location this shop does not use. Not drift — misfiled stock.</>');
+
+                if (! empty($s['wrote'])) {
+                    $this->line('  <fg=gray>what wrote them:</>');
+                    $this->table(
+                        ['Written by', 'Movement', 'Hand', 'Rows', 'Units', 'First', 'Last'],
+                        array_map(fn ($w) => [$w['ref_type'], $w['type'], $w['created_by'],
+                            $w['n'], $w['units'], $w['first_at'], $w['last_at']], $s['wrote'])
+                    );
+                }
+
+                $peek = min(5, count($s['rows']));
+                $this->line(sprintf('  <fg=gray>%d product(s), e.g.:</>', count($s['rows'])));
+                foreach (array_slice($s['rows'], 0, $peek) as $row) {
+                    $this->line(sprintf('    <fg=gray>%s — %s at %s</>',
+                        $row['name'], $this->num($row['ledger']), $s['location']));
+                }
+                if (count($s['rows']) > $peek) {
+                    $this->line(sprintf('    <fg=gray>…and %d more (--json for all).</>', count($s['rows']) - $peek));
+                }
+                continue;
             }
 
             if (! empty($s['rows'])) {
