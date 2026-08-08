@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Services\Inventory\LegacySource;
+use App\Services\Inventory\MisfiledStock;
 use App\Services\Inventory\StockBackfill;
 use App\Services\Inventory\StockLedger;
 use Illuminate\Console\Command;
@@ -42,7 +43,7 @@ class StockReconcile extends Command
      * output identical to the previous release, discussed at length, from code that had already
      * been replaced. One line at the top settles it before anybody reads a number.
      */
-    private const VERSION = 'v4.65.5';
+    private const VERSION = 'v4.65.6';
 
     protected $signature = 'stock:reconcile
         {tenant? : Tenant id to check (omit for all tenants with stock data)}
@@ -108,7 +109,7 @@ class StockReconcile extends Command
                 // A location with no legacy figure cannot "drift" — there is nothing to drift FROM.
                 // Whatever is there was written by something, and the only useful question is what.
                 $s['wrote'] = $source === LegacySource::NONE && $s['drift_products'] > 0
-                    ? $this->wroteThese((int) $t->id, $location)
+                    ? (new MisfiledStock())->wroteThese((int) $t->id, $location)
                     : [];
 
                 $tenantOut['locations'][$location] = $s;
@@ -150,8 +151,9 @@ class StockReconcile extends Command
         if ($misfiled > 0.0) {
             $this->info('HOME PARITY OK — every product matches at the location this shop actually uses, so on-hand reads are correct.');
             $this->warn(sprintf('MISFILED STOCK — %s unit(s) sit at a location this shop does not use. Nothing reads them and no '
-                . 'screen is affected, but they are a second copy of goods already counted at home. The breakdown above says '
-                . 'what wrote them; decide from that before removing anything.', $this->num($misfiled)));
+                . 'screen is affected, but they are a second copy of goods already counted at home.', $this->num($misfiled)));
+            $this->line('<fg=gray>See what would be removed (writes nothing):</> php artisan stock:clear-misfiled '
+                . (count($report) === 1 ? (int) $report[0]['tenant_id'] : '<tenant-id>'));
             return self::FAILURE;
         }
         $this->info('PARITY OK — ledger on-hand matches legacy within tolerance for every product checked.');
@@ -249,39 +251,6 @@ class StockReconcile extends Command
                 foreach ($rows as $p) { $out[(int) $p->id] = (string) ($p->name ?? ''); }
             });
         return $out;
-    }
-
-    /**
-     * What put movements at a location the shop does not use.
-     *
-     * The per-product table cannot answer this and it is the only question worth asking. An opening
-     * balance seeded before the home location was set is dead weight to be withdrawn; a receipt from
-     * a real demand plan is an event that happened and was filed in the wrong place. They look
-     * identical in a quantity column and are not remotely the same decision, so the report groups by
-     * what wrote each row — ref_type, movement type and the hand that made it — with the dates.
-     *
-     * @return array<int,array<string,string>>
-     */
-    private function wroteThese(int $tenantId, string $location): array
-    {
-        return DB::table('stock_movements')
-            ->where('tenant_id', $tenantId)->where('location', $location)
-            ->select('ref_type', 'type', 'created_by',
-                DB::raw('COUNT(*) as n'), DB::raw('SUM(qty) as units'),
-                DB::raw('MIN(created_at) as first_at'), DB::raw('MAX(created_at) as last_at'))
-            ->groupBy('ref_type', 'type', 'created_by')
-            ->orderByRaw('SUM(qty) DESC')
-            ->get()
-            ->map(fn ($r) => [
-                'ref_type'   => (string) ($r->ref_type ?? '—'),
-                'type'       => (string) $r->type,
-                'created_by' => (string) ($r->created_by ?? '—'),
-                'n'          => (string) (int) $r->n,
-                'units'      => $this->num((float) $r->units),
-                'first_at'   => substr((string) $r->first_at, 0, 10),
-                'last_at'    => substr((string) $r->last_at, 0, 10),
-            ])
-            ->all();
     }
 
     /** Ledger on-hand at a location: Σ stock_movements.qty grouped by product_id (raw, tenant-scoped). */

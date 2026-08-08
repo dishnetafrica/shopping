@@ -105,6 +105,35 @@ final class LegacySource
     }
 
     /**
+     * v4.65.6 — may the movements at `$location` be cleared away?
+     *
+     * Three conditions, and the third is the one that makes this safe rather than merely bounded.
+     *
+     *   1. It is not the shop's home. Obvious, and the only one anybody would think to check.
+     *   2. It has no legacy figure — nothing in the old system describes this location, so there is
+     *      no second opinion being discarded.
+     *   3. HOME IS ALREADY IN PARITY. Every product's ledger figure at home already equals the
+     *      number on its product screen. That is what makes the deletion provably unable to change
+     *      anything the shop reads: the figures it reads are all at home, they are all correct
+     *      before, and nothing at another location contributes to them.
+     *
+     * Without (3) this is a guess dressed as a cleanup. A product whose only opening balance was
+     * seeded at the wrong location — before the home setting existed, which is exactly how this
+     * mess arises — would read zero afterwards, and the deletion would be the cause. Parity at home
+     * is the proof that no such product exists.
+     */
+    public static function mayClear(string $home, string $location, bool $homeInParity): bool
+    {
+        // Condition (1) is not written out, because `table()` answers PRODUCTS for the home location
+        // by construction — NONE already excludes it, and it excludes a mis-cased or mistyped home
+        // too, since `table()` normalises both sides before comparing. A first draft did check it
+        // separately and no input could tell the two versions apart. On a destructive path that
+        // reads like defence in depth; it is a comment pretending to be code, and the mutant suite
+        // is what said so.
+        return $homeInParity && self::table($home, $location) === self::NONE;
+    }
+
+    /**
      * Does one quantity repeat often enough across opening balances to be a default rather than a count?
      *
      * A backfill seeds whatever `products.stock` says, and says nothing about where that number came
