@@ -69,7 +69,9 @@ class RelationshipReviewCommand extends Command
             }
 
             // memory completeness
-            $profiles = \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id);
+            $profiles = \App\Services\Crm\BusinessStage::scope(
+                \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)
+            );
             $total = (clone $profiles)->count();
             $withFacts = (clone $profiles)->whereNotNull('facts')->count();
             // what the shop LEARNED (nightly study sessions)

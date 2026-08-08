@@ -37,7 +37,11 @@ class CampaignService
     /** Base audience query for one channel ('email'|'whatsapp'). */
     public function audienceQuery(Tenant $tenant, array $segment, string $channel): Builder
     {
-        $q = DB::table('customer_profiles')->where('tenant_id', $tenant->id);
+        // v4.60 — a discovered business is not a campaign recipient. This audience is built with
+        // DB::table(), so no Eloquent scope of any kind can reach it; the guard has to be the raw
+        // fragment, and it has to be here, in the funnel every single-channel send passes through.
+        $q = DB::table('customer_profiles')->where('tenant_id', $tenant->id)
+            ->whereRaw(\App\Services\Crm\BusinessStage::sql());
 
         if ($channel === 'email') {
             $q->whereNotNull('email')->where('email', '!=', '');
@@ -81,7 +85,9 @@ class CampaignService
         foreach ($chs as $ch) {
             $out[$ch] = $this->audienceQuery($tenant, $segment, $ch)->count();
         }
-        $out['total_profiles'] = (int) DB::table('customer_profiles')->where('tenant_id', $tenant->id)->count();
+        // "of N profiles" on the campaign screen means reachable customers, not rows in a table.
+        $out['total_profiles'] = (int) DB::table('customer_profiles')->where('tenant_id', $tenant->id)
+            ->whereRaw(\App\Services\Crm\BusinessStage::sql())->count();
         return $out;
     }
 
@@ -228,7 +234,10 @@ class CampaignService
         }
 
         // both: base filters once, address requirement becomes (email OR phone)
+        // This branch rebuilds the audience rather than calling audienceQuery(), so it needs the
+        // discovered guard again — and it is the branch that actually enqueues messages.
         $q = DB::table('customer_profiles')->where('tenant_id', $tenant->id)
+            ->whereRaw(\App\Services\Crm\BusinessStage::sql())
             ->where('customer_profiles.id', '>', (int) $c->last_enqueued_id)
             ->where(function ($w) {
                 $w->where(function ($e) { $e->whereNotNull('email')->where('email', '!=', ''); })

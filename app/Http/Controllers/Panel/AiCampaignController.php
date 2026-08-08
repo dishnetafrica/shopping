@@ -61,6 +61,11 @@ class AiCampaignController extends Controller
         if ($stage !== '' && $stage !== 'ANY') {
             $q->whereRaw('UPPER(COALESCE(stage, \'\')) = ?', [$stage]);
         }
+        // v4.60 — applied AFTER the stage filter and unconditionally, so that picking DISCOVERED in
+        // the dropdown produces an empty audience rather than a blast. A discovered business enters
+        // with marketing_opt_in false and has agreed to nothing; the choice is not the owner's to
+        // make here, it is the business's, and nobody has asked them yet.
+        \App\Services\Crm\BusinessStage::scope($q);
         $contains = trim((string) ($f['contains'] ?? ''));
         if ($contains !== '') {
             $like = '%' . mb_strtolower($contains) . '%';

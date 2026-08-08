@@ -9,6 +9,7 @@ use App\Models\Category;
 use App\Models\Conversation;
 use App\Models\CustomerPayment;
 use App\Models\CustomerProfile;
+use App\Services\Crm\BusinessStage;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderCost;
@@ -59,7 +60,10 @@ final class NavCountsCapability implements Capability
         };
 
         $counts = [
-            'customers'         => $safe(fn () => $c(CustomerProfile::query())),
+            // v4.60 — the sidebar badge is the owner's headline number. Discovered businesses
+            // live in this table and are not customers; counting them here would be the single
+            // most visible way ADR-016 could go wrong.
+            'customers'         => $safe(fn () => $c(BusinessStage::scope(CustomerProfile::query()))),
             'chats'             => $safe(fn () => $c(Conversation::query()->where('unread', '>', 0))),
             'salesOrder'        => $safe(fn () => $c(Order::query())),
             'quotations'        => $safe(fn () => $c(Quotation::query()->whereRaw("lower(coalesce(status,'')) in ('sent','accepted','pending','revised','customer_revised')")->whereNull('order_id'))),   // revised quotes stay in the "waiting" badge (v4.6.3)

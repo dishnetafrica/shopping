@@ -58,7 +58,13 @@ class AudienceResolver
             case 'all':
             default:
                 $fromOrders   = Order::whereNotNull('customer_phone')->pluck('customer_phone');
-                $fromProfiles = CustomerProfile::whereNotNull('phone')->pluck('phone');
+                // v4.60 — discovery does not add anyone to an audience; a purchase does.
+                // Filtered HERE rather than in norm(), because norm() also receives phones that came
+                // from orders, and a business that has bought from you is a customer no matter what
+                // its stage says the night before relationship:stages next runs.
+                $fromProfiles = \App\Services\Crm\BusinessStage::scope(
+                    CustomerProfile::whereNotNull('phone')
+                )->pluck('phone');
                 return $this->norm($fromOrders->concat($fromProfiles));
         }
     }

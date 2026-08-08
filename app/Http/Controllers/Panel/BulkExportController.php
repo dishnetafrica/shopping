@@ -106,7 +106,11 @@ class BulkExportController extends Controller
                     ['h' => 'Created', 'v' => fn ($x) => $d($x->created_at)],
                 ]],
             'customers' => ['title' => 'Customers',
-                'query' => fn ($tid) => CustomerProfile::withoutGlobalScopes()->where('tenant_id', $tid)->orderBy('name'),
+                // v4.60 — the sheet is titled Customers, so it contains customers. Discovered
+                // businesses get their own export when they get their own screen.
+                'query' => fn ($tid) => \App\Services\Crm\BusinessStage::scope(
+                    CustomerProfile::withoutGlobalScopes()->where('tenant_id', $tid)
+                )->orderBy('name'),
                 'cols' => [
                     ['h' => 'Name', 'v' => fn ($x) => $x->name],
                     ['h' => 'Phone', 'v' => fn ($x) => $x->phone],

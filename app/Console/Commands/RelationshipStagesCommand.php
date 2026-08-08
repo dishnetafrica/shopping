@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\CustomerProfile;
 use App\Models\Order;
 use App\Models\Tenant;
+use App\Services\Crm\BusinessStage;
 use Illuminate\Console\Command;
 
 /**
@@ -53,7 +54,14 @@ class RelationshipStagesCommand extends Command
 
                 // ---- stage floor ----
                 $stage = strtoupper((string) ($p->stage ?: 'NEW'));
-                if ($orders >= 2) {
+                if (BusinessStage::isDiscovered($stage)) {
+                    // v4.60 — a discovered business becomes a customer when it BUYS, and never
+                    // because time passed. Left in the ordinary chain below it would fall to DORMANT
+                    // on 45 days of silence — and DORMANT counts in every customer total on this
+                    // system, so an import of strangers would walk into the owner's headline number
+                    // six weeks later, long after anyone would connect the two.
+                    $stage = BusinessStage::promote($stage, $orders);
+                } elseif ($orders >= 2) {
                     if (! in_array($stage, ['REPEAT', 'VIP'], true)) $stage = 'REPEAT';
                 } elseif ($orders === 1 && in_array($stage, self::PRE_PURCHASE, true)) {
                     $stage = 'PURCHASED';

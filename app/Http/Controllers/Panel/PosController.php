@@ -314,6 +314,14 @@ class PosController extends Controller
         }
         $q = trim((string) $request->query('q', ''));
         $query = \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id);
+        // v4.60 — a deliberate split. With no search term this returns the eight most recent
+        // profiles, and thousands of discovered businesses would bury the people who actually come
+        // to the counter. When the cashier IS searching, a discovered business must be findable:
+        // the order path matches on phone and would otherwise adopt or duplicate the row anyway,
+        // and a sale is the one event that turns a discovered business into a customer.
+        if ($q === '') {
+            \App\Services\Crm\BusinessStage::scope($query);
+        }
         if ($q !== '') {
             $digits = preg_replace('/[^0-9]/', '', $q);
             $like = '%' . mb_strtolower($q) . '%';

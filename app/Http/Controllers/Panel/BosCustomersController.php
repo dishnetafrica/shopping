@@ -35,7 +35,8 @@ class BosCustomersController extends Controller
                 ->selectRaw('customer_phone, MAX(created_at) as last_at')
                 ->groupBy('customer_phone')->get()->keyBy('customer_phone');
 
-            $profiles = CustomerProfile::where('tenant_id', $tid)->get(['id', 'name', 'phone', 'city']);
+            $profiles = \App\Services\Crm\BusinessStage::scope(CustomerProfile::where('tenant_id', $tid))
+                ->get(['id', 'name', 'phone', 'city']);
 
             $rows = []; $owes = 0; $overdue = 0;
             foreach ($profiles as $p) {

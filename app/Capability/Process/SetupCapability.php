@@ -43,7 +43,7 @@ final class SetupCapability implements ProcessCapability
             ['key' => 'categories', 'title' => 'Create product categories', 'desc' => 'Group what you sell — e.g. Beverages, Hygiene, Staples.', 'done' => $has(Category::query())],
             ['key' => 'products',   'title' => 'Add your products',          'desc' => 'Add items with photos, price, cost, stock and MOQ — the bot uses these to sell.', 'done' => $has(Product::query())],
             ['key' => 'suppliers',  'title' => 'Add your suppliers',         'desc' => 'Who you buy stock from, so you can track what you owe.', 'done' => $has(Supplier::query())],
-            ['key' => 'customers',  'title' => 'Add your customers',         'desc' => 'Who you sell to — business name, contact, segment and credit limit.', 'done' => $has(CustomerProfile::query())],
+            ['key' => 'customers',  'title' => 'Add your customers',         'desc' => 'Who you sell to — business name, contact, segment and credit limit.', 'done' => $has(\App\Services\Crm\BusinessStage::scope(CustomerProfile::query()))],
             ['key' => 'salesOrders', 'title' => 'Make your first sale',      'desc' => 'Create a quotation or a sales order for a customer.', 'done' => $has(Order::query()) || $has(Quotation::query())],
             ['key' => 'invoices',   'title' => 'Issue your first invoice',   'desc' => 'Bill a delivered order — an invoice is created automatically on delivery.', 'done' => $has(Invoice::query()->where('status', '!=', 'void'))],
             ['key' => 'payments',   'title' => 'Record your first payment',  'desc' => 'Log money received from a customer against their balance.', 'done' => $has(CustomerPayment::query())],

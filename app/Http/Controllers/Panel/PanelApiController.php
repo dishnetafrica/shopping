@@ -1039,7 +1039,9 @@ class PanelApiController extends Controller
     public function customers()
     {
         $map = [];
-        foreach (CustomerProfile::all() as $c) {
+        // v4.60 — this dump feeds the legacy panel's customer map. Discovered businesses share
+        // the table and are not customers.
+        foreach (\App\Services\Crm\BusinessStage::scope(CustomerProfile::query())->get() as $c) {
             $map[$c->phone] = [
                 'name'      => (string) ($c->name ?? ''),
                 'alt_phone' => (string) ($c->alt_phone ?? ''),
@@ -6283,7 +6285,13 @@ class PanelApiController extends Controller
         $score = function ($p) use ($fields) { $s = 0; foreach ($fields as $f) { if (trim((string) $p->$f) !== '') $s++; } return $s; };
 
         $groups = [];
-        foreach (\App\Models\CustomerProfile::where('tenant_id', $t->id)->get() as $p) {
+        // v4.60 — discovered businesses are deliberately NOT merged. The winner here is chosen by
+        // how many fields are filled in, so a rich discovery row could beat a real customer and
+        // leave that customer marked DISCOVERED and invisible in every count. A discovered record
+        // colliding with a real one is precisely what the review queue is for: a person decides.
+        foreach (\App\Services\Crm\BusinessStage::scope(
+            \App\Models\CustomerProfile::where('tenant_id', $t->id)
+        )->get() as $p) {
             $key = $canon($p->phone);
             if ($key === '' || strlen($key) < 9) continue;   // can't canonicalise → leave untouched
             $groups[$key][] = $p;
