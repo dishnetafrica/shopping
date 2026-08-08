@@ -147,7 +147,11 @@ class StockReconcile extends Command
     {
         $out = [];
         DB::table('consignment_stock')->where('tenant_id', $tenantId)
-            ->select('product_id', 'name', 'qty_sent', 'qty_received', 'qty_sold')
+            // v4.65.3 — `id` must be SELECTED, not merely ordered by: chunkById paginates on the
+            // value it reads back from each row, and Laravel throws rather than silently looping
+            // when it is absent. Latent since this command was written, and only reachable on a
+            // tenant that actually has consignment rows — which is why it survived to here.
+            ->select('id', 'product_id', 'name', 'qty_sent', 'qty_received', 'qty_sold')
             ->orderBy('id')->chunkById(1000, function ($rows) use (&$out) {
                 foreach ($rows as $k) {
                     $pid = $k->product_id !== null ? (int) $k->product_id : 0; // 0 = unlinked line bucket
