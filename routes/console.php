@@ -100,3 +100,13 @@ Schedule::command('trust:daily --send')->dailyAt('06:45')->timezone('Africa/Kamp
 Schedule::command('trust:links --tenant=17 --count --send')->dailyAt('07:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
 // v1.3: weekly shrink waterfall + pilot metrics, Monday 07:15 EAT. Archive the --json output weekly.
 Schedule::command('trust:weekly --tenant=17 --send')->weeklyOn(1, '07:15')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
+
+// v4.65.7 — Stock Ledger parity watchdog. Read-only; dormant until stock_v2 is ON for a tenant, so
+// this is inert on every shop that has not enabled it.
+//   Daily  — DRIFT AT HOME only: the ledger disagrees with the product screen, so a number somebody
+//            is reading right now is wrong. Worth a message the same morning.
+//   Weekly — also MISFILED STOCK: movements at a location the shop does not use. Real, inert, and
+//            nothing reads them. Mentioning it once a week is right; nagging daily is how a watchdog
+//            gets muted, and a muted watchdog is worse than none.
+Schedule::command('stock:watch')->dailyAt('06:00')->timezone('Africa/Juba')->withoutOverlapping()->onOneServer();
+Schedule::command('stock:watch --include-misfiled')->weeklyOn(1, '08:20')->timezone('Africa/Juba')->withoutOverlapping()->onOneServer();

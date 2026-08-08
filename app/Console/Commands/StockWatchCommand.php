@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Services\Inventory\StockAlert;
 use App\Services\WhatsApp\WhatsAppManager;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
@@ -16,15 +17,24 @@ use Illuminate\Support\Facades\Log;
  * DORMANT until stock_v2 is ON for a tenant (so scheduling it before enablement does nothing) — pass
  * --force to check regardless. Writes nothing itself; the reconcile it calls is read-only.
  *
- * Schedule (add during enablement, see DEPLOY-STOCK-LEDGER-ENABLE.txt):
+ * v4.65.7 — it now tells the two findings apart. Home drift (the ledger disagrees with the product
+ * screen — somebody's on-hand is wrong on a screen right now) alerts daily. Misfiled stock (movements
+ * at a location the shop does not use — inert, nothing reads them) alerts only with --include-misfiled,
+ * scheduled weekly. Before this, a shop with perfect stock and 219,445 misfiled units would have been
+ * told its numbers were broken every morning until somebody muted it, and a muted watchdog is a cron
+ * job burning battery.
+ *
+ * Scheduled in routes/console.php:
  *   Schedule::command('stock:watch')->dailyAt('06:00');
+ *   Schedule::command('stock:watch --include-misfiled')->weeklyOn(1, '08:20');
  */
 class StockWatchCommand extends Command
 {
     protected $signature = 'stock:watch
         {tenant? : Tenant id to check (omit for every tenant with the ledger switched on)}
         {--force : Check even when stock_v2 is off (normally dormant until enablement)}
-        {--tolerance=0 : Absolute qty drift tolerated per product before alerting}';
+        {--tolerance=0 : Absolute qty drift tolerated per product before alerting}
+        {--include-misfiled : Also report movements at a location this shop does not use (weekly, not daily)}';
 
     protected $description = 'Daily parity watchdog: WhatsApps the owner if live stock drifts from the Stock Ledger.';
 
@@ -50,40 +60,32 @@ class StockWatchCommand extends Command
                 Log::warning('stock:watch reconcile failed for tenant ' . $t->id . ': ' . $e->getMessage());
                 continue;
             }
-            if (! is_array($data) || ! empty($data['ok'])) {
-                continue; // parity — nothing to report
+            if (! is_array($data)) {
+                continue;
             }
 
-            // Build a short, human summary of where it drifted.
-            $lines = [];
-            foreach (($data['tenants'] ?? []) as $tr) {
-                foreach (($tr['locations'] ?? []) as $locName => $s) {
-                    if ((int) ($s['drift_products'] ?? 0) > 0) {
-                        $place = ucfirst(str_replace('-consignment', '', (string) $locName));
-                        $lines[] = "• {$place}: " . (int) $s['drift_products'] . ' product(s) off (total '
-                            . rtrim(rtrim(number_format((float) ($s['total_abs_drift'] ?? 0), 3, '.', ''), '0'), '.') . ')';
-                    }
-                }
+            // The message is built by a pure function so the one thing that matters here — that a
+            // shop whose stock is fine is never told otherwise — is testable without a WhatsApp
+            // gateway, a tenant or a database.
+            $alert = StockAlert::from($data, (bool) $this->option('include-misfiled'));
+            if ($alert === null) {
+                continue;
             }
-            if (! $lines) continue;
-
-            $msg = "⚠️ *Stock check — needs a look*\n"
-                . "The live stock and the stock ledger don't match:\n"
-                . implode("\n", $lines)
-                . "\n\nRun  stock:reconcile " . (int) $t->id . "  to see which products, then re-seed or adjust."
-                . "\n(Fixes: see DEPLOY-STOCK-LEDGER-ENABLE.txt)";
+            $msg = $alert['text'];
 
             $instance = (string) ($t->whatsapp_instance ?? '');
             $numbers  = method_exists($t, 'ownerAlertNumbers') ? $t->ownerAlertNumbers() : [];
             if ($instance === '' || ! count($numbers)) {
-                Log::info('stock:watch drift for tenant ' . $t->id . ' but no WhatsApp instance / owner number set.');
+                Log::info('stock:watch has something to say about tenant ' . $t->id
+                    . ' but no WhatsApp instance / owner number is set: ' . $msg);
                 continue;
             }
             $gw = $wa->forTenant($t);
             foreach ($numbers as $n) {
                 try { $gw->sendText($instance, $n, $msg); } catch (\Throwable $e) { Log::warning('stock:watch alert send failed: ' . $e->getMessage()); }
             }
-            $this->info("stock:watch — alerted owner of tenant {$t->id} about stock drift.");
+            $this->info("stock:watch — alerted owner of tenant {$t->id} ("
+                . ($alert['urgent'] ? 'drift at home' : 'misfiled stock') . ').');
         }
 
         return self::SUCCESS;
