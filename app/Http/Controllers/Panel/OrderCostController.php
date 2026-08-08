@@ -367,18 +367,13 @@ class OrderCostController extends Controller
                 // EXACT match only, case and whitespace insensitive. No fuzzy matching: attaching a
                 // carton of foil to the wrong product is worse than not attaching it at all.
                 if (! $pid && $name !== '') {
-                    try {
-                        $pid = (int) (\App\Models\Product::withoutGlobalScopes()
-                            ->where('tenant_id', $t->id)
-                            // Normalised identically to purchase:relink — lowercase, trimmed, inner
-                            // whitespace collapsed — so a name does not link on one path and fail on
-                            // the other, which would be the most confusing possible outcome.
-                            ->whereRaw("lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) = ?",
-                                [mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $name)))])
-                            ->value('id') ?? 0) ?: null;
-                    } catch (\Throwable $e) {
-                        $pid = null;
-                    }
+                    // v4.65 — by the product's own name, or by an alias it answers to. The catalogue
+                    // says "ALUMINIUM FOIL 45CM GOLDEN (CARTON OF 6PC, MIN 5 CARTON)" and the
+                    // supplier's invoice says "Golden Foil 45cm". Both are correct, they will never
+                    // be the same string, and typing more carefully will not fix it — so a product
+                    // carries the other names it is known by, in the keywords field the bot already
+                    // searches. Exact match against a comma-separated entry; nothing fuzzy.
+                    $pid = \App\Services\Inventory\PurchaseResolver::forTenant($t)->find($name);
                 }
                 if ($qty <= 0 || $unit < 0) continue;
                 $native = round($qty * $unit, 2);
