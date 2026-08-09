@@ -1149,14 +1149,23 @@ button{ -webkit-tap-highlight-color:transparent }
    so this rule can never touch a classic shop's emoji buttons. */
 .lic svg{width:20px;height:20px;display:block;color:#667085}
 .lic:hover svg{color:var(--green-d)}
+/* v4.76 — the owner's nav review: one Home (the logo), one Categories (the red button), search
+   in the header on desktop, Popular chips under the stripe. All matched only under .whchrome. */
+.whchrome .dnav .dlink{display:none}
+.whhsearch{display:none}
+.whpop{display:flex;align-items:center;gap:8px;overflow-x:auto;padding:2px 14px 10px;-webkit-overflow-scrolling:touch}
+.whpop .pl{flex:none;font-size:12px;font-weight:700;color:#98a1ab;text-transform:uppercase;letter-spacing:.4px}
+.whpop .pc{flex:none;border:1px solid #e4e7ec;background:#fff;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;color:#344054;cursor:pointer}
+.whpop .pc:hover{border-color:var(--green);color:var(--green)}
 /* the wide wordmark needs a size at EVERY width — phones included, where the header stays compact */
-.whchrome .top .lg.whlogo{width:auto;max-width:58vw;height:38px;border-radius:0;background:none;box-shadow:none;padding:0;display:flex;align-items:center}
-.whchrome .top .lg.whlogo img{height:38px;width:auto;display:block;max-width:100%;object-fit:contain}
+.whchrome .top .lg.whlogo{width:auto;max-width:58vw;height:46px;border-radius:0;background:none;box-shadow:none;padding:0;display:flex;align-items:center}
+.whchrome .top .lg.whlogo img{height:46px;width:auto;display:block;max-width:100%;object-fit:contain}
 .whchrome .top .lg.whlogo+div{display:none}   /* the wordmark carries the name + tagline */
 @media(min-width:1024px){
   .whchrome .whtopbar{display:block;background:#f7f7f8;border-bottom:1px solid #ececf0;font-size:12.5px;color:#4a5568}
   .whtopbar .in{max-width:1240px;margin:0 auto;padding:7px 18px;display:flex;justify-content:space-between;gap:14px;align-items:center}
   .whtopbar .l{display:flex;align-items:center;gap:8px}
+  .whtopbar .l .d{margin:0 7px;opacity:.45}
   .whtopbar .c{font-weight:600}
   .whtopbar .d{color:#c3c9d1}
   .whtopbar .r{display:flex;align-items:center;gap:16px}
@@ -1165,12 +1174,19 @@ button{ -webkit-tap-highlight-color:transparent }
   .whtopbar .wl svg{width:15px;height:15px;color:#1faa53}
   .whtopbar .si{color:var(--green);font-weight:700;text-decoration:none}
   .whchrome .whnav{display:block;background:#fff;border-bottom:1px solid #ececf0}
+  .whchrome .top .topb{flex:0 0 auto !important}
+  .whchrome .whhsearch{display:flex;align-items:center;gap:8px;flex:1 1 auto;max-width:600px;margin:0 26px;height:44px;background:#F4F4F6;border:1px solid #E3E6EA;border-radius:11px;padding:0 12px;cursor:text}
+  .whchrome .whhsearch .mg{width:18px;height:18px;flex:none;color:#98a1ab}
+  .whchrome .whhsearch .ph{flex:1;font-size:14px;color:#9AA1AB;white-space:nowrap;overflow:hidden}
+  .whchrome .whhsearch .hb{border:0;background:none;padding:4px;cursor:pointer}
+  .whchrome .searchwrap{display:none}
+  .whchrome .whpop{max-width:1240px;margin:0 auto;padding:10px 18px 4px}
   .whnav .in{max-width:1240px;margin:0 auto;padding:0 18px;display:flex;align-items:center;gap:4px;overflow-x:auto}
   .whnav .cats{flex:none;border:0;background:var(--green);color:#fff;font-weight:800;font-size:13px;border-radius:9px;padding:10px 15px;margin:8px 10px 8px 0;cursor:pointer}
   .whnav .lnk{flex:none;border:0;background:none;font:inherit;font-size:13.5px;font-weight:600;color:#1a202c;padding:14px 12px;cursor:pointer;border-bottom:2.5px solid transparent}
   .whnav .lnk:hover{color:var(--green);border-bottom-color:var(--green)}
-  .whchrome .top .lg.whlogo{height:52px;max-width:none}
-  .whchrome .top .lg.whlogo img{height:52px}
+  .whchrome .top .lg.whlogo{height:62px;max-width:none}
+  .whchrome .top .lg.whlogo img{height:62px}
 }
 .whh1 .whh1c{display:block;color:#1a202c}
 .whpage{max-width:720px;margin:10px 12px;background:#fff;border:1px solid #ececf0;border-radius:14px;padding:20px}
@@ -1305,7 +1321,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.75.1';
+var SHOP_BUILD='v4.76';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3071,22 +3087,74 @@ function whChrome(){
     var lg=document.querySelector('.top .lg');
     if(lg){ lg.classList.add('whlogo'); lg.innerHTML='<img alt="'+esc(SHOP.name||'')+'" src="'+esc(SHOP.logo)+'">'; }
   }
+  // v4.76 — search moves INTO the header on desktop (one stripe fewer before shopping starts).
+  // It is a trigger for the SAME overlay the stripe opens; the stripe stays for phones.
+  if(top && !document.getElementById('whHdrSearch')){
+    var hs=document.createElement('div'); hs.id='whHdrSearch'; hs.className='whhsearch';
+    hs.setAttribute('role','search');
+    hs.onclick=function(){searchOpen();};
+    hs.innerHTML='<svg class="mg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
+      +'<span class="ph">'+esc((document.getElementById('q')||{}).placeholder||'Search products, brands…')+'</span>'
+      +'<button data-lic="1" class="lic hb" aria-label="Voice search" onclick="event.stopPropagation();voiceSearch()">'+WH_SIC.mic+'</button>'
+      +'<button data-lic="1" class="lic hb" aria-label="Scan barcode" onclick="event.stopPropagation();barcodeSearch()">'+WH_SIC.cam+'</button>';
+    top.insertBefore(hs, top.querySelector('.dnav'));
+  }
+  // v4.76 — About Us lives in the footer now (owner's review: wholesale buyers don't start at
+  // About Us). Injected only when the owner wrote one, before the FAQ link, once.
+  if(C.about && !document.getElementById('whAboutF')){
+    var faq=document.querySelector('a[onclick*="showFaq"]');
+    if(faq){
+      var ab=document.createElement('a'); ab.id='whAboutF'; ab.href='#';
+      ab.onclick=function(e){e.preventDefault();whPage('about');};
+      ab.textContent='About us';
+      faq.parentNode.insertBefore(ab,faq);
+      faq.parentNode.insertBefore(document.createTextNode(' · '),faq);
+    }
+  }
+}
+/* v4.76 — "Popular:" chips under the search bar. Owner-typed terms search; when none are set the
+   chips are the shop's REAL top categories (never invented terms) and click straight into them. */
+function whSearchFor(t){
+  searchOpen();
+  var sq=document.getElementById('sq');
+  if(sq){ sq.value=t; try{searchRender(t);}catch(e){} }
+}
+function whPopChips(){
+  if(!whOn()) return;
+  var C=(SHOP.home&&SHOP.home.chrome)||{};
+  var custom=!!(C.popular&&C.popular.length);
+  var terms=custom?C.popular.slice(0,6):CATS.slice(0,4).map(function(c){return c.name;});
+  var host=document.querySelector('.searchwrap'); if(!host) return;
+  var wrap=document.getElementById('whPop');
+  if(!terms.length){ if(wrap) wrap.style.display='none'; return; }
+  var sig=terms.join('|');
+  if(wrap && wrap.getAttribute('data-sig')===sig) return;
+  if(!wrap){ wrap=document.createElement('div'); wrap.id='whPop'; wrap.className='whpop';
+    host.parentNode.insertBefore(wrap, host.nextSibling); }
+  wrap.setAttribute('data-sig',sig); wrap.style.display='';
+  wrap.innerHTML='<span class="pl">Popular:</span>'+terms.map(function(t){
+    return '<button class="pc" onclick="'+(custom?('whSearchFor('+jk(t)+')'):('setCat('+jk(t)+')'))+'">'+esc(t)+'</button>';
+  }).join('');
 }
 /* the nav needs the catalogue (deals/brands existence), so it builds after load() */
 function whNav(){
   if(!whOn() || document.getElementById('whNav')) return;
   var top=document.querySelector('.top'); if(!top) return;
   var C=(SHOP.home&&SHOP.home.chrome)||{};
-  var items=[['Home','goHome()']];
+  /* v4.76 — the owner's own nav review, applied: no Home (the logo IS home), Brands promoted
+     to second (wholesale buyers think in brands before best-sellers), About Us demoted to the
+     footer, "Contact Us" shortened, and the button says Browse (verb) not Shop by (jargon).
+     Deals still appears only when real promotions exist — a link to an empty section is worse
+     than no link. */
+  var items=[];
   items.push(['Shop by Business',"whGo('whBiz')"]);
-  items.push(['Best Sellers',"whGo('whBest')"]);
-  if(BANNERS&&Array.isArray(BANNERS.promotions)&&BANNERS.promotions.length) items.push(["Today's Deals","whGo('whDeals')"]);
-  items.push(['New Arrivals',"whGo('whNew')"]);
   items.push(['Brands',"whGo('whBrands')"]);
-  if(C.about) items.push(['About Us',"whPage('about')"]);
-  if(C.phone||C.email||C.address||SHOP.waNumber) items.push(['Contact Us',"whPage('contact')"]);
+  items.push(['Best Sellers',"whGo('whBest')"]);
+  items.push(['New Arrivals',"whGo('whNew')"]);
+  if(BANNERS&&Array.isArray(BANNERS.promotions)&&BANNERS.promotions.length) items.push(['Deals',"whGo('whDeals')"]);
+  if(C.phone||C.email||C.address||SHOP.waNumber) items.push(['Contact',"whPage('contact')"]);
   var nav=document.createElement('div'); nav.id='whNav'; nav.className='whnav';
-  nav.innerHTML='<div class="in"><button class="cats" onclick="showCategories()">☰ Shop by Categories</button>'
+  nav.innerHTML='<div class="in"><button class="cats" onclick="showCategories()">☰ Browse Categories</button>'
     +items.map(function(it){return '<button class="lnk" onclick="'+it[1]+'">'+esc(it[0])+'</button>';}).join('')+'</div>';
   var anchor=document.getElementById('whTopbar')?top.nextSibling:top.nextSibling;
   top.parentNode.insertBefore(nav,anchor&&anchor.nextSibling?anchor:top.nextSibling);
@@ -3281,7 +3349,7 @@ function render(){
   var c=$('content');
   /* chrome + nav inject at first render, not at boot: function declarations hoist but the icon
      set (var WH_IC) only has a VALUE once its line runs, and boot is before that line. */
-  try{whChrome();whNav();whSearchIcons();}catch(e){}
+  try{whChrome();whNav();whSearchIcons();whPopChips();}catch(e){}
   SEARCH_ACTIVE=false;
   dLayout();
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';

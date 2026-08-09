@@ -61,6 +61,7 @@ final class SettingsWriteService
         'bulk_tiers', 'bulk_tiers_title', 'home_stats',
         'home_cta_primary', 'home_cta_secondary',
         'home_hero_title3', 'home_topbar', 'home_delivering', 'home_about',   // v4.70 M3 chrome
+        'home_popular_searches',                                             // v4.76 popular chips
         'theme_accent', 'theme_accent_dark',
         // Storefront model photo override (v4.7.6): any image URL; blank = official TVS photo.
         'model_image_tvshlx125',

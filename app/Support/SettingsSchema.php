@@ -227,6 +227,7 @@ final class SettingsSchema
                      'help' => 'Only numbers you can stand behind, e.g. [{"t":"450+","s":"Products"},{"t":"24h","s":"Delivery in Juba"}]'],
                     ['key' => 'home_topbar', 'type' => 'textarea', 'label' => 'Top bar chips (JSON)', 'help' => 'Up to four short claims, e.g. [{"t":"Wholesale prices"},{"t":"Bulk orders"},{"t":"Reliable delivery"}]'],
                     ['key' => 'home_delivering', 'type' => 'text', 'label' => 'Delivering line (top bar)', 'help' => 'e.g. "Delivering in Uganda & South Sudan". Blank = hidden.'],
+                    ['key' => 'home_popular_searches', 'type' => 'text', 'label' => 'Popular searches (under the search bar)', 'help' => 'Comma-separated, e.g. Rice, Cooking Oil, Aluminium Foil, Hotel Supplies. Blank = your top categories are shown instead.'],
                     ['key' => 'home_about', 'type' => 'textarea', 'label' => 'About Us page', 'help' => 'A few short paragraphs. Blank = no About page in the menu. Contact page details come from Business profile (phone, email, address).'],
                     ['key' => 'theme_accent', 'type' => 'text', 'label' => 'Brand colour', 'help' => 'e.g. #D92D20 — colours every button and accent across the whole shop.'],
                     ['key' => 'theme_accent_dark', 'type' => 'text', 'label' => 'Brand colour, darker', 'help' => 'Hover/active shade, e.g. #B42318.'],

@@ -83,6 +83,11 @@ final class WholesaleHome
                 'phone'      => $str('public_phone'),
                 'email'      => $str('public_email'),
                 'address'    => trim(implode(', ', array_filter([$str('address'), $city]))),
+                // v4.76 — "Popular:" chips under the search bar (owner's nav review). A comma
+                // list the owner typed; EMPTY by default — the SPA then falls back to the shop's
+                // own top categories, which are real data, not invented search terms.
+                'popular'    => array_slice(array_values(array_filter(array_map('trim',
+                    explode(',', (string) ($settings['home_popular_searches'] ?? ''))))), 0, 6),
             ],
             // v4.68 (M2) — merchandising strips. Every one of these is null until the tenant
             // configures it, and null renders NOTHING. A delivery promise, a volume-discount table
