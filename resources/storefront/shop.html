@@ -1057,13 +1057,14 @@ button{ -webkit-tap-highlight-color:transparent }
 .whbtn.p:hover{filter:brightness(.94)}
 .whbtn.s{background:#fff;color:#1a202c;border:1.5px solid #d9dde3}
 .whbtn.s:hover{border-color:var(--green);color:var(--green)}
-.whart{padding:0 16px 18px}
+.whart{padding:0 16px}
+.whart:empty{display:none;padding:0}
 .whimg{display:block;width:100%;height:auto;border-radius:12px}
 .whimg.d{display:none}
-/* Fallback collage — real catalogue products, never a broken image. Fixed height = no layout shift. */
-.whcollage{display:flex;gap:10px;align-items:stretch;height:150px}
-.whcollage .cg{flex:1;min-width:0;background:#fff;border:1px solid #ececf0;border-radius:12px;display:grid;place-items:center;padding:10px;cursor:pointer}
-.whcollage .cg img{max-width:100%;max-height:100%;object-fit:contain}
+.whimg.m{margin-bottom:18px}
+/* Fallback shelf — ONE merchandised panel of real products, desktop only. A phone with no
+   configured hero image gets a compact text hero instead of homemade artwork. */
+.whshow{display:none}
 @media(min-width:1024px){
   .whhero{margin:10px 0 22px}
   .whhero-in{flex-direction:row;align-items:center;gap:28px;padding:34px 34px 30px}
@@ -1075,8 +1076,16 @@ button{ -webkit-tap-highlight-color:transparent }
   .whart{flex:1.05;min-width:0;padding:0}
   .whimg.d{display:block}
   .whimg.m{display:none}
-  .whcollage{height:300px}
-  .whcollage.hasm{display:none}   /* a configured mobile image owns <1024px; desktop shows img or collage */
+  .whshow{display:flex;align-items:flex-end;justify-content:center;gap:0;height:300px;position:relative;
+    background:#fff;border:1px solid #ececf0;border-radius:16px;padding:26px 22px;overflow:hidden;
+    box-shadow:0 10px 30px rgba(16,24,40,.07)}
+  .whshow::before{content:'';position:absolute;left:0;right:0;bottom:0;height:64px;
+    background:linear-gradient(180deg,transparent,#f2f2f4);border-radius:0 0 16px 16px}
+  .whshow img{position:relative;max-height:78%;width:auto;max-width:44%;object-fit:contain;cursor:pointer;
+    filter:drop-shadow(0 14px 18px rgba(16,24,40,.18))}
+  .whshow img.s0{max-height:92%;z-index:2}
+  .whshow img.s1{margin-left:-7%;transform:rotate(-2deg);z-index:1}
+  .whshow img.s2{margin-left:-7%;transform:rotate(2.5deg);z-index:0;max-height:66%}
 }
 .whsec{margin:20px 12px 0}
 @media(min-width:1024px){.whsec{margin:26px 0 0}}
@@ -1288,7 +1297,12 @@ function forgetCust(){CUST=null;try{localStorage.removeItem(CUST_KEY);}catch(e){
 /* --- Segment-aware storefront (Phase 1): buyer mode + wholesale/carton face + credit ------- */
 var BUYER={mode:'retail',segment:null,credit:null};
 var WMODE_KEY='cb_wmode_'+(SHOP.slug||'shop'), WMODE=false, WMODE_SET=false;
-function loadWMode(){try{var v=localStorage.getItem(WMODE_KEY);if(v==='1'){WMODE=true;WMODE_SET=true;}else if(v==='0'){WMODE=false;WMODE_SET=true;}}catch(e){} if(!WMODE_SET&&/(^|[?&])mode=wholesale/.test(location.search)){WMODE=true;}}
+function loadWMode(){try{var v=localStorage.getItem(WMODE_KEY);if(v==='1'){WMODE=true;WMODE_SET=true;}else if(v==='0'){WMODE=false;WMODE_SET=true;}}catch(e){} if(!WMODE_SET&&/(^|[?&])mode=wholesale/.test(location.search)){WMODE=true;}
+  /* v4.67.1 — a wholesale-positioned home opens in wholesale presentation: carton labels and MOQ
+     up front, which is the offer. Owner-approved for wholesale-home tenants. Purely presentational
+     (labels + the mode bar; prices and cart maths are untouched), gated on cfg.home so no other
+     tenant changes, and a person's own saved toggle (WMODE_SET) still outranks the default. */
+  if(!WMODE_SET&&SHOP.home&&SHOP.home.enabled){WMODE=true;}}
 function isWholesaleBuyer(){return BUYER.mode==='wholesale'||BUYER.mode==='institutional';}
 function applyBuyer(b){ if(!b||typeof b!=='object')return; BUYER={mode:b.mode||'retail',segment:b.segment||null,credit:b.credit||null}; if(!WMODE_SET&&isWholesaleBuyer())WMODE=true; }
 function setWMode(on){WMODE=!!on;WMODE_SET=true;try{localStorage.setItem(WMODE_KEY,WMODE?'1':'0');}catch(e){}render();try{bar();}catch(e){}}
@@ -2501,7 +2515,10 @@ function specChipsFor(p){
   return res;
 }
 /* wholesale unit helpers — render nothing unless the product opts in */
-function packLine(p){ if(!p.unit && !p.packSize) return ''; if(WMODE && p.packSize){ return '<div class="packlbl">Carton of '+p.packSize+(p.unit?(' '+esc(p.unit)):' pcs')+'</div>'; } var t=p.unit?cap(p.unit):'Pack'; if(p.packSize)t+=' · '+p.packSize+' pcs'; return '<div class="packlbl">'+esc(t)+'</div>'; }
+/* v4.67.1 — the carton phrasing needs a real pack: "Carton of 1000 pcs", never "Carton of 1000 CTN"
+   (the pack is pieces; the unit is what you BUY) and never "Carton of 1 BAG" (packSize 1 means the
+   unit IS the pack — say "Bag"). Surfaced the day wholesale became a default view. */
+function packLine(p){ if(!p.unit && !p.packSize) return ''; if(WMODE && p.packSize>1){ return '<div class="packlbl">Carton of '+p.packSize+' pcs</div>'; } var t=p.unit?cap(p.unit):'Pack'; if(p.packSize)t+=' · '+p.packSize+' pcs'; return '<div class="packlbl">'+esc(t)+'</div>'; }
 function perPiece(p){ if(!p.packSize||p.packSize<2) return ''; var v=p.price/p.packSize; if(v<0.05) return ''; return '<div class="unit">\u2248 '+ugx(Math.round(v*100)/100)+' / pc</div>'; }
 function moqLine(p){ var m=minq(p); if(m<=1) return ''; return '<div class="moqlbl">Min order: '+m+' '+esc(p.unit?(m>1?plur(p.unit):p.unit):'units')+'</div>'; }
 function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
@@ -2942,18 +2959,25 @@ function whHero(){
       +(ctas[1]?'<button class="whbtn s" onclick="whCta(2)">'+esc(ctas[1])+'</button>':'')
     +'</div></div><div class="whart">'+whArt(h)+'</div></div></section>';
 }
-/* Hero art: configured desktop (1600×600) and/or mobile (750×750) images, else a collage of real
-   catalogue products. Above the fold → never lazy; width/height always set → no layout shift.  */
+/* Hero art. Configured images own their breakpoints: desktop 1600×600 at ≥1024px, mobile 750×750
+   below (rendered AFTER the CTAs, per the owner's mobile composition). Above the fold → never
+   lazy; width/height always set → no layout shift.
+   v4.67.1 — the fallback changed after owner review. The old three-card collage read as
+   placeholder artwork, and on a phone it made the hero taller than the first screen. Now:
+   · mobile with no configured image shows NO art at all — headline, benefits, CTAs, done. A
+     compact hero beats a homemade visual.
+   · desktop with no configured image shows ONE merchandised panel (a shelf of the shop's top
+     three real products), which holds the layout until the real artwork arrives and can never
+     be a broken image. It disappears the moment home_hero_image is set.                        */
 function whArt(h){
   var out='';
   if(h.img) out+='<img class="whimg d" src="'+esc(h.img)+'" width="1600" height="600" alt="" fetchpriority="high" decoding="async">';
   if(h.imgM) out+='<img class="whimg m" src="'+esc(h.imgM)+'" width="750" height="750" alt="" decoding="async">';
-  var needCollage=!h.imgM||!h.img;             // any breakpoint without a configured image gets the collage
-  if(needCollage){
+  if(!h.img){
     var picks=PRODUCTS.filter(function(p){return p.image&&(p.price>0||p.poa);}).slice(0,3);
     if(picks.length){
-      out+='<div class="whcollage'+(h.imgM?' hasm':'')+(h.img?' hasd':'')+'">'+picks.map(function(p){
-        return '<div class="cg" onclick="openDetail('+jk(p.id!=null?p.id:p.name)+')"><img src="'+esc(p.image)+'" width="200" height="200" alt="'+esc(p.name)+'" decoding="async"></div>';
+      out+='<div class="whshow">'+picks.map(function(p,i){
+        return '<img class="s'+i+'" src="'+esc(p.image)+'" width="220" height="220" alt="'+esc(p.name)+'" decoding="async" onclick="openDetail('+jk(p.id!=null?p.id:p.name)+')">';
       }).join('')+'</div>';
     }
   }
