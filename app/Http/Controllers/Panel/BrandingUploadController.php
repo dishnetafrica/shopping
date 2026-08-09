@@ -54,7 +54,8 @@ class BrandingUploadController extends Controller
 
         $data = $request->validate([
             'key'  => 'required|string|in:' . implode(',', self::allowedKeys()),
-            'file' => 'required|file|image|mimes:png,jpg,jpeg,webp,gif|max:6144',
+            // v4.74 — 10 MB in: phone photos are 4–8 MB and the server now shrinks them itself.
+            'file' => 'required|file|image|mimes:png,jpg,jpeg,webp,gif|max:10240',
         ]);
 
         $file = $data['file'];
@@ -62,10 +63,18 @@ class BrandingUploadController extends Controller
         if (! in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif'], true)) {
             $ext = 'png';
         }
-        $path = 'branding/' . $t->id . '/' . $data['key'] . '-' . substr(md5_file($file->getRealPath()) ?: uniqid(), 0, 10) . '.' . $ext;
+
+        // v4.74 — convert/resize per slot (logo keeps transparency, hero fits its frame) so the
+        // owner can upload any photo and the page stays fast. On any doubt the original ships.
+        $bin = (string) file_get_contents($file->getRealPath());
+        $opt = \App\Services\Catalog\ImageOptimizer::optimize($bin, $ext, \App\Services\Catalog\ImagePolicy::kindForKey($data['key']));
+        $bin = $opt['bin'];
+        $ext = $opt['ext'];
+
+        $path = 'branding/' . $t->id . '/' . $data['key'] . '-' . substr(md5($bin), 0, 10) . '.' . $ext;
 
         try {
-            Storage::disk('public')->put($path, file_get_contents($file->getRealPath()));
+            Storage::disk('public')->put($path, $bin);
         } catch (\Throwable $e) {
             \Log::warning('branding-upload failed: ' . $e->getMessage());
 

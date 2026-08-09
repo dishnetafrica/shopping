@@ -221,8 +221,8 @@ final class SettingsCapability implements ProcessCapability
             ],
             'labels' => [
                 'storefront_home'        => 'Homepage style (wholesale = the new home)',
-                'home_hero_image'        => 'Hero image — desktop (1600×600, WebP, under 250 KB)',
-                'home_hero_image_mobile' => 'Hero image — mobile (750×750, WebP, under 250 KB)',
+                'home_hero_image'        => 'Hero image — desktop (1600×600 works best — any photo is fine, the system converts it)',
+                'home_hero_image_mobile' => 'Hero image — mobile (750×750 works best — any photo is fine, the system converts it)',
                 'home_hero_title'        => 'Hero headline (blank = "Your Trusted Wholesale Partner")',
                 'home_hero_title2'       => 'Hero second line (blank = "in ' . ($s('city') ?: 'your city') . '")',
                 'home_hero_sub'          => 'Hero supporting line',

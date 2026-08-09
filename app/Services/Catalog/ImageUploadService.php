@@ -34,6 +34,12 @@ final class ImageUploadService
             $ext = 'jpg';
         }
 
+        // v4.74 — the owner uploads whatever the phone produced; the SERVER makes it fast.
+        // WebP + max-edge resize + sideways-photo fix, and on any doubt the original ships.
+        $opt = ImageOptimizer::optimize($bin, $ext, 'product');
+        $bin = $opt['bin'];
+        $ext = $opt['ext'];
+
         $file = 'products/' . ((int) $t->id) . '/' . uniqid('p_', true) . '.' . $ext;
         Storage::disk('public')->put($file, $bin);
 
