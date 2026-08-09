@@ -1059,9 +1059,15 @@ button{ -webkit-tap-highlight-color:transparent }
 .whbtn.s:hover{border-color:var(--green);color:var(--green)}
 .whart{padding:0 16px}
 .whart:empty{display:none;padding:0}
-.whimg{display:block;width:100%;height:auto;border-radius:12px}
-.whimg.d{display:none}
-.whimg.m{margin-bottom:18px}
+/* v4.69.2 — the slot holds its shape whatever shape the upload is. Real artwork arrives 16:9,
+   4:3, whatever the tool exported: without a fixed frame the hero grows with the image (a 16:9
+   file renders ~78% taller than the 8:3 design), the copy column looks stranded beside it, and
+   the page jumps when the image loads. Now the frame is locked to the design ratio and the image
+   covers it — anchored right on desktop so the products stay in view and spare white lands on
+   the text side. An exact 1600×600 / 750×750 upload is untouched by any of this. */
+.whimg{display:block;width:100%;border-radius:12px;object-fit:cover}
+.whimg.d{display:none;aspect-ratio:8/3;height:auto;object-position:right center}
+.whimg.m{margin-bottom:18px;aspect-ratio:1/1;height:auto;object-position:center}
 /* Fallback shelf — ONE merchandised panel of real products, desktop only. A phone with no
    configured hero image gets a compact text hero instead of homemade artwork. */
 .whshow{display:none}
