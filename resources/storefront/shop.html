@@ -1104,6 +1104,35 @@ button{ -webkit-tap-highlight-color:transparent }
 .whwa .s{display:block;font-size:12.5px;color:#5a6572;margin-top:2px}
 .whwa .go{flex:none;display:inline-flex;align-items:center;gap:8px;background:#1faa53;color:#fff;border-radius:10px;font-weight:800;font-size:13px;letter-spacing:.02em;padding:12px 16px;text-decoration:none}
 .whwa .go:hover{filter:brightness(.95)}
+/* M2 (v4.68) — business grid, promo cards, stats, category cap */
+.whbiz{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(min-width:1024px){.whbiz{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}
+.whbiz .bc{background:#fff;border:1px solid #ececf0;border-radius:14px;padding:16px 14px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:box-shadow .15s,border-color .15s}
+@media(hover:hover){.whbiz .bc:hover{border-color:var(--green);box-shadow:0 8px 22px rgba(16,24,40,.09)}}
+.whbiz .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:#f4f4f6;background:color-mix(in srgb,var(--green) 7%,#fff);color:var(--green)}
+.whbiz .ic svg{width:24px;height:24px}
+.whbiz b{font-size:13.5px;color:#1a202c;line-height:1.25}
+.whbiz .s{font-size:12px;color:#5a6572;line-height:1.35}
+.whbiz .go{font-size:12.5px;font-weight:800;color:var(--green);margin-top:auto}
+.whpromo{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:1024px){.whpromo{grid-template-columns:1.2fr 1fr;gap:12px}}
+.whpromo .pd{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#f7f7f8;background:color-mix(in srgb,var(--green) 6%,#fff);border-radius:14px;padding:18px 16px}
+.whpromo .pd .ic{flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:#fff;color:var(--green)}
+.whpromo .pd .ic svg{width:24px;height:24px}
+.whpromo .pd>div{flex:1;min-width:150px}
+.whpromo .pd b{display:block;font-size:16px;font-weight:800;color:#1a202c}
+.whpromo .pd .s{display:block;font-size:12.5px;color:#5a6572;margin-top:2px}
+.whpromo .pt{background:#fff;border:1px solid #ececf0;border-radius:14px;padding:14px 16px}
+.whpromo .pt .tt{display:block;font-size:14px;font-weight:800;color:#1a202c;margin-bottom:8px}
+.whpromo .pt .tr{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#3a4552;padding:7px 0;border-top:1px solid #f1f1f4}
+.whpromo .pt .tr b{color:var(--green)}
+.whstats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
+@media(min-width:1024px){.whstats{grid-template-columns:repeat(4,1fr)}}
+.whstats .st{background:#fff;border:1px solid #ececf0;border-radius:12px;padding:13px;text-align:center}
+.whstats .st b{display:block;font-size:19px;font-weight:800;color:var(--green)}
+.whstats .st span{display:block;font-size:12px;color:#5a6572;margin-top:2px}
+.whallcats{display:block;margin:10px auto 0;border:1.5px solid #d9dde3;background:#fff;border-radius:10px;font-weight:800;font-size:13px;color:#1a202c;padding:11px 16px;cursor:pointer}
+.whallcats:hover{border-color:var(--green);color:var(--green)}
 
 /* ---- Smart search: "why it matched" chips on product cards ---- */
 .pcmatch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 3px}
@@ -1330,7 +1359,7 @@ function railHtml(title,items){
   return '<div class="section-title">'+esc(title)+'</div>'+
     '<div style="display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 12px;margin-bottom:4px">'+cards+'</div>';
 }
-function buyAgainRail(){
+function buyAgainRail(title){
   if(!AUTHTOK || !BUYAGAIN || !BUYAGAIN.length || !PRODUCTS.length) return '';
   var seen={}, items=[];
   BUYAGAIN.forEach(function(b){
@@ -1339,24 +1368,24 @@ function buyAgainRail(){
     if(!p && b.name) p=prod(b.name);
     if(p && !seen[p.name]){ seen[p.name]=1; items.push(p); }
   });
-  return railHtml('Buy again', items);
+  return railHtml(title||'Buy again', items);
 }
 function recentlyViewedRail(){
   if(!PRODUCTS.length || !RECENT.length) return '';
   var items=[]; RECENT.forEach(function(id){ var p=PRODUCTS.find(function(x){return x.id===id;}); if(sellableRail(p)) items.push(p); });
   return items.length>=3 ? railHtml('Recently viewed', items) : '';
 }
-function popularRail(){
+function popularRail(title){
   if(!PRODUCTS.length) return '';
   var pool=PRODUCTS.filter(sellableRail).filter(function(p){return (p.popularity||0)>0;});
   if(pool.length<4) return '';
   pool=pool.slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);});
-  return railHtml('Popular right now', pool);
+  return railHtml(title||'Popular right now', pool);
 }
-function newArrivalsRail(){
+function newArrivalsRail(title){
   if(!PRODUCTS.length) return '';
   var pool=PRODUCTS.filter(sellableRail).slice().sort(function(a,b){return (b.createdAt||b.id||0)-(a.createdAt||a.id||0);});
-  return pool.length>=4 ? railHtml('New arrivals', pool) : '';
+  return pool.length>=4 ? railHtml(title||'New arrivals', pool) : '';
 }
 function trendingRail(){
   if(!PRODUCTS.length || !TRENDING.length) return '';
@@ -1366,19 +1395,19 @@ function trendingRail(){
 function homeRails(){ return buyAgainRail()+recentlyViewedRail()+trendingRail()+popularRail()+newArrivalsRail(); }
 
 /* Homepage merchandising rows (below the collection banners) — Promotions · Brands · Recommended. */
-function promotionsRail(){
+function promotionsRail(title){
   if(!PRODUCTS.length || !BANNERS || !Array.isArray(BANNERS.promotions) || !BANNERS.promotions.length) return '';
   var items=[], seen={};
   BANNERS.promotions.forEach(function(nm){ var p=prod(nm)||PRODUCTS.filter(function(x){return x.name.toLowerCase()===String(nm||'').toLowerCase();})[0]; if(sellableRail(p)&&!seen[p.name]){seen[p.name]=1;items.push(p);} });
-  return items.length ? railHtml('Current promotions', items) : '';
+  return items.length ? railHtml(title||'Current promotions', items) : '';
 }
-function brandsStrip(){
+function brandsStrip(title){
   if(!PRODUCTS.length) return '';
   var cnt={}, order=[];
   PRODUCTS.forEach(function(p){ var br=(p.brand||'').trim(); if(!br)return; var k=br.toLowerCase(); if(!cnt[k]){cnt[k]={name:br,n:0};order.push(k);} cnt[k].n++; });
   var brands=order.map(function(k){return cnt[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,14);
   if(brands.length<4) return '';
-  return '<div class="section-title">Popular brands</div><div class="homebrands">'+brands.map(function(b){return '<button class="hbrand" onclick="searchSubmit('+jk(b.name)+')">'+esc(b.name)+'</button>';}).join('')+'</div>';
+  return '<div class="section-title">'+esc(title||'Popular brands')+'</div><div class="homebrands">'+brands.map(function(b){return '<button class="hbrand" onclick="searchSubmit('+jk(b.name)+')">'+esc(b.name)+'</button>';}).join('')+'</div>';
 }
 function recommendedRail(){
   if(!PRODUCTS.length) return '';
@@ -3012,13 +3041,72 @@ function whWa(){
     +'<span class="tx"><b>Need help?</b><span class="s">Chat with '+esc(SHOP.name||'us')+' on WhatsApp</span></span>'
     +'<a class="go" href="https://wa.me/'+SHOP.waNumber+'?text='+msg+'" target="_blank" rel="noopener" onclick="sTrack(\'whatsapp\',{src:\'home\'})">'+WH_IC.wa+' CHAT ON WHATSAPP</a></div></div>';
 }
+/* ── M2 (v4.68): the homepage as a salesperson ─────────────────────────────────────────────────
+   Owner's order: hero → Shop by Business → best sellers → delivery/deals → brands → recently
+   added → buy again → categories → trust → WhatsApp. Every strip is real data or absent:
+   business cards come from the tenant's business_banners config, deals from its promotions
+   list, tiers/stats/delivery-banner from settings (null = nothing — a discount table nobody
+   configured must not exist), brands are counted from the catalogue, and Buy Again falls back
+   to this device's own last order when the customer is not signed in.                        */
+function whBizGrid(){
+  var list=activeBiz(); if(!list.length) return '';
+  return '<div class="whsec"><div class="section-title">Shop by Business</div><div class="whbiz">'
+    +list.map(function(b){
+      return '<div class="bc" onclick="bumpBizFreq('+jk(b.id)+');bizShop('+jk(b.id)+')">'
+        +'<span class="ic">'+bizIcon(b.icon||b.id)+'</span>'
+        +'<b>'+esc(b.label||'')+'</b>'
+        +(b.tagline?'<span class="s">'+esc(b.tagline)+'</span>':'')
+        +'<span class="go">Shop Now →</span></div>';
+    }).join('')+'</div></div>';
+}
+function whPromoSec(){
+  var P=(SHOP.home&&SHOP.home.promo)||{}; var cards='';
+  if(P.delivery){
+    cards+='<div class="pd"><span class="ic">'+WH_IC.truck+'</span><div><b>'+esc(P.delivery.t)+'</b>'
+      +(P.delivery.s?'<span class="s">'+esc(P.delivery.s)+'</span>':'')
+      +'</div><button class="whbtn p" onclick="whScroll(\'whBest\')">SHOP NOW →</button></div>';
+  }
+  if(P.tiers&&P.tiers.length){
+    cards+='<div class="pt"><b class="tt">'+esc(P.tiersTitle||'')+'</b>'
+      +P.tiers.map(function(t){return '<div class="tr"><span>'+esc(t.t)+'</span><b>'+esc(t.s)+'</b></div>';}).join('')+'</div>';
+  }
+  var stats='';
+  if(P.stats&&P.stats.length){
+    stats='<div class="whstats">'+P.stats.map(function(x){
+      return '<div class="st"><b>'+esc(x.t)+'</b><span>'+esc(x.s)+'</span></div>';}).join('')+'</div>';
+  }
+  if(!cards&&!stats) return '';
+  return '<div class="whsec">'+(cards?('<div class="whpromo">'+cards+'</div>'):'')+stats+'</div>';
+}
+function whAgainRail(){
+  var r=buyAgainRail('🔄 Buy Again'); if(r) return r;
+  // Not signed in — this device's own last order is still real history, and repeat buyers are the
+  // whole point of a wholesale shop. Only products still in the catalogue render.
+  if(LASTORDER&&LASTORDER.items&&LASTORDER.items.length&&PRODUCTS.length){
+    var items=[],seen={};
+    LASTORDER.items.forEach(function(it){ var p=catalogueProduct(it); if(p&&sellableRail(p)&&!seen[p.name]){seen[p.name]=1;items.push(p);} });
+    if(items.length) return railHtml('🔄 Buy Again', items);
+  }
+  return '';
+}
+function whCats(){
+  if(!CATS.length) return '';
+  var tiles=CATS.slice(0,12).map(function(cat,i){return catTile(cat.name,i);}).join('');
+  var more=CATS.length>12?'<button class="whallcats" onclick="showCategories()">All '+CATS.length+' categories →</button>':'';
+  return '<div class="whsec"><div class="section-title">📦 Browse categories</div><div class="catgrid">'+tiles+'</div>'+more+'</div>';
+}
 function whHome(){
   return wsBar()
     +whHero()
-    +'<div id="whBiz">'+businessBanners()+'</div>'
-    +'<div id="whBest">'+trendingRail()+popularRail()+newArrivalsRail()+'</div>'
-    +'<div id="whPromo"></div>'
-    +'<div id="whAgain">'+buyAgainRail()+recentlyViewedRail()+'</div>'
+    +'<div id="whBiz">'+whBizGrid()+'</div>'
+    +'<div id="whBest">'+trendingRail()+popularRail('🔥 Wholesale Best Sellers')+'</div>'
+    +'<div id="whPromo">'+whPromoSec()+'</div>'
+    +promotionsRail('🏷 Today\'s Deals')
+    +brandsStrip('⭐ Trusted Brands')
+    +newArrivalsRail('🆕 Recently Added')
+    +'<div id="whAgain">'+whAgainRail()+recentlyViewedRail()+'</div>'
+    +comboStrip()
+    +whCats()
     +whTrust()
     +whWa();
 }

@@ -68,6 +68,17 @@ final class WholesaleHome
                 $str('home_cta_primary', 'SHOP WHOLESALE PACKS'),
                 $str('home_cta_secondary', 'SHOP BY BUSINESS'),
             ],
+            // v4.68 (M2) — merchandising strips. Every one of these is null until the tenant
+            // configures it, and null renders NOTHING. A delivery promise, a volume-discount table
+            // and a "500+ businesses served" figure are business claims; a default that invents one
+            // would put words in a shop's mouth — the exact thing the owner's own brief forbids
+            // ("make the UI component configurable rather than pretending the discount is active").
+            'promo'    => [
+                'delivery'   => self::items($settings['home_delivery_banner'] ?? null, [], 1, false)[0] ?? null,
+                'tiers'      => self::items($settings['bulk_tiers'] ?? null, [], 4, false) ?: null,
+                'tiersTitle' => $str('bulk_tiers_title', 'Buy More, Save More'),
+                'stats'      => self::items($settings['home_stats'] ?? null, [], 4, false) ?: null,
+            ],
         ];
     }
 
