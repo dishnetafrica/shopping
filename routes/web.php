@@ -833,6 +833,9 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::post('/dealer-otp',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerOtp'])->middleware('throttle:6,1');
     Route::post('/dealer-verify',  [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerVerify'])->middleware('throttle:12,1');
     Route::get('/dealer-feed',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'dealerFeed'])->middleware('throttle:30,1');
+    // v4.78 (M-CHAT-1, ADR-018) — website chat into the SAME bot brain as WhatsApp. Throttled
+    // per IP; the controller adds per-session and per-tenant daily caps (AI calls cost money).
+    Route::post('/chat',           [\App\Http\Controllers\Storefront\ChatController::class, 'message'])->middleware('throttle:12,1');
     Route::get('/c/{slug}',        [\App\Http\Controllers\Storefront\StorefrontController::class, 'category']);
     // v4.27 — a real, indexable page per product: /p/sugar-2kg-kakira-412. The trailing id is what
     // resolves it, so renaming a product never breaks an indexed link (the canonical updates itself).
@@ -889,6 +892,7 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/{spa}', fn (string $shop) => app(\App\Http\Controllers\Storefront\StorefrontController::class)->autoParts($shop))
         ->where('shop', $shopSlug)->where('spa', '(part|parts|system|model|search|cart|ai|diagrams|plate|diagram)(/.*)?');   // v4.11 real URLs
     Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug);
+    Route::post('/{shop}/chat',     [\App\Http\Controllers\Storefront\ChatController::class, 'message'])->where('shop', $shopSlug)->middleware('throttle:12,1');   // v4.78
     // Quotation-first flow (platform slug variants).
     Route::post('/{shop}/quote',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote'])->where('shop', $shopSlug);
     Route::get('/{shop}/q/{token}',         [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'show'])->where('shop', $shopSlug)->where('token', $qToken);
