@@ -286,7 +286,9 @@ body{padding-bottom:calc(var(--nav-h) + 14px + var(--safe-b))}
 /* ---- V2 premium search (Increment 3): trigger bar + full-screen overlay ---- */
 .searchbar{display:flex;align-items:center;gap:8px;background:#F4F4F6;border:1px solid var(--line);border-radius:12px;padding:0 10px;height:46px;cursor:text}
 .searchbar .sicon{width:18px;height:18px;color:var(--muted);flex:none}
-.searchbar input{flex:1;border:0;background:none;font-size:15px;color:var(--ink);outline:none;height:100%;cursor:text}
+/* v4.75.1 — min-width:0 lets flex actually shrink the input: without it every shop overflowed
+   20px sideways at 320px (input's implicit min-width beat flex). No effect at normal widths. */
+.searchbar input{flex:1;min-width:0;border:0;background:none;font-size:15px;color:var(--ink);outline:none;height:100%;cursor:text}
 .searchbar .sqbtn{border:0;background:none;font-size:17px;width:36px;height:36px;display:grid;place-items:center;cursor:pointer;flex:none}
 .soverlay{position:fixed;inset:0;z-index:55;background:#fff;display:none;flex-direction:column}
 .soverlay.show{display:flex}
@@ -1303,7 +1305,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.75';
+var SHOP_BUILD='v4.75.1';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
