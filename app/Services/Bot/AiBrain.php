@@ -1593,6 +1593,7 @@ class AiBrain
         }
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- You know this shop's FULL range — see CATALOGUE RANGE below for every category we stock and how many items are in each. NEVER tell a customer we only carry a few things or imply a narrow selection. If they describe what they need by specification, model/part number, or use-case, act like an experienced salesperson for this shop: help them find the right item, confirm the exact match from PRODUCTS, and suggest suitable alternatives we stock. If the exact item isn't in PRODUCTS, offer to confirm it or arrange a special order — don't dead-end. Never invent prices, specs or stock; quote only from PRODUCTS.\n";
+        $p .= "- PHYSICAL SPECIFICATIONS (thickness/microns/gsm/weight/length/material): state one ONLY when it appears in that product's line in PRODUCTS (look for 'specs:'). If the customer asks for a specification that is NOT listed, say you will confirm the exact figure and offer to send a photo — NEVER estimate it and NEVER answer a spec question with 'typically', 'around', 'usually' or 'about'. A wholesale buyer will weigh and measure what we say against the real product.\n";
         $p .= "- MANY CUSTOMERS DESCRIBE A PROBLEM OR A NEED, NOT A PRODUCT NAME (e.g. \"power keeps tripping at home\", \"I have 10 fans\", \"which breaker for a 3hp motor\", \"my socket has no power\"). When they do, act as a knowledgeable advisor for this shop's domain: ask at most one or two SHORT clarifying questions only if essential, explain the likely cause or the correct choice/sizing using sound real-world knowledge, then RECOMMEND suitable product(s) from the catalogue and offer to quote. Ground every recommendation in a real catalogue item — never invent a spec, model, rating or price. If nothing suitable is stocked, offer a special order. Keep it WhatsApp-short and practical.\n";
         $p .= "- BROWSE BY CATEGORY: if a customer is just exploring, asks \"what do you have\", or says \"menu\"/\"categories\"/\"list\", show the CATALOGUE RANGE categories with their counts and invite them to pick one. When they pick a category, list a few example items and ask which rating/size/spec they need, then quote. Keep every list short.\n";
         $p .= "- GUIDE, DON'T JUST LIST: when you show products, add a few plain words on what each is typically used for, so the customer can pick confidently (e.g. disposable cups → \"good for juice, water or soft drinks\"; aluminium foil → \"for wrapping food and takeaway trays\"; cling film → \"for covering and sealing food\"). Use the item's own use note from PRODUCTS when shown; otherwise describe only the OBVIOUS everyday use of that kind of product. Keep it to a short phrase per item — never a paragraph.\n";
@@ -1792,7 +1793,36 @@ class AiBrain
                 $p->hidden = \App\Services\Catalog\Visibility::isHidden((string) ($p->category ?? ''), $p->hidden ?? null, $hiddenCats);
             }
             $inv->prime($products);   // one query for all snapshots
-            return $products->map(function ($p) use ($inv) {
+            // v4.71 — physical specs join the ground truth. A buyer asked the foil's thickness and
+            // the model answered "typically around 18 microns" — a figure that existed nowhere in
+            // our data, invented in exactly the voice of a fact. Specs the shop HAS recorded now
+            // ride on each product line, so the honest answer is also the easy one; the prompt
+            // separately forbids estimating the ones that are absent.
+            $specTxt = [];
+            try {
+                $defs = \App\Models\SpecDefinition::withoutGlobalScopes()
+                    ->where('tenant_id', $tenant->id)->get()->keyBy('id');
+                if ($defs->isNotEmpty()) {
+                    $byProduct = \App\Models\ProductSpec::withoutGlobalScopes()
+                        ->where('tenant_id', $tenant->id)
+                        ->whereIn('product_id', $products->pluck('id'))
+                        ->whereNotNull('value_text')->get()->groupBy('product_id');
+                    foreach ($byProduct as $pid => $rows) {
+                        $parts = [];
+                        foreach ($rows as $ps) {
+                            $d = $defs->get($ps->spec_definition_id);
+                            if (! $d) continue;
+                            $label = trim((string) ($d->label ?: $d->key));
+                            $unit  = trim((string) ($d->unit ?? ''));
+                            if ($label === '') continue;
+                            $parts[] = $label . ' ' . trim((string) $ps->value_text) . ($unit !== '' ? ' ' . $unit : '');
+                            if (count($parts) >= 4) break;
+                        }
+                        if ($parts) $specTxt[(int) $pid] = implode('; ', $parts);
+                    }
+                }
+            } catch (\Throwable $e) { $specTxt = []; }
+            return $products->map(function ($p) use ($inv, $specTxt) {
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
                 $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
                 $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
@@ -1809,8 +1839,9 @@ class AiBrain
                     $use = ' — ' . $note;
                 }
                 $off = ($p->hidden ?? false) ? ' [OFF-CATALOGUE: never mention or list this unless the customer names it first]' : '';
+                $spec = isset($specTxt[(int) $p->id]) ? ', specs: ' . $specTxt[(int) $p->id] : '';
 
-                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$use} [{$inv->botTag($p)}]{$off}";
+                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
             })->all();
         });
         return implode("\n", $rows);

@@ -89,6 +89,49 @@ class ProductImageResponder
             return array_slice($out, 0, 5);
         }
 
+        // ---- COMPARISON turn (v4.71): "the foil looks smaller than the one I supply". The
+        // customer is holding a rival product — possibly on a scale (real chat, 09 Aug: a buyer
+        // photographed a roll at 707 g). Text cannot answer that; OUR photo next to THEIR item
+        // can. The confident-match bar below would refuse ("foil" alone scores low), which is
+        // exactly backwards here — so this branch resolves loosely: the product words from the
+        // sentence, else the last product this customer was shown. Facts on the caption come
+        // ONLY from what is on file; PhotoCompare::caption has no argument for a guess to ride in.
+        if (PhotoCompare::isComparison($t)) {
+            $p = null;
+            $words = PhotoCompare::productWords($t);
+            if (mb_strlen($words) >= 3) {
+                $p = $this->search->find($words, 1)->first();
+            }
+            if (! $p && $convo) {
+                $lastId = (int) ($convo->state['last_image_product'] ?? 0);
+                if ($lastId > 0) $p = Product::find($lastId);
+            }
+            if ($p) {
+                $url = $this->absUrl($tenant, (string) $p->image_url);
+                if ($url !== '') {
+                    $this->remember($convo, (int) $p->id);
+                    \App\Support\ProductEvents::log((int) $tenant->id, (int) $p->id, 'view');
+                    $price = (float) ($p->price ?? $p->base_price ?? 0);
+                    $priceLine = $price > 0
+                        ? $cur . ' ' . number_format($price) . ($p->unit_label ? ' per ' . $p->unit_label : '')
+                          . ((int) $p->moq > 1 ? ' · MOQ ' . (int) $p->moq : '')
+                        : '';
+                    $caption = PhotoCompare::caption(
+                        (string) $p->name,
+                        $this->specsFor($tenant, $p),
+                        $priceLine,
+                        'This is ours — compare it with yours, or visit us and check them side by side. 😊'
+                    );
+                    $out = [['media' => $url, 'caption' => $caption]];
+                    foreach (array_slice($this->galleryFor($tenant, $p), 0, 2) as $g) {
+                        $out[] = $g;               // packaging shot rides along when one exists
+                    }
+                    return array_slice($out, 0, 3);
+                }
+            }
+            return [];                             // a comparison with no resolvable product: stay silent
+        }
+
         // ---- SINGLE product. Multi-item lists / multi-line are cart fills -> no image spam.
         if (substr_count($t, ',') >= 1) return [];
         if (str_contains($t, "\n") && count(array_filter(array_map('trim', preg_split('/\R+/u', $t)))) >= 2) return [];
@@ -184,6 +227,34 @@ class ProductImageResponder
     }
 
     /** Persist which product was last shown, for a name-free "more photos" follow-up. */
+    /**
+     * v4.71 — the specs on file for a product, as [label, value] pairs for the comparison caption.
+     * Explicit tenant_id (withoutGlobalScopes): the bot pipeline usually has tenant context, but
+     * this must be correct even when it does not — the session rule since the NULL-scope incident.
+     *
+     * @return array<int,array{0:string,1:string}>
+     */
+    private function specsFor(Tenant $tenant, Product $p): array
+    {
+        try {
+            $defs = \App\Models\SpecDefinition::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->get()->keyBy('id');
+            if ($defs->isEmpty()) return [];
+
+            return \App\Models\ProductSpec::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('product_id', $p->id)
+                ->whereNotNull('value_text')->get()
+                ->map(function ($ps) use ($defs) {
+                    $d = $defs->get($ps->spec_definition_id);
+                    if (! $d) return null;
+                    $label = trim((string) ($d->label ?: $d->key)) . ($d->unit ? ' (' . $d->unit . ')' : '');
+                    return $label !== '' ? [$label, (string) $ps->value_text] : null;
+                })->filter()->values()->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     private function remember(?Conversation $convo, int $productId): void
     {
         if (! $convo || $productId <= 0) return;
