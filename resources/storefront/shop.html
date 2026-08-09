@@ -1321,7 +1321,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.76';
+var SHOP_BUILD='v4.76.1';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3159,7 +3159,19 @@ function whNav(){
   var anchor=document.getElementById('whTopbar')?top.nextSibling:top.nextSibling;
   top.parentNode.insertBefore(nav,anchor&&anchor.nextSibling?anchor:top.nextSibling);
 }
-function whGo(id){ WHPAGE=''; if(CAT!=='all'||Q){goHome();} setTimeout(function(){whScroll(id);},60); }
+/* v4.76.1 — owner's repro: Browse Categories → "Shop by Business" did nothing. The old guard
+   only left CATEGORY/SEARCH state (CAT/Q); the category BROWSER (CATLIST), business drill-ins
+   and the detail page all kept their view, so the target section never existed to scroll to.
+   Now the DOM decides: section missing → we are not on home → goHome() (which resets every
+   view flag), then keep seeking until the section renders. Slow phones get 12 tries, not 1. */
+function whGo(id){
+  WHPAGE='';
+  if(!$(id)){ goHome(); }
+  var tries=0;(function seek(){ var el=$(id);
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); }
+    else if(++tries<12){ setTimeout(seek,70); }
+  })();
+}
 function whPage(kind){ WHPAGE=kind; CAT='all'; Q=''; BIZVIEW=''; COLLVIEW=null; CATLIST=false; if($('q'))$('q').value=''; closeSheet(); render(); window.scrollTo(0,0); }
 function whPageHtml(){
   var C=(SHOP.home&&SHOP.home.chrome)||{};
@@ -3930,7 +3942,10 @@ window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return
       var pl=back?back.textContent.replace(/^[‹<\s]+/,'').trim():'';
       var cl=cur?cur.textContent:'';
       var html='<button class="crumb" onclick="goHome()">Home</button>';
-      if(pl) html+='<span class="crumbsep">/</span><button class="crumb" onclick="'+act+'">'+esc(pl)+'</button>';
+      /* v4.76.1 — when the parent IS home ("‹ Home"), a second Home crumb duplicated the first
+         ("Home / Home / All categories"). All-shop fix: the parent crumb renders only when it
+         leads somewhere other than home. */
+      if(pl && act.indexOf('goHome()')===-1) html+='<span class="crumbsep">/</span><button class="crumb" onclick="'+act+'">'+esc(pl)+'</button>';
       html+='<span class="crumbsep">/</span><b>'+esc(cl)+'</b>';
       b.innerHTML=html;
     }
