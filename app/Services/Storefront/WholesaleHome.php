@@ -58,6 +58,7 @@ final class WholesaleHome
             'hero'    => [
                 'title'  => $str('home_hero_title', 'Your Trusted Wholesale Partner'),
                 'title2' => $str('home_hero_title2', $city !== '' ? 'in ' . $city : ''),
+                'title3' => $str('home_hero_title3'),
                 'sub'    => $str('home_hero_sub', $str('tagline', 'Everything your business buys — at wholesale prices.')),
                 'img'    => $str('home_hero_image'),
                 'imgM'   => $str('home_hero_image_mobile'),
@@ -67,6 +68,21 @@ final class WholesaleHome
             'ctas'     => [
                 $str('home_cta_primary', 'SHOP WHOLESALE PACKS'),
                 $str('home_cta_secondary', 'SHOP BY BUSINESS'),
+            ],
+            // v4.70 (M3) — the page chrome: utility topbar, delivering line, About/Contact pages.
+            // Topbar chips default to three claims true of any wholesale shop; everything
+            // shop-specific (where you deliver, who you are, how to reach you) is settings —
+            // contact details reuse the SAME business-profile settings every invoice already
+            // prints, so there is one address in the system, not two.
+            'chrome'   => [
+                'topbar'     => self::items($settings['home_topbar'] ?? null, [
+                    ['t' => 'Wholesale prices'], ['t' => 'Bulk orders'], ['t' => 'Reliable delivery'],
+                ], 4, false),
+                'delivering' => $str('home_delivering'),
+                'about'      => $str('home_about'),
+                'phone'      => $str('public_phone'),
+                'email'      => $str('public_email'),
+                'address'    => trim(implode(', ', array_filter([$str('address'), $city]))),
             ],
             // v4.68 (M2) — merchandising strips. Every one of these is null until the tenant
             // configures it, and null renders NOTHING. A delivery promise, a volume-discount table

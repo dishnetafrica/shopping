@@ -1040,7 +1040,7 @@ button{ -webkit-tap-highlight-color:transparent }
    Every class is wh-prefixed; nothing here restyles an existing element, so tenants without
    the setting cannot be affected by this block existing. Accent = the tenant's theme accent
    (--green custom property), so a shop's brand colour arrives via settings, not CSS.       */
-.whhero{margin:4px 12px 18px;border-radius:16px;background:#f7f7f8;background:color-mix(in srgb,var(--green) 6%,#fff);overflow:hidden}
+.whhero{margin:4px 12px 18px;border-radius:16px;background:#fff;border:1px solid #ececf0;overflow:hidden}
 .whhero-in{display:flex;flex-direction:column;gap:14px;padding:22px 16px 20px}
 .whh1{margin:0;font-size:27px;line-height:1.13;font-weight:800;letter-spacing:-.01em;color:#1a202c}
 .whh1 .whh1b{display:block;color:var(--green)}
@@ -1139,6 +1139,41 @@ button{ -webkit-tap-highlight-color:transparent }
 .whstats .st span{display:block;font-size:12px;color:#5a6572;margin-top:2px}
 .whallcats{display:block;margin:10px auto 0;border:1.5px solid #d9dde3;background:#fff;border-radius:10px;font-weight:800;font-size:13px;color:#1a202c;padding:11px 16px;cursor:pointer}
 .whallcats:hover{border-color:var(--green);color:var(--green)}
+/* M3 (v4.70) — page chrome: topbar, wide logo, nav row, static pages. Desktop-first; phones keep
+   the approved compact header + bottom nav. Everything below renders only under body.whchrome. */
+.whtopbar{display:none}
+.whnav{display:none}
+/* the wide wordmark needs a size at EVERY width — phones included, where the header stays compact */
+.whchrome .top .lg.whlogo{width:auto;max-width:58vw;height:38px;border-radius:0;background:none;box-shadow:none;padding:0;display:flex;align-items:center}
+.whchrome .top .lg.whlogo img{height:38px;width:auto;display:block;max-width:100%;object-fit:contain}
+.whchrome .top .lg.whlogo+div{display:none}   /* the wordmark carries the name + tagline */
+@media(min-width:1024px){
+  .whchrome .whtopbar{display:block;background:#f7f7f8;border-bottom:1px solid #ececf0;font-size:12.5px;color:#4a5568}
+  .whtopbar .in{max-width:1240px;margin:0 auto;padding:7px 18px;display:flex;justify-content:space-between;gap:14px;align-items:center}
+  .whtopbar .l{display:flex;align-items:center;gap:8px}
+  .whtopbar .c{font-weight:600}
+  .whtopbar .d{color:#c3c9d1}
+  .whtopbar .r{display:flex;align-items:center;gap:16px}
+  .whtopbar .dl{color:#4a5568}
+  .whtopbar .wl{display:inline-flex;align-items:center;gap:6px;color:#1a202c;font-weight:700;text-decoration:none}
+  .whtopbar .wl svg{width:15px;height:15px;color:#1faa53}
+  .whtopbar .si{color:var(--green);font-weight:700;text-decoration:none}
+  .whchrome .whnav{display:block;background:#fff;border-bottom:1px solid #ececf0}
+  .whnav .in{max-width:1240px;margin:0 auto;padding:0 18px;display:flex;align-items:center;gap:4px;overflow-x:auto}
+  .whnav .cats{flex:none;border:0;background:var(--green);color:#fff;font-weight:800;font-size:13px;border-radius:9px;padding:10px 15px;margin:8px 10px 8px 0;cursor:pointer}
+  .whnav .lnk{flex:none;border:0;background:none;font:inherit;font-size:13.5px;font-weight:600;color:#1a202c;padding:14px 12px;cursor:pointer;border-bottom:2.5px solid transparent}
+  .whnav .lnk:hover{color:var(--green);border-bottom-color:var(--green)}
+  .whchrome .top .lg.whlogo{height:52px;max-width:none}
+  .whchrome .top .lg.whlogo img{height:52px}
+}
+.whh1 .whh1c{display:block;color:#1a202c}
+.whpage{max-width:720px;margin:10px 12px;background:#fff;border:1px solid #ececf0;border-radius:14px;padding:20px}
+@media(min-width:1024px){.whpage{margin:10px 0;padding:26px}}
+.whpage h2{margin:0 0 12px;font-size:20px;color:#1a202c}
+.whpage p{font-size:14px;line-height:1.6;color:#3a4552;margin:0 0 10px}
+.whpage .row{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #f1f1f4;font-size:14px}
+.whpage .row b{flex:none;width:90px;color:#5a6572;font-weight:700}
+.whpage .row a{color:var(--green);font-weight:700;text-decoration:none}
 
 /* ---- Smart search: "why it matched" chips on product cards ---- */
 .pcmatch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 3px}
@@ -1262,6 +1297,10 @@ button{ -webkit-tap-highlight-color:transparent }
 <script>
 /* ====================== CONFIG (injected per shop by the server) ====================== */
 window.SHOP = __SHOP_CONFIG__;
+/* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
+   was debugged at length that turned out to be a stale copy. One glance settles it. */
+var SHOP_BUILD='v4.70';
+try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
 /* Vertical-driven storefront mode. 'snacks' = advance-booking pickup (no delivery). */
@@ -2969,6 +3008,67 @@ function growGrid(){ var wrap=$('catgridwrap'); if(!wrap)return; var full=applyF
    Section order per the M1 brief: hero · Shop by Business position · Best Sellers position ·
    promo position (M2) · Buy Again where applicable · trust quartet · WhatsApp · footer.        */
 function whOn(){ return !!(SHOP.home && SHOP.home.enabled); }
+/* ── M3 (v4.70): page chrome — topbar, wide logo, nav row, About/Contact ───────────────────────
+   Injected at runtime ONLY when whOn(), so the static markup every other tenant renders is
+   untouched — the pristine-vs-new control check stays byte-identical by construction. Desktop
+   chrome; phones keep the compact header + bottom nav the owner already approved.            */
+var WHPAGE='';
+function whChrome(){
+  if(!whOn()) return;
+  document.body.classList.add('whchrome');
+  var C=(SHOP.home&&SHOP.home.chrome)||{};
+  // utility topbar above the header
+  var top=document.querySelector('.top');
+  if(top && !document.getElementById('whTopbar')){
+    var chips=(C.topbar||[]).map(function(x){return '<span class="c">'+esc(x.t)+'</span>';}).join('<span class="d">·</span>');
+    var wa=SHOP.waNumber?('<a class="wl" href="https://wa.me/'+SHOP.waNumber+'" target="_blank" rel="noopener" onclick="sTrack(\'whatsapp\',{src:\'topbar\'})">'+WH_IC.wa+' WhatsApp: +'+esc(SHOP.waNumber)+'</a>'):'';
+    var bar=document.createElement('div'); bar.id='whTopbar'; bar.className='whtopbar';
+    bar.innerHTML='<div class="in"><div class="l">'+chips+'</div><div class="r">'
+      +(C.delivering?'<span class="dl">'+esc(C.delivering)+'</span>':'')
+      +wa+'<a class="si" href="#" onclick="event.preventDefault();navGo(\'account\')">Sign in / Register</a></div></div>';
+    top.parentNode.insertBefore(bar,top);
+  }
+  // the wide wordmark replaces the initials circle when a logo is uploaded
+  if(SHOP.logo){
+    var lg=document.querySelector('.top .lg');
+    if(lg){ lg.classList.add('whlogo'); lg.innerHTML='<img alt="'+esc(SHOP.name||'')+'" src="'+esc(SHOP.logo)+'">'; }
+  }
+}
+/* the nav needs the catalogue (deals/brands existence), so it builds after load() */
+function whNav(){
+  if(!whOn() || document.getElementById('whNav')) return;
+  var top=document.querySelector('.top'); if(!top) return;
+  var C=(SHOP.home&&SHOP.home.chrome)||{};
+  var items=[['Home','goHome()']];
+  items.push(['Shop by Business',"whGo('whBiz')"]);
+  items.push(['Best Sellers',"whGo('whBest')"]);
+  if(BANNERS&&Array.isArray(BANNERS.promotions)&&BANNERS.promotions.length) items.push(["Today's Deals","whGo('whDeals')"]);
+  items.push(['New Arrivals',"whGo('whNew')"]);
+  items.push(['Brands',"whGo('whBrands')"]);
+  if(C.about) items.push(['About Us',"whPage('about')"]);
+  if(C.phone||C.email||C.address||SHOP.waNumber) items.push(['Contact Us',"whPage('contact')"]);
+  var nav=document.createElement('div'); nav.id='whNav'; nav.className='whnav';
+  nav.innerHTML='<div class="in"><button class="cats" onclick="showCategories()">☰ Shop by Categories</button>'
+    +items.map(function(it){return '<button class="lnk" onclick="'+it[1]+'">'+esc(it[0])+'</button>';}).join('')+'</div>';
+  var anchor=document.getElementById('whTopbar')?top.nextSibling:top.nextSibling;
+  top.parentNode.insertBefore(nav,anchor&&anchor.nextSibling?anchor:top.nextSibling);
+}
+function whGo(id){ WHPAGE=''; if(CAT!=='all'||Q){goHome();} setTimeout(function(){whScroll(id);},60); }
+function whPage(kind){ WHPAGE=kind; CAT='all'; Q=''; BIZVIEW=''; COLLVIEW=null; CATLIST=false; if($('q'))$('q').value=''; closeSheet(); render(); window.scrollTo(0,0); }
+function whPageHtml(){
+  var C=(SHOP.home&&SHOP.home.chrome)||{};
+  if(WHPAGE==='about'){
+    return wsBar()+'<div class="backbar"><button onclick="WHPAGE=\'\';goHome()">‹ Home</button><b>About us</b></div>'
+      +'<div class="whpage"><h2>About '+esc(SHOP.name||'us')+'</h2><p>'+esc(C.about).replace(/\n+/g,'</p><p>')+'</p></div>';
+  }
+  var rows='';
+  if(SHOP.waNumber) rows+='<div class="row"><b>WhatsApp</b><a href="https://wa.me/'+SHOP.waNumber+'" target="_blank" rel="noopener">+'+esc(SHOP.waNumber)+'</a></div>';
+  if(C.phone) rows+='<div class="row"><b>Phone</b><a href="tel:'+esc(C.phone)+'">'+esc(C.phone)+'</a></div>';
+  if(C.email) rows+='<div class="row"><b>Email</b><a href="mailto:'+esc(C.email)+'">'+esc(C.email)+'</a></div>';
+  if(C.address) rows+='<div class="row"><b>Address</b><span>'+esc(C.address)+'</span></div>';
+  return wsBar()+'<div class="backbar"><button onclick="WHPAGE=\'\';goHome()">‹ Home</button><b>Contact us</b></div>'
+    +'<div class="whpage"><h2>Contact '+esc(SHOP.name||'us')+'</h2>'+rows+whWa()+'</div>';
+}
 var WH_IC={
   truck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8h13v8H1zM14 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="1.7"/><circle cx="17.5" cy="18" r="1.7"/></svg>',
   tag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 11 3H3v8l9.6 10.4a2 2 0 0 0 2.8 0l5.2-5.2a2 2 0 0 0 0-2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>',
@@ -2978,7 +3078,7 @@ var WH_IC={
   box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg>',
   wa:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.2 13.9c-.2.6-1.2 1.2-1.7 1.2-.4.1-1 .1-1.6-.1a13 13 0 0 1-2.9-1.3 11.3 11.3 0 0 1-3.9-4.3c-.4-.8-.4-1.5-.3-2 .1-.5.6-1 .8-1.1.3-.2.5-.2.7-.2h.5c.2 0 .4 0 .6.4l.8 2c.1.2.1.4 0 .6l-.4.6c-.2.2-.3.4-.1.7a8.6 8.6 0 0 0 3.8 3.4c.3.1.5.1.7-.1l.7-.8c.2-.3.4-.3.7-.2l2 1c.3.1.5.2.5.4.1.1.1.6-.1 1.1z"/></svg>'
 };
-var WH_BEN=[WH_IC.truck,WH_IC.tag,WH_IC.shield], WH_TRUST=[WH_IC.shield,WH_IC.card,WH_IC.headset,WH_IC.box];
+var WH_BEN=[WH_IC.truck,WH_IC.tag,WH_IC.shield,WH_IC.headset], WH_TRUST=[WH_IC.shield,WH_IC.card,WH_IC.headset,WH_IC.box];
 function whHero(){
   var H=SHOP.home||{}, h=H.hero||{}, ben=H.benefits||[], ctas=H.ctas||[];
   var b=ben.map(function(x,i){
@@ -2986,7 +3086,7 @@ function whHero(){
       +(x.s?'<span class="s">'+esc(x.s)+'</span>':'')+(x.s2?'<span class="s2">'+esc(x.s2)+'</span>':'')+'</span></div>';
   }).join('');
   return '<section class="whhero"><div class="whhero-in"><div class="whcopy">'
-    +'<h1 class="whh1">'+esc(h.title||'')+(h.title2?'<span class="whh1b">'+esc(h.title2)+'</span>':'')+'</h1>'
+    +'<h1 class="whh1">'+esc(h.title||'')+(h.title2?'<span class="whh1b">'+esc(h.title2)+'</span>':'')+(h.title3?'<span class="whh1c">'+esc(h.title3)+'</span>':'')+'</h1>'
     +(h.sub?'<p class="whsub">'+esc(h.sub)+'</p>':'')
     +(b?'<div class="whben">'+b+'</div>':'')
     +'<div class="whctas">'
@@ -3057,9 +3157,10 @@ function whWa(){
 function whBizGrid(){
   var list=activeBiz(); if(!list.length) return '';
   return '<div class="whsec"><div class="section-title">Shop by Business</div><div class="whbiz">'
-    +list.map(function(b){
+    +list.map(function(b,i){
+      var pal=['#D92D20','#D97706','#16A34A','#2563EB','#7C3AED','#EA580C','#0D9488'];
       return '<div class="bc" onclick="bumpBizFreq('+jk(b.id)+');bizShop('+jk(b.id)+')">'
-        +'<span class="ic">'+bizIcon(b.icon||b.id)+'</span>'
+        +'<span class="ic" style="background:'+pal[i%pal.length]+'1a;color:'+pal[i%pal.length]+'">'+bizIcon(b.icon||b.id)+'</span>'
         +'<b>'+esc(b.label||'')+'</b>'
         +(b.tagline?'<span class="s">'+esc(b.tagline)+'</span>':'')
         +'<span class="go">Shop Now →</span></div>';
@@ -3107,9 +3208,9 @@ function whHome(){
     +'<div id="whBiz">'+whBizGrid()+'</div>'
     +'<div id="whBest">'+trendingRail()+popularRail('🔥 Wholesale Best Sellers')+'</div>'
     +'<div id="whPromo">'+whPromoSec()+'</div>'
-    +promotionsRail('🏷 Today\'s Deals')
-    +brandsStrip('⭐ Trusted Brands')
-    +newArrivalsRail('🆕 Recently Added')
+    +'<div id="whDeals">'+promotionsRail('🏷 Today\'s Deals')+'</div>'
+    +'<div id="whBrands">'+brandsStrip('⭐ Trusted Brands')+'</div>'
+    +'<div id="whNew">'+newArrivalsRail('🆕 Recently Added')+'</div>'
     +'<div id="whAgain">'+whAgainRail()+recentlyViewedRail()+'</div>'
     +comboStrip()
     +whCats()
@@ -3119,10 +3220,14 @@ function whHome(){
 
 function render(){
   var c=$('content');
+  /* chrome + nav inject at first render, not at boot: function declarations hoist but the icon
+     set (var WH_IC) only has a VALUE once its line runs, and boot is before that line. */
+  try{whChrome();whNav();}catch(e){}
   SEARCH_ACTIVE=false;
   dLayout();
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
   if(!PRODUCTS.length){c.innerHTML=skeletonGrid(8);return;}
+  if(whOn()&&WHPAGE){c.innerHTML=whPageHtml();return;}
   var q=Q.trim().toLowerCase();
   if(q){
     SEARCH_ACTIVE=true;
