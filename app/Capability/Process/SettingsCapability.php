@@ -195,6 +195,72 @@ final class SettingsCapability implements ProcessCapability
             ['Note', 'Only owners can add or remove members'],
         ]];
 
+        // --- v4.69: the wholesale storefront home (ADR-017), owner-editable ------------------------
+        // Until now these lived behind SSH + tinker, which meant only a developer could change a
+        // homepage photo. The form reuses the existing upload widget ('image' fields post to the
+        // shared upload endpoint and store a URL) and the existing save path; the JSON fields are
+        // forgiving by construction — WholesaleHome falls back whole on malformed input, so the
+        // worst a typo here can do is leave a section on its defaults.
+        $sfMode = strtolower($s('storefront_home')) === 'wholesale' ? 'wholesale' : 'classic';
+        $editStorefront = [
+            'key' => 'edit_storefront', 'label' => 'Storefront homepage', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => [
+                'storefront_home'        => 'enum:classic,wholesale',
+                'home_hero_image'        => 'image',
+                'home_hero_image_mobile' => 'image',
+                'home_hero_title'        => 'text',
+                'home_hero_title2'       => 'text',
+                'home_hero_sub'          => 'text',
+                'home_benefits'          => 'textarea',
+                'home_delivery_banner'   => 'textarea',
+                'bulk_tiers_title'       => 'text',
+                'bulk_tiers'             => 'textarea',
+                'home_stats'             => 'textarea',
+                'theme_accent'           => 'text',
+                'theme_accent_dark'      => 'text',
+            ],
+            'labels' => [
+                'storefront_home'        => 'Homepage style (wholesale = the new home)',
+                'home_hero_image'        => 'Hero image — desktop (1600×600, WebP, under 250 KB)',
+                'home_hero_image_mobile' => 'Hero image — mobile (750×750, WebP, under 250 KB)',
+                'home_hero_title'        => 'Hero headline (blank = "Your Trusted Wholesale Partner")',
+                'home_hero_title2'       => 'Hero second line (blank = "in ' . ($s('city') ?: 'your city') . '")',
+                'home_hero_sub'          => 'Hero supporting line',
+                'home_benefits'          => 'Hero benefits — JSON, e.g. [{"t":"FREE DELIVERY","s":"in Juba","s2":"Min. 5 Cartons"}]',
+                'home_delivery_banner'   => 'Delivery banner — JSON [{"t":"FREE DELIVERY IN JUBA","s":"On orders of 5+ cartons"}] (blank = hidden)',
+                'bulk_tiers_title'       => 'Volume pricing heading',
+                'bulk_tiers'             => 'Volume tiers — JSON [{"t":"5 – 10 cartons","s":"Standard price"}] (blank = hidden)',
+                'home_stats'             => 'Numbers strip — JSON [{"t":"450+","s":"Products"}] (blank = hidden; only numbers you can stand behind)',
+                'theme_accent'           => 'Brand colour (e.g. #D92D20)',
+                'theme_accent_dark'      => 'Brand colour, darker (hover)',
+            ],
+            'prefill' => [
+                'storefront_home'        => $sfMode,
+                'home_hero_image'        => $s('home_hero_image'),
+                'home_hero_image_mobile' => $s('home_hero_image_mobile'),
+                'home_hero_title'        => $s('home_hero_title'),
+                'home_hero_title2'       => $s('home_hero_title2'),
+                'home_hero_sub'          => $s('home_hero_sub'),
+                'home_benefits'          => $s('home_benefits'),
+                'home_delivery_banner'   => $s('home_delivery_banner'),
+                'bulk_tiers_title'       => $s('bulk_tiers_title'),
+                'bulk_tiers'             => $s('bulk_tiers'),
+                'home_stats'             => $s('home_stats'),
+                'theme_accent'           => $s('theme_accent'),
+                'theme_accent_dark'      => $s('theme_accent_dark'),
+            ],
+        ];
+        $sfCard = ['kind' => 'dl', 'title' => 'Storefront homepage', 'rows' => [
+            ['Style', $sfMode === 'wholesale' ? 'Wholesale home (hero, business cards, best sellers)' : 'Classic home'],
+            ['Hero image — desktop', $s('home_hero_image') ? '✓ uploaded' : '— product shelf fallback'],
+            ['Hero image — mobile', $s('home_hero_image_mobile') ? '✓ uploaded' : '— compact text hero'],
+            ['Brand colour', $s('theme_accent') ?: '— theme default'],
+            ['Delivery banner', $s('home_delivery_banner') ? 'On' : 'Off'],
+            ['Volume tiers', $s('bulk_tiers') ? 'On' : 'Off'],
+            ['Numbers strip', $s('home_stats') ? 'On' : 'Off'],
+            ['Note', 'Image sizes: desktop 1600×600, mobile 750×750. Products only, no text in the image — the headline and buttons are typed above and stay sharp on every screen.'],
+        ]];
+
         $help = ['kind' => 'links', 'title' => 'How reporting currency works', 'items' => [
             ['icon' => 'dollar', 'color' => '#16a34a', 'title' => 'Consolidated', 'sub' => 'Every figure is converted to your base currency so totals add up.', 'right' => ''],
             ['icon' => 'tag', 'color' => '#2563eb', 'title' => 'Original', 'sub' => 'Each figure stays in its own currency; KPI tiles still consolidate.', 'right' => ''],
@@ -225,6 +291,7 @@ final class SettingsCapability implements ProcessCapability
                 'invoicing' => [$invoiceCard],
                 'documents' => [$documentsCard],
                 'inventory' => [$stockCard],
+                'storefront' => [$sfCard],
                 'whatsapp' => [$connCard, $botCard, $automationCard],
                 'team' => [$teamCard, $teamNote],
             ])
@@ -235,11 +302,12 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'invoicing', 'label' => 'Invoice & tax'],
                 ['key' => 'documents', 'label' => 'Documents'],
                 ['key' => 'inventory', 'label' => 'Stock tracking'],
+                ['key' => 'storefront', 'label' => 'Storefront'],
                 ['key' => 'whatsapp', 'label' => 'WhatsApp & bot'],
                 ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editStock, $editAutomation, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
+            ->more([$editStorefront, $editStock, $editAutomation, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 

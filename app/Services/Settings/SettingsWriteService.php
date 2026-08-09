@@ -51,6 +51,16 @@ final class SettingsWriteService
         'catalog_badge', 'catalog_cover_tags',   // v4.7.7 — trust badge + cover value-prop line
         // POS till controls (v3.9).
         'pos_manager_pin',
+        // v4.69 — the wholesale storefront home (ADR-017), editable from Settings → Storefront.
+        // The two image keys hold URLs written by the existing upload widget; the JSON keys are
+        // parsed by WholesaleHome, which falls back whole on anything malformed — a typo in this
+        // screen can never break the shop, only leave a section on its defaults.
+        'home_hero_image', 'home_hero_image_mobile',
+        'home_hero_title', 'home_hero_title2', 'home_hero_sub',
+        'home_benefits', 'home_trust', 'home_delivery_banner',
+        'bulk_tiers', 'bulk_tiers_title', 'home_stats',
+        'home_cta_primary', 'home_cta_secondary',
+        'theme_accent', 'theme_accent_dark',
         // Storefront model photo override (v4.7.6): any image URL; blank = official TVS photo.
         'model_image_tvshlx125',
         'model_image_hero', 'model_image_boxer100', 'model_image_boxer125hd', 'model_image_boxer150',   // v4.15
@@ -135,6 +145,10 @@ final class SettingsWriteService
         // through the Filament admin, so a shop had no way to say what it sells and therefore
         // no way to stop being shown another trade's settings. Read by Vertical::of().
         'vertical'            => \App\Support\Vertical::ALL,
+        // v4.69 — which homepage the storefront composes. WholesaleHome::enabled() treats anything
+        // that is not exactly 'wholesale' as classic, so 'classic' here switches the new home off
+        // without deleting any of the copy/image settings alongside it.
+        'storefront_home'     => ['classic', 'wholesale'],
     ];
 
     /**
