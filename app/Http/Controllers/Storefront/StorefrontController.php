@@ -100,6 +100,24 @@ class StorefrontController extends Controller
             : Storage::disk('public')->url($value);
     }
 
+    /** v4.67 — wholesale home config (null = classic home). Hero image paths become URLs here. */
+    private function wholesaleHome(Tenant $tenant): ?array
+    {
+        $home = \App\Services\Storefront\WholesaleHome::build(
+            (array) ($tenant->settings ?? []),
+            (string) $tenant->setting('city', '')
+        );
+        if ($home === null) {
+            return null;
+        }
+        foreach (['img', 'imgM'] as $k) {
+            if (($home['hero'][$k] ?? '') !== '') {
+                $home['hero'][$k] = $this->imageUrl($home['hero'][$k]);
+            }
+        }
+        return $home;
+    }
+
     private function currency(Tenant $tenant): string
     {
         $c = (string) $tenant->setting('currency', 'UGX');
@@ -168,6 +186,11 @@ class StorefrontController extends Controller
             'vertical'     => \App\Support\Vertical::of($tenant),
             'combos'       => \App\Support\Combos::forTenant($tenant),
             'theme'        => $this->resolveTheme($tenant),
+            // v4.67 (ADR-017 M1) — the wholesale home, as data. Null for every tenant that has not
+            // set `storefront_home = wholesale`, and the SPA renders the classic home on null, so
+            // this line is invisible to the other twelve shops. All copy comes from settings via
+            // the pure builder; only the image paths need the controller's storage knowledge.
+            'home'         => $this->wholesaleHome($tenant),
         ];
 
         $path = resource_path('storefront/shop.html');
