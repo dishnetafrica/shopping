@@ -1143,6 +1143,10 @@ button{ -webkit-tap-highlight-color:transparent }
    the approved compact header + bottom nav. Everything below renders only under body.whchrome. */
 .whtopbar{display:none}
 .whnav{display:none}
+/* v4.75 — Lucide mic/camera in the search bar. .lic exists only after the gated render swap,
+   so this rule can never touch a classic shop's emoji buttons. */
+.lic svg{width:20px;height:20px;display:block;color:#667085}
+.lic:hover svg{color:var(--green-d)}
 /* the wide wordmark needs a size at EVERY width — phones included, where the header stays compact */
 .whchrome .top .lg.whlogo{width:auto;max-width:58vw;height:38px;border-radius:0;background:none;box-shadow:none;padding:0;display:flex;align-items:center}
 .whchrome .top .lg.whlogo img{height:38px;width:auto;display:block;max-width:100%;object-fit:contain}
@@ -1299,7 +1303,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.74';
+var SHOP_BUILD='v4.75';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3022,6 +3026,24 @@ function whDelvLabel(){
   var d=(SHOP.home.chrome&&SHOP.home.chrome.delivering)||'';
   return d||'Delivery available';
 }
+/* v4.75 — the search bar's mic/camera buttons trade their emoji for Lucide glyphs (owner: "its
+   look too basic"). Same rules as every wh change: the emoji stay in the static markup — classic
+   shops render them untouched — and this swaps at render time, behind the gate, idempotently. */
+var WH_SIC={
+ mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>',
+ cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/></svg>'
+};
+function whSearchIcons(){
+  if(!whOn()) return;
+  var bs=document.querySelectorAll('button[aria-label="Voice search"],button[aria-label="Scan barcode"]');
+  for(var i=0;i<bs.length;i++){
+    var b=bs[i];
+    if(b.getAttribute('data-lic')) continue;             // idempotent across re-renders
+    b.setAttribute('data-lic','1');
+    b.classList.add('lic');
+    b.innerHTML=(b.getAttribute('aria-label')==='Voice search')?WH_SIC.mic:WH_SIC.cam;
+  }
+}
 /* ── M3 (v4.70): page chrome — topbar, wide logo, nav row, About/Contact ───────────────────────
    Injected at runtime ONLY when whOn(), so the static markup every other tenant renders is
    untouched — the pristine-vs-new control check stays byte-identical by construction. Desktop
@@ -3257,7 +3279,7 @@ function render(){
   var c=$('content');
   /* chrome + nav inject at first render, not at boot: function declarations hoist but the icon
      set (var WH_IC) only has a VALUE once its line runs, and boot is before that line. */
-  try{whChrome();whNav();}catch(e){}
+  try{whChrome();whNav();whSearchIcons();}catch(e){}
   SEARCH_ACTIVE=false;
   dLayout();
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
