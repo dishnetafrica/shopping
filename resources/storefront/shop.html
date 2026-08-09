@@ -1299,7 +1299,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.72';
+var SHOP_BUILD='v4.73';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -2172,6 +2172,8 @@ function showDelv(){
   if(!DELV){setDelv('<span class="ico">📍</span><span class="txt">Set your location for delivery time</span><span class="chg">›</span>');return;}
   if(DELV.mode==='out'){setDelv('<span class="ico">⚠️</span><span class="txt">'+esc(DELIVERY.out)+'</span><span class="chg">Change</span>',true);return;}
   if(DELV.mode==='city'){setDelv('<span class="ico">🛵</span><span class="txt">Delivering to '+esc(DELV.branch.name)+'</span><span class="chg">Change</span>');return;}
+  var wl=whDelvLabel();                        // v4.73 — wholesale homes: no invented minutes
+  if(wl){setDelv('<span class="ico">🚚</span><span class="txt">'+esc(wl)+' · '+esc((DELV.branch&&DELV.branch.name)||'')+'</span><span class="chg">Change</span>');return;}
   setDelv('<span class="ico">🛵</span><span class="txt">'+esc(DELV.label)+'</span><span class="chg">Change</span>');
 }
 function applyCoords(lat,lng){
@@ -3008,6 +3010,18 @@ function growGrid(){ var wrap=$('catgridwrap'); if(!wrap)return; var full=applyF
    Section order per the M1 brief: hero · Shop by Business position · Best Sellers position ·
    promo position (M2) · Buy Again where applicable · trust quartet · WhatsApp · footer.        */
 function whOn(){ return !!(SHOP.home && SHOP.home.enabled); }
+/* v4.73 — the delivery strip stops talking like a pizza app on wholesale homes. "Delivery in
+   ~30 min" is the RETAIL time-band default; on a 5-carton wholesale order it reads as either
+   false or confused (owner review, 09 Aug). Rule: if the owner configured real time bands in
+   settings.delivery, those win — their claim, their words. Otherwise wholesale mode shows the
+   owner's own delivering line (or a neutral "Delivery available"), never an invented minute.
+   Classic shops keep the bands untouched. */
+function whDelvLabel(){
+  if(!whOn()) return null;
+  if(DELV_CFG && (DELV_CFG.near||DELV_CFG.mid||DELV_CFG.far)) return null;   // owner-set bands outrank
+  var d=(SHOP.home.chrome&&SHOP.home.chrome.delivering)||'';
+  return d||'Delivery available';
+}
 /* ── M3 (v4.70): page chrome — topbar, wide logo, nav row, About/Contact ───────────────────────
    Injected at runtime ONLY when whOn(), so the static markup every other tenant renders is
    untouched — the pristine-vs-new control check stays byte-identical by construction. Desktop
