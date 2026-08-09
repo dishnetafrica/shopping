@@ -1538,6 +1538,15 @@ class AiBrain
 
         $p  = ($persona !== '' ? $persona : 'You are a helpful WhatsApp sales & support assistant.') . "\n\n";
 
+        // v4.77 (M-CHAT-0) — the brain gets a clock. Before this, the prompt carried NO current
+        // time, timezone or business hours: "are you open now?" and "deliver tomorrow" were
+        // unanchored guesses. Everything below is server-computed; the model is forbidden to
+        // improvise time. Zone: explicit setting > shop city > platform default.
+        $tz = TimeContext::zone((string) $tenant->setting('timezone', ''), (string) $tenant->setting('city', ''));
+        $p .= TimeContext::block(new \DateTimeImmutable('now', new \DateTimeZone($tz)), $tz,
+            trim((string) $tenant->setting('business_hours', '')));
+        $p .= "- TIME RULES: NEVER guess or invent the date, day, hour, or opening status — use ONLY the CURRENT TIME block. Resolve \"today\", \"tomorrow\", \"Monday\", \"this evening\", \"next week\" from it. If asked \"are you open?\" and it says YES/NO, answer that; if it says unknown, share the business-hours text as written (or say you'll confirm the hours) and NEVER state open/closed yourself. Orders can be placed any time — outside hours say the team will follow up when back.\n\n";
+
         // Explicit location & currency context — overrides any default assumption (e.g. Kampala)
         // baked into a persona. Built from the tenant's own setup so the bot speaks to the right
         // place and money.
