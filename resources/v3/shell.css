@@ -1017,3 +1017,10 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 .ptr-ring{width:30px;height:30px;border-radius:50%;border:3px solid var(--line,#E7EAEF);border-top-color:var(--brand,#12A150);background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.14);box-sizing:border-box}
 .ptr.spin .ptr-ring{animation:ptrspin .7s linear infinite}
 @keyframes ptrspin{to{transform:rotate(360deg)}}
+
+/* v4.69.1 — image fields on the settings hub (Choose photo) */
+.set-imgrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.set-imgprev{width:64px;height:64px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc center/cover no-repeat;flex:none}
+.set-imgbtn{border:1px solid #cbd5e1;background:#fff;border-radius:9px;font:inherit;font-size:13px;font-weight:600;padding:8px 13px;cursor:pointer}
+.set-imgbtn:hover{border-color:#94a3b8}
+.set-imgbtn.ghost{color:#64748b}

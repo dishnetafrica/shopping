@@ -198,6 +198,35 @@ final class SettingsSchema
                 ]],
             ]],
             ['key' => 'storefront', 'label' => 'Storefront', 'icon' => 'doc', 'groups' => [
+                // v4.69.1 — the wholesale homepage (ADR-017), on the settings screen people actually
+                // open. The workspace-capability form shipped first and nobody could find it: the
+                // panel's Settings menu routes HERE (/papi/settings-hub), not to the workspace
+                // settings surface. Same keys, same single write path (SettingsWriteService), and
+                // the image fields ride the existing branding upload — any schema field typed
+                // 'image' is automatically uploadable (the v4.16 rule).
+                ['label' => 'Your homepage (wholesale look)', 'help' => 'The new wholesale homepage: hero with your headline and photo, Shop-by-Business cards, best sellers with carton prices and minimum orders. Switch it on here, upload the hero artwork, and edit every line of copy. Blank fields fall back to sensible text — and a typo in a JSON field can never break the shop; that section just shows its default or hides.', 'fields' => [
+                    ['key' => 'storefront_home', 'type' => 'enum', 'label' => 'Homepage style', 'options' => ['classic', 'wholesale'], 'default' => 'classic',
+                     'optionLabels' => ['classic' => 'Classic — the original homepage', 'wholesale' => 'Wholesale — hero, business cards, carton-first best sellers'],
+                     'help' => 'Switching back to Classic only changes the layout — your photos and text stay saved for when you switch again.'],
+                    ['key' => 'home_hero_image', 'type' => 'image', 'label' => 'Hero photo — desktop (1600×600, WebP, under 250 KB)',
+                     'help' => 'Products only — no headline, prices or buttons inside the image; the text is typed and stays sharp on every screen. Leave clean space on the LEFT where the headline sits. Blank = a shelf of your top products stands in.'],
+                    ['key' => 'home_hero_image_mobile', 'type' => 'image', 'label' => 'Hero photo — mobile (750×750, WebP, under 250 KB)',
+                     'help' => 'Shown below the hero buttons on phones. Blank = a compact text-only hero, which also looks fine.'],
+                    ['key' => 'home_hero_title', 'type' => 'text', 'label' => 'Hero headline', 'help' => 'Blank = "Your Trusted Wholesale Partner".'],
+                    ['key' => 'home_hero_title2', 'type' => 'text', 'label' => 'Hero second line (the red one)', 'help' => 'Blank = "in" + your city from Business profile.'],
+                    ['key' => 'home_hero_sub', 'type' => 'text', 'label' => 'Hero supporting line'],
+                    ['key' => 'home_benefits', 'type' => 'textarea', 'label' => 'Hero benefits (JSON)',
+                     'help' => 'Up to four, e.g. [{"t":"FREE DELIVERY","s":"in Juba","s2":"Min. 5 Cartons"},{"t":"WHOLESALE PRICES","s":"Best deals for your business"}]'],
+                    ['key' => 'home_delivery_banner', 'type' => 'textarea', 'label' => 'Free-delivery banner (JSON, blank = hidden)',
+                     'help' => 'One entry, e.g. [{"t":"FREE DELIVERY IN JUBA","s":"On orders of 5 cartons or more"}]'],
+                    ['key' => 'bulk_tiers_title', 'type' => 'text', 'label' => 'Volume pricing heading', 'default' => 'Buy More, Save More'],
+                    ['key' => 'bulk_tiers', 'type' => 'textarea', 'label' => 'Volume tiers (JSON, blank = hidden)',
+                     'help' => 'Only claims you honour, e.g. [{"t":"5 – 10 cartons","s":"Standard price"},{"t":"20+ cartons","s":"Best price on WhatsApp"}]. Put a % here only when the discount really applies at checkout.'],
+                    ['key' => 'home_stats', 'type' => 'textarea', 'label' => 'Numbers strip (JSON, blank = hidden)',
+                     'help' => 'Only numbers you can stand behind, e.g. [{"t":"450+","s":"Products"},{"t":"24h","s":"Delivery in Juba"}]'],
+                    ['key' => 'theme_accent', 'type' => 'text', 'label' => 'Brand colour', 'help' => 'e.g. #D92D20 — colours every button and accent across the whole shop.'],
+                    ['key' => 'theme_accent_dark', 'type' => 'text', 'label' => 'Brand colour, darker', 'help' => 'Hover/active shade, e.g. #B42318.'],
+                ]],
                 ['label' => 'Bike models on the website', 'only' => ['auto_parts'], 'help' => 'Turn a model ON to show it on your customer website, OFF to hide it. Changes take effect as soon as you save. Tip: keep at least one model on. To set ALL the photos in one go, open /papi/bike-photos and upload the bike photo pack zip.', 'fields' => [
                     ['key' => 'show_model_boxer100',   'type' => 'bool', 'label' => 'Boxer 100 KS',  'default' => true],
                     ['key' => 'show_model_boxer125hd', 'type' => 'bool', 'label' => 'Boxer 125 HD',  'default' => true],

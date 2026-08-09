@@ -1281,12 +1281,40 @@ function setField(f){
   if(f.type==='textarea'){
     return '<div class="set-row set-col"><div class="set-lbl">'+lbl+'</div>'+help+'<textarea class="set-in set-ta" data-key="'+k+'" data-type="text">'+esc(val!=null?val:'')+'</textarea></div>';
   }
+  if(f.type==='image'){
+    /* v4.69.1 — a real Choose-photo field on the settings hub. Image-typed schema fields used to
+       fall through to the bare text input below, so the screen asked for a URL nobody has. The
+       button uploads through the existing owner-only /papi/branding-upload (which already accepts
+       every image key in the schema — the v4.16 rule) and drops the returned URL into the hidden
+       input that settingsSave() reads. Clear = back to the built-in fallback. */
+    var iv=(val!=null?String(val):'');
+    return '<div class="set-row set-col"><div class="set-lbl">'+lbl+'</div>'+help
+      +'<div class="set-imgrow"><span class="set-imgprev" id="sfimg_'+k+'"'+(iv?' style="background-image:url(\''+esc(iv)+'\')"':'')+'></span>'
+      +'<input type="hidden" data-key="'+k+'" data-type="text" id="sfimgv_'+k+'" value="'+esc(iv)+'">'
+      +'<input type="file" accept="image/*" id="sfimgf_'+k+'" style="display:none" onchange="setImgUpload(\''+k+'\')">'
+      +'<button type="button" class="set-imgbtn" onclick="document.getElementById(\'sfimgf_'+k+'\').click()">Choose photo</button>'
+      +'<button type="button" class="set-imgbtn ghost" onclick="setImgClear(\''+k+'\')">Clear</button>'
+      +'<span class="mut" id="sfimgs_'+k+'" style="font-size:12px"></span></div></div>';
+  }
   var unit=f.unit?'<span class="set-unit">'+esc(f.unit)+'</span>':'';
   var typ=(f.type==='number')?'number':'text';
   return '<div class="set-row set-col"><div class="set-lbl">'+lbl+'</div>'+help
     +'<div class="set-inwrap"><input class="set-in" type="'+typ+'"'+(typ==='number'?' inputmode="decimal"':'')+' data-key="'+k+'" data-type="'+esc(f.type||'text')+'" value="'+esc(val!=null?val:(f.default!=null?f.default:''))+'">'+unit+'</div></div>';
 }
 function setToggle(el){ el.classList.toggle('on'); }
+async function setImgUpload(k){
+  var fi=document.getElementById('sfimgf_'+k); var f=fi&&fi.files&&fi.files[0]; if(!f) return;
+  var st=document.getElementById('sfimgs_'+k); if(st) st.textContent='Uploading…';
+  if(f.size>6*1024*1024){ if(st) st.textContent='Too large (max 6MB)'; return; }
+  try{
+    var fd=new FormData(); fd.append('key',k); fd.append('file',f);
+    var res=await fetch('/papi/branding-upload',{method:'POST',credentials:'same-origin',headers:{'X-CSRF-TOKEN':CFG.csrf,'Accept':'application/json'},body:fd});
+    var d=await res.json();
+    if(d&&d.ok&&d.url){ document.getElementById('sfimgv_'+k).value=d.url; var pv=document.getElementById('sfimg_'+k); if(pv) pv.style.backgroundImage='url(\''+d.url+'\')'; if(st) st.textContent='\u2713 uploaded \u2014 press Save'; }
+    else { if(st) st.textContent=(d&&(d.error||d.message))||'Upload failed'; }
+  }catch(e){ if(st) st.textContent='Upload failed'; }
+}
+function setImgClear(k){ var v=document.getElementById('sfimgv_'+k); if(v) v.value=''; var pv=document.getElementById('sfimg_'+k); if(pv) pv.style.backgroundImage=''; var st=document.getElementById('sfimgs_'+k); if(st) st.textContent='cleared \u2014 press Save'; }
 function setSeg(btn){ var p=btn.parentNode; p.querySelectorAll('.set-seg').forEach(function(x){ x.classList.remove('on'); }); btn.classList.add('on'); }
 async function settingsSave(btn){
   var vals={};
