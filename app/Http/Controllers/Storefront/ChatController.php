@@ -36,6 +36,7 @@ class ChatController extends Controller
             'session_id' => 'nullable|string|max:80',
             'location'   => 'nullable|string|max:40',       // v4.80 — the storefront's chosen delivery place
             'action'     => 'nullable|string|in:human',     // v4.80 — "Talk to a person"
+            'auth'       => 'nullable|string|max:2000',     // v4.81 — the customer login token, validated server-side
         ]);
 
         $sid = (string) ($data['session_id'] ?? '');
@@ -67,6 +68,33 @@ class ChatController extends Controller
             $convo->save();
 
             $state = is_array($convo->state) ? $convo->state : [];
+
+            // v4.81 (M-CHAT-4) — a signed-in visitor links this conversation to their customer
+            // identity ONCE. The token is the same encrypted, tenant-pinned, expiring credential
+            // the account area uses — validated server-side; an invalid token simply leaves the
+            // visitor anonymous. The link line lands in the SAME message history, so the inbox
+            // AND the brain both know who they're talking to from here on.
+            $auth = trim((string) ($data['auth'] ?? ''));
+            if ($auth !== '' && empty($state['linked_phone'])) {
+                $phone = \App\Http\Controllers\Storefront\CustomerAuthController::customerPhoneFromToken($tenant->id, $auth);
+                if ($phone !== null) {
+                    $name = '';
+                    try {
+                        $prof = \App\Models\CustomerProfile::withoutGlobalScopes()
+                            ->where('tenant_id', $tenant->id)->where('phone', $phone)->first();
+                        $name = trim((string) ($prof->name ?? ''));
+                    } catch (\Throwable $e) {
+                        // profile is a nicety; the phone link stands
+                    }
+                    $state['linked_phone'] = $phone;
+                    $state['linked_name']  = $name;
+                    $convo->state = $state;
+                    $convo->save();
+                    MessageLog::record($tenant->id, $from, WebChatPolicy::INSTANCE, 'out', 'system',
+                        '[Customer signed in on the website: ' . ($name !== '' ? $name . ', ' : '') . '+' . $phone . ']');
+                    BotTrace::log($tenant->id, 'web', $from, 'web_linked', $phone);
+                }
+            }
 
             // v4.80 — "Talk to a person": flips the SAME human-takeover switch the inbox uses,
             // alerts the owner, and never burns a cap. The visitor can keep typing; every line
@@ -152,6 +180,9 @@ class ChatController extends Controller
                 }
             } catch (\Throwable $e) {
                 $cards = [];                    // cards are a bonus; the reply never dies for them
+            }
+            if ($cards !== []) {
+                BotTrace::log($tenant->id, 'web', $from, 'web_cards', (string) count($cards));
             }
 
             return response()->json(WebChatPolicy::shape(

@@ -1382,7 +1382,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.80';
+var SHOP_BUILD='v4.81';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3286,7 +3286,7 @@ function whChatPaint(m,save){
     +'<div class="ci"><b>'+esc(m.p.name||'')+'</b>'
     +((m.p.pack||m.p.moq)?'<span class="cm">'+esc([m.p.pack?('Carton of '+m.p.pack+' pcs'):'',m.p.moq?('MOQ '+m.p.moq):''].filter(Boolean).join(' · '))+'</span>':'')
     +'<span class="cp">'+esc(m.p.price!=null?(((m.p.currency||'')+' ').replace(/^ $/,'')+Number(m.p.price).toLocaleString()+(m.p.unit?' per '+m.p.unit:'')):'Price on request')+'</span>'
-    +'<div class="ca"><button class="add" onclick="whChatAdd('+jk(m.p.name||'')+',this)">ADD</button>'
+    +'<div class="ca"><button class="add" onclick="whChatAdd('+jk(m.p.name||'')+',this,'+(+m.p.id||0)+')">ADD</button>'
     +'<button class="vc" onclick="whChatHide();openCart()">View cart</button></div>'
     +'</div></div></div>';
   else h='<div class="row bot"><div class="bub">'+esc(m.text||'').replace(/\n/g,'<br>')+'</div></div>';
@@ -3310,6 +3310,7 @@ function whChatSend(text,action){
   var body={message:text,session_id:whChatSid()};
   try{ var dl=(typeof DELV!=='undefined'&&DELV&&DELV.branch&&DELV.branch.name)?String(DELV.branch.name):''; if(dl) body.location=dl.slice(0,40); }catch(e){}
   if(action) body.action=action;
+  try{ if(typeof AUTHTOK!=='undefined'&&AUTHTOK) body.auth=AUTHTOK; }catch(e){}   // v4.81 — server validates; never trusted client-side
   fetch((SHOP.base||'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
   .then(function(r){ return r.json().then(function(j){ return {st:r.status,j:j}; }).catch(function(){ return {st:r.status,j:null}; }); })
   .then(function(x){
@@ -3318,6 +3319,7 @@ function whChatSend(text,action){
     if(!x.j || x.j.ok===false){ whChatErr('Something went wrong.',true); return; }
     (x.j.messages||[]).forEach(function(m){ whChatPaint(m); });
     (x.j.products||[]).forEach(function(p){ whChatPaint({type:'card',p:p}); });
+    if((x.j.products||[]).length){ sTrack('chat_reco',{n:x.j.products.length}); }
     if(x.j.wa && SHOP.waNumber){
       bd.insertAdjacentHTML('beforeend','<div class="row bot"><a class="bub doc" target="_blank" rel="noopener" href="'+whChatWaHref()+'">'+WH_IC.wa+' Continue on WhatsApp</a></div>');
     }
@@ -3342,11 +3344,13 @@ function whChatRetry(btn){
 }
 /* v4.80 — ADD inside a chat card feeds the REAL storefront cart (same cartAdd the product grid
    uses), so chat → cart → checkout is one system, not two. */
-function whChatAdd(name,btn){
+function whChatAdd(name,btn,id){
   try{
     cartAdd(name);
     if(btn){ btn.textContent='ADDED ✓'; setTimeout(function(){ btn.textContent='ADD'; },1200); }
-    sTrack('chat_add',{name:name});
+    sTrack('chat_add',{product_id:(+id||0)});
+    // v4.81 — remember that chat touched this cart, so the eventual order is attributable.
+    try{ localStorage.setItem('cb_chat_attr_'+(SHOP.slug||'shop'),'1'); }catch(e){}
   }catch(e){}
 }
 /* the nav needs the catalogue (deals/brands existence), so it builds after load() */
@@ -4037,6 +4041,9 @@ async function placeOrder(){
     var r=await fetch(SUBMIT_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
     var d=await r.json();
     if(d&&d.ok){track('checkout',payload.items.map(function(i){var p=prod(i.name);return p?p.id:null;}).filter(Boolean));saveCust({name:name,phone:phone,addr:addr});saveLast(payload.items);CART={};saveCart();bar();render();$('sheetTitle').textContent='Order placed';
+      /* v4.81 — chat attribution: fires ONLY when a chat ADD touched this cart (gated flag),
+         then clears, so one conversation never claims two orders. */
+      try{ var _ck='cb_chat_attr_'+(SHOP.slug||'shop'); if(localStorage.getItem(_ck)==='1'){ sTrack('chat_order',{}); localStorage.removeItem(_ck); } }catch(e){}
       var shopName=SHOP.name||'us';
       var eta=deliveryEstimateText();
       try{ toast('Order placed'); if(navigator.vibrate)navigator.vibrate([10,30,10]); }catch(e){}

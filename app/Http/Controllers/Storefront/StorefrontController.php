@@ -1430,7 +1430,10 @@ class StorefrontController extends Controller
         \Illuminate\Support\Facades\RateLimiter::hit($ipKey, 60);
 
         $event = strtolower(trim((string) $r->input('event', 'view')));
-        if (! in_array($event, ['view', 'add', 'gallery', 'checkout', 'search', 'whatsapp'], true)) {
+        // v4.81 (M-CHAT-4) — the three chat facts only the BROWSER knows (open, add-from-chat,
+        // order-after-chat). Server-side stages live in bot_events already. Additive: no
+        // existing event changes meaning, and nothing sends these unless the gated chat UI is on.
+        if (! in_array($event, ['view', 'add', 'gallery', 'checkout', 'search', 'whatsapp', 'chat_open', 'chat_add', 'chat_order'], true)) {
             $event = 'view';
         }
 

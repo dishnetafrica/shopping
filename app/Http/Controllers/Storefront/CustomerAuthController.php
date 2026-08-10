@@ -197,6 +197,15 @@ class CustomerAuthController extends Controller
 
     private function phoneFromToken(int $tenantId, string $token): ?string
     {
+        return self::customerPhoneFromToken($tenantId, $token);
+    }
+
+    /**
+     * v4.81 (M-CHAT-4) — the ONE token check, now callable by the chat channel too. Same
+     * cryptography, same tenant pin, same expiry; a second copy would drift.
+     */
+    public static function customerPhoneFromToken(int $tenantId, string $token): ?string
+    {
         if ($token === '') return null;
         try {
             $d = json_decode(Crypt::decryptString($token), true);
@@ -205,8 +214,8 @@ class CustomerAuthController extends Controller
         }
         if (! is_array($d) || (int) ($d['t'] ?? 0) !== $tenantId) return null;
         if ((int) ($d['exp'] ?? 0) < now()->timestamp) return null;
-        $p = $this->normPhone((string) ($d['p'] ?? ''));
-        return $p !== '' ? $p : null;
+        $p = preg_replace('/[^0-9]/', '', (string) ($d['p'] ?? ''));
+        return $p !== '' ? $p : null;          // exact original semantics — one source, no drift
     }
 
     private function profileFor(Tenant $tenant, string $phone): array
