@@ -71,7 +71,7 @@ final class WebChatPolicy
      *
      * @param array<int,array<string,mixed>> $collected
      */
-    public static function shape(array $collected, bool $ok, array $cart, string $sid, bool $human, bool $wa): array
+    public static function shape(array $collected, bool $ok, array $cart, string $sid, bool $human, bool $wa, array $products = []): array
     {
         if ($collected === []) {
             $collected = [['type' => 'text',
@@ -85,6 +85,10 @@ final class WebChatPolicy
             'wa'         => $wa,
             'messages'   => array_values($collected),
             'cart'       => array_values($cart),
+            'products'   => array_values($products),
         ];
     }
+
+    /** v4.80 — the reply when a visitor taps "Talk to a person". WhatsApp stays offered. */
+    public const HUMAN_REQUEST_MSG = 'Okay — a team member will join this chat shortly. You can keep typing here; they will see everything you write. 🙏';
 }

@@ -34,6 +34,8 @@ class ChatController extends Controller
         $data = $request->validate([
             'message'    => 'required|string|max:2000',
             'session_id' => 'nullable|string|max:80',
+            'location'   => 'nullable|string|max:40',       // v4.80 — the storefront's chosen delivery place
+            'action'     => 'nullable|string|in:human',     // v4.80 — "Talk to a person"
         ]);
 
         $sid = (string) ($data['session_id'] ?? '');
@@ -65,6 +67,24 @@ class ChatController extends Controller
             $convo->save();
 
             $state = is_array($convo->state) ? $convo->state : [];
+
+            // v4.80 — "Talk to a person": flips the SAME human-takeover switch the inbox uses,
+            // alerts the owner, and never burns a cap. The visitor can keep typing; every line
+            // lands in the inbox for the person who picks it up.
+            if (($data['action'] ?? '') === 'human') {
+                $mins = max(15, (int) $tenant->setting('human_takeover_minutes', 60));
+                $state['human_until'] = time() + $mins * 60;
+                $convo->state = $state;
+                $convo->save();
+                \App\Jobs\NotifyOwner::dispatch($tenant->id,
+                    '🌐 A website visitor asked to talk to a person — open Chats (' . $from . ') to reply.');
+                BotTrace::log($tenant->id, 'web', $from, 'web_human_requested');
+
+                return response()->json(WebChatPolicy::shape(
+                    [['type' => 'text', 'text' => WebChatPolicy::HUMAN_REQUEST_MSG]], true,
+                    (array) ($convo->cart ?? []), $sid, true, (bool) $tenant->whatsapp_number));
+            }
+
             $humanActive = $convo->agent_active || ((int) ($state['human_until'] ?? 0) > time());
 
             $sessionCount = $this->bump('webchat:s:' . $tenant->id . ':' . $sid, 86400);
@@ -89,9 +109,15 @@ class ChatController extends Controller
                     (array) ($convo->cart ?? []), $sid, $v['action'] === 'human', $v['wa']));
             }
 
+            // v4.80 — the visitor's chosen delivery place rides along as DATA (same weave pattern
+            // as ad-awareness in the WhatsApp job). The inbox logged the raw text above; the brain
+            // sees the annotation and stops asking for a location the website already knows.
+            $loc = trim((string) ($data['location'] ?? ''));
+            $aiText = $text . ($loc !== '' ? "\n[delivery location selected on the website: {$loc}]" : '');
+
             $collector = new CollectorGateway();
             try {
-                $ok = app(\App\Services\Bot\AiBrain::class)->handle($tenant, $convo, $from, $text, $collector, []);
+                $ok = app(\App\Services\Bot\AiBrain::class)->handle($tenant, $convo, $from, $aiText, $collector, []);
             } catch (\Throwable $e) {
                 BotTrace::log($tenant->id, 'web', $from, 'web_failed', mb_substr($e->getMessage(), 0, 160));
                 \App\Jobs\NotifyOwner::dispatch($tenant->id,
@@ -103,8 +129,33 @@ class ChatController extends Controller
             $convo->refresh();
             BotTrace::log($tenant->id, 'web', $from, $ok ? 'web_replied' : 'web_no_reply');
 
+            // v4.80 — product cards: the brain stars EXACT catalogue names (its own protocol);
+            // we look those up for real and card ONLY what exists. No row, no card — a wrongly
+            // starred phrase costs nothing. Explicit tenant scoping, console-rule style.
+            $cards = [];
+            try {
+                $names = \App\Services\Bot\ChatCards::starredNames($collector->messages());
+                if ($names !== []) {
+                    $cur = strtoupper(trim((string) $tenant->setting('currency', 'UGX')));
+                    $rows = \App\Models\Product::withoutGlobalScopes()
+                        ->where('tenant_id', $tenant->id)->whereIn('name', $names)->get()->keyBy('name');
+                    foreach ($names as $n) {
+                        if ($rows->has($n)) {
+                            $p = $rows[$n];
+                            $cards[] = \App\Services\Bot\ChatCards::card([
+                                'id' => $p->id, 'name' => $p->name, 'image_url' => (string) $p->image_url,
+                                'price' => $p->price, 'currency' => $cur, 'unit_label' => (string) $p->unit_label,
+                                'pack_size' => $p->pack_size, 'moq' => $p->moq,
+                            ]);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                $cards = [];                    // cards are a bonus; the reply never dies for them
+            }
+
             return response()->json(WebChatPolicy::shape(
-                $collector->messages(), $ok, (array) ($convo->cart ?? []), $sid, false, false));
+                $collector->messages(), $ok, (array) ($convo->cart ?? []), $sid, false, false, $cards));
         } finally {
             $lock->release();
         }
