@@ -1262,7 +1262,11 @@ button{ -webkit-tap-highlight-color:transparent }
 .whchrome .top .lg.whlogo+div{display:none}   /* the wordmark carries the name + tagline */
 @media(min-width:1024px){
   .whchrome .whtopbar{display:block;background:#f7f7f8;border-bottom:1px solid #ececf0;font-size:12.5px;color:#4a5568}
-  .whtopbar .in{max-width:1240px;margin:0 auto;padding:7px 18px;display:flex;justify-content:space-between;gap:14px;align-items:center}
+  /* v4.87 — ONE canvas for every band (owner, wide-screen screenshot: header/nav hugged the
+     left while content centred wider — three different widths made the right side dead space).
+     All wholesale bands now share the SAME --dcanvas/--dpad the content grid uses, so their
+     text edges line up down the page at any width. */
+  .whtopbar .in{max-width:var(--dcanvas,1240px);margin:0 auto;padding:7px var(--dpad,18px);display:flex;justify-content:space-between;gap:14px;align-items:center}
   .whtopbar .l{display:flex;align-items:center;gap:8px}
   .whtopbar .l .d{margin:0 7px;opacity:.45}
   .whtopbar .c{font-weight:600}
@@ -1274,13 +1278,19 @@ button{ -webkit-tap-highlight-color:transparent }
   .whtopbar .si{color:var(--green);font-weight:700;text-decoration:none}
   .whchrome .whnav{display:block;background:#fff;border-bottom:1px solid #ececf0}
   .whchrome .top .topb{flex:0 0 auto !important}
-  .whchrome .whhsearch{display:flex;align-items:center;gap:8px;flex:1 1 auto;max-width:600px;margin:0 26px;height:44px;background:#F4F4F6;border:1px solid #E3E6EA;border-radius:11px;padding:0 12px;cursor:text}
+  /* v4.87 — the missing slack-absorber: with the logo pinned (rule above) and the search capped,
+     nothing claimed the leftover canvas width, so Cart/♡/account floated mid-air ~400px from the
+     right edge on wide monitors (the owner circled exactly this). margin-left:auto hands ALL the
+     slack to the gap before the cart — logo left, search beside it, actions pinned to the canvas
+     edge, the standard e-commerce header at every width. */
+  .whchrome .top .dnav{margin-left:auto}
+  .whchrome .whhsearch{display:flex;align-items:center;gap:8px;flex:1 1 auto;max-width:680px;margin:0 26px;height:44px;background:#F4F4F6;border:1px solid #E3E6EA;border-radius:11px;padding:0 12px;cursor:text}   /* v4.87 — cap 600→680: a little more of the wide-screen slack goes to the search */
   .whchrome .whhsearch .mg{width:18px;height:18px;flex:none;color:#98a1ab}
   .whchrome .whhsearch .ph{flex:1;font-size:14px;color:#9AA1AB;white-space:nowrap;overflow:hidden}
   .whchrome .whhsearch .hb{border:0;background:none;padding:4px;cursor:pointer}
   .whchrome .searchwrap{display:none}
-  .whchrome .whpop{max-width:1240px;margin:0 auto;padding:10px 18px 4px}
-  .whnav .in{max-width:1240px;margin:0 auto;padding:0 18px;display:flex;align-items:center;gap:4px;overflow-x:auto}
+  .whchrome .whpop{max-width:var(--dcanvas,1240px);margin:0 auto;padding:10px var(--dpad,18px) 4px}
+  .whnav .in{max-width:var(--dcanvas,1240px);margin:0 auto;padding:0 var(--dpad,18px);display:flex;align-items:center;gap:4px;overflow-x:auto}
   .whnav .cats{flex:none;border:0;background:var(--green);color:#fff;font-weight:800;font-size:13px;border-radius:9px;padding:10px 15px;margin:8px 10px 8px 0;cursor:pointer}
   .whnav .lnk{flex:none;border:0;background:none;font:inherit;font-size:13.5px;font-weight:600;color:#1a202c;padding:14px 12px;cursor:pointer;border-bottom:2.5px solid transparent}
   .whnav .lnk:hover{color:var(--green);border-bottom-color:var(--green)}
@@ -1434,7 +1444,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.86';
+var SHOP_BUILD='v4.87';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
