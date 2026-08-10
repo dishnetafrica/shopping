@@ -1245,6 +1245,12 @@ button{ -webkit-tap-highlight-color:transparent }
 .whchat .ctc input:focus{border-color:var(--green)}
 .whchat .ctc .go{border:0;background:var(--green);color:#fff;font-weight:800;font-size:13px;border-radius:10px;padding:11px;cursor:pointer}
 .whchat .ctc .er{font-size:11.5px;color:var(--red);min-height:1px}
+/* v4.86 — country picker row (only ever wraps gated/injected inputs) */
+.whccrow{display:flex;gap:7px;min-width:0}
+.whccrow input{flex:1;min-width:0}
+.whccsel{flex:none;max-width:112px;border:1px solid #E3E6EA;background:#F4F4F6;border-radius:10px;height:41px;padding:0 6px;font-size:13.5px;outline:none;color:var(--ink)}
+.whccsel:focus{border-color:var(--green)}
+.field .whccrow .whccsel{height:44px;border-radius:10px}
 @media(min-width:1024px){
   .whcfab{right:26px;bottom:26px}
   .whwfab{right:26px;bottom:88px}
@@ -1428,7 +1434,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.85';
+var SHOP_BUILD='v4.86';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -2835,9 +2841,10 @@ function openLogin(prefill){
     '<button class="place" id="loSendBtn" onclick="reqCode()">Send code</button>'+
     '<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Cancel</button>';
   $('sheet').classList.add('show');
+  try{ if(typeof whCcWrap==='function') whCcWrap('loPhone'); }catch(e){}   /* v4.86 — gated inside whCcWrap; classic sheets untouched */
 }
 async function reqCode(){
-  var phone=($('loPhone').value||'').replace(/[^0-9]/g,'');
+  var phone=whCcRead('loPhone');   /* v4.86 — classic path inside is the exact old digits-only read */
   if(phone.length<9){toast('Enter a valid WhatsApp number','err');return;}
   var b=$('loSendBtn');b.disabled=true;b.textContent='Sending\u2026';
   try{var r=await fetch(authBase()+'/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone})});var d=await r.json();
@@ -3339,6 +3346,75 @@ function whWishBadge(){
   el.style.display=n>0?'':'none';
 }
 /* WH-WISH-END */
+/* WH-CC v4.86 — country-aware phone entry (owner, 10 Aug: "not all people have number on
+   whatsapp from south sudan — do it wherever we need to enter number"). ONE selector, applied
+   at every phone input: the chat pre-chat form, the OTP login, and checkout/quotation.
+   Why it matters beyond comfort: the server's conservative canon guesses a bare 9-digit local
+   by its first digit (9→South Sudan, 7→Uganda) — a Kenyan typing their local 07… number was
+   silently becoming Ugandan, and their login OTP went nowhere. The picker removes the guess.
+   HONESTY RULES:
+     · a country the buyer TYPED always wins — a full 211…/256…/+91… number is never re-prefixed
+       by a mis-set picker;
+     · local trunk zeros are stripped, then the picked code is prepended — plain digits the
+       server's PhoneNormalizer already understands (known codes kept, unknown shapes preserved);
+     · the picker remembers the buyer's last choice on this device; the default is the SHOP's
+       own WhatsApp country, never a hardcoded one.
+   Gated: selectors inject only when whOn(); classic shops keep their plain inputs, and
+   whCcRead's no-selector fallback is the EXACT old digits-only expression. */
+var WH_CC=[
+ ['SS','🇸🇸','211','South Sudan'],['UG','🇺🇬','256','Uganda'],['KE','🇰🇪','254','Kenya'],
+ ['TZ','🇹🇿','255','Tanzania'],['RW','🇷🇼','250','Rwanda'],['CD','🇨🇩','243','DR Congo'],
+ ['SD','🇸🇩','249','Sudan'],['ET','🇪🇹','251','Ethiopia'],['ER','🇪🇷','291','Eritrea'],
+ ['BI','🇧🇮','257','Burundi'],['SO','🇸🇴','252','Somalia'],['DJ','🇩🇯','253','Djibouti'],
+ ['EG','🇪🇬','20','Egypt'],['AE','🇦🇪','971','UAE'],['SA','🇸🇦','966','Saudi Arabia'],
+ ['IN','🇮🇳','91','India'],['PK','🇵🇰','92','Pakistan'],['CN','🇨🇳','86','China'],
+ ['GB','🇬🇧','44','UK'],['US','🇺🇸','1','USA']
+];
+function whCcDefault(){
+  try{ var s=localStorage.getItem('cb_cc_'+(SHOP.slug||'shop'));
+    if(s){ for(var i=0;i<WH_CC.length;i++){ if(WH_CC[i][2]===s) return s; } } }catch(e){}
+  var wa=String(SHOP.waNumber||''), best='';
+  for(var j=0;j<WH_CC.length;j++){ var c=WH_CC[j][2]; if(wa.indexOf(c)===0 && c.length>best.length) best=c; }
+  return best||'211';
+}
+function whCcOptions(){
+  var def=whCcDefault();
+  return WH_CC.map(function(c){ return '<option value="'+c[2]+'"'+(c[2]===def?' selected':'')+'>'+c[1]+' +'+c[2]+'</option>'; }).join('');
+}
+function whCcCompose(cc,raw){
+  var s=String(raw||'');
+  var intl=/^\s*(\+|00)/.test(s);                       // the buyer EXPLICITLY typed international
+  var d=s.replace(/\D+/g,'');
+  if(intl){ return d.replace(/^0{2}/,''); }             // their country, their call — never re-prefixed
+  d=d.replace(/^0+/,'');
+  if(!d) return '';
+  /* Bare digits: trust only the LONG (3-digit) corridor codes as already-international — a
+     12-digit 256… is unambiguous. Short codes stay behind the +/00 signal on purpose: the
+     owner's own number 0929245020 strips to 92…, which LOOKS like Pakistan +92 — without this
+     rule his every customer in Juba would lose their 211. Found by t478 before it shipped. */
+  for(var i=0;i<WH_CC.length;i++){ var c=WH_CC[i][2];
+    if(c.length===3 && d.indexOf(c)===0 && d.length>=c.length+7 && d.length<=15) return d;
+  }
+  return String(cc||'')+d;
+}
+function whCcWrap(id){
+  if(typeof whOn!=='function'||!whOn()) return;
+  var inp=document.getElementById(id); if(!inp||document.getElementById(id+'Cc')) return;
+  var sel=document.createElement('select'); sel.id=id+'Cc'; sel.className='whccsel';
+  sel.setAttribute('aria-label','Country code');
+  sel.innerHTML=whCcOptions();
+  sel.onchange=function(){ try{ localStorage.setItem('cb_cc_'+(SHOP.slug||'shop'),sel.value); }catch(e){} };
+  var row=document.createElement('div'); row.className='whccrow';
+  inp.parentNode.insertBefore(row,inp); row.appendChild(sel); row.appendChild(inp);
+}
+function whCcRead(id){
+  var inp=document.getElementById(id); if(!inp) return '';
+  var raw=inp.value||'';
+  var sel=document.getElementById(id+'Cc');
+  if(!sel) return raw.replace(/[^0-9]/g,'');   // classic path: EXACT old behaviour, byte for byte
+  return whCcCompose(sel.value,raw);
+}
+/* WH-CC-END */
 /* ── M-CHAT-2 (v4.79, ADR-018): the storefront face of the ONE brain ───────────────────────────
    Everything here is a CLIENT for POST /chat (M-CHAT-1) — no product logic, no prices, no rules,
    no keys. Injected only when whChatOn(); classic shops carry zero extra DOM and zero listeners.
@@ -3424,6 +3500,7 @@ function whChatBuild(){
     +'<button class="snd" aria-label="Send" onclick="whChatSubmit()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg></button></div>'
     +'<div class="pw">Powered by '+esc(SHOP.name||'')+' AI</div>';
   document.body.appendChild(p);
+  try{ whCcWrap('whCtcPhone'); }catch(e){}   /* v4.86 — country picker on the chat form */
   whChatCtcSync();
   document.getElementById('whChatIn').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); whChatSubmit(); } });
   var saved=[]; try{ saved=JSON.parse(localStorage.getItem('cb_chat_log_'+(SHOP.slug||'shop'))||'[]'); }catch(e){}
@@ -3550,11 +3627,13 @@ function whChatCtcSync(){
 }
 function whChatCtcGo(){
   var n=(document.getElementById('whCtcName')||{value:''}).value.trim();
-  var pRaw=(document.getElementById('whCtcPhone')||{value:''}).value;
-  var p=String(pRaw).replace(/\D+/g,'').replace(/^0+/,'');
+  var p=whCcRead('whCtcPhone');   /* v4.86 — country picker composes the full number */
+  /* v4.86 — the LOCAL part must be a real subscriber number too: with a picker, a 5-digit
+     stub + country code reads 8 digits total and would sneak past a total-length floor. */
+  var loc=String((document.getElementById('whCtcPhone')||{value:''}).value).replace(/\D+/g,'').replace(/^0+/,'');
   var er=document.getElementById('whCtcErr');
   if(n.length<2){ if(er)er.textContent='Please write your name.'; return; }
-  if(p.length<7||p.length>15){ if(er)er.textContent='That number looks short — use your full WhatsApp number.'; return; }
+  if(p.length<7||p.length>15||loc.length<7){ if(er)er.textContent='That number looks short — use your full WhatsApp number.'; return; }
   if(er)er.textContent='';
   try{ localStorage.setItem('cb_chat_ctc_'+(SHOP.slug||'shop'),JSON.stringify({name:n.slice(0,60),phone:p})); }catch(e){}
   whChatCtcSync();
@@ -4293,6 +4372,7 @@ function openCheckout(){
     +'<button class="colink" style="text-align:center;width:100%;margin-top:6px" onclick="openCart()">Back to cart</button></div></div>';
   $('sheetBody').innerHTML='<div class="cocols">'+coLeft+coRight+'</div>';
   $('sheet').classList.add('show');
+  try{ if(typeof whCcWrap==='function') whCcWrap('coPhone'); }catch(e){}   /* v4.86 — gated inside whCcWrap */
   renderLocMsg();
 }
 function mapsUrl(g){return 'https://maps.google.com/?q='+g.lat+','+g.lng;}
@@ -4311,7 +4391,7 @@ function captureLoc(){
   );
 }
 async function placeOrder(){
-  var name=($('coName').value||'').trim(), phone=($('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr').value||'').trim(), pay=$('coPay').value, note=(($('coNote')||{}).value||'').trim(), when=(($('coWhen')||{}).value||'').trim();
+  var name=($('coName').value||'').trim(), phone=whCcRead('coPhone'), addr=($('coAddr').value||'').trim(), pay=$('coPay').value, note=(($('coNote')||{}).value||'').trim(), when=(($('coWhen')||{}).value||'').trim();   /* v4.86 — whCcRead: composed when the picker exists, exact old digits otherwise */
   if(!name){toast('Please enter your name','err');return;}
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
   if(!IS_PICKUP && !addr && !GEO){toast('Add your delivery address or share your location','err');return;}
@@ -4345,7 +4425,7 @@ async function placeOrder(){
 /* Quotation-first submit: turn the cart into a professional Quotation instantly (B2B trading flow).
    Reuses the same checkout fields; posts to /quote; shows the quotation + portal link. */
 async function requestQuotation(){
-  var name=($('coName')&&$('coName').value||'').trim(), phone=($('coPhone')&&$('coPhone').value||'').replace(/[^0-9]/g,''), addr=($('coAddr')&&$('coAddr').value||'').trim(), note=(($('coNote')||{}).value||'').trim();
+  var name=($('coName')&&$('coName').value||'').trim(), phone=whCcRead('coPhone'), addr=($('coAddr')&&$('coAddr').value||'').trim(), note=(($('coNote')||{}).value||'').trim();   /* v4.86 — same read for quotations */
   if(!name){toast('Please enter your name','err');return;}
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
