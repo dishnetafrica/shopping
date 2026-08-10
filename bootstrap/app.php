@@ -35,6 +35,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'part-request', '*/part-request',   // v4.9.2 — "ask my colleague" part request (session-less)
             'solar/*', '*/solar/*',
             'event', '*/event',
+            // v4.81.1 — web chat is session-less like its storefront siblings; it is guarded by
+            // the per-IP throttle, the per-session lock, and the message caps, not by a CSRF
+            // token a public visitor doesn't have. (The miss that shipped: chat worked against
+            // the stubbed test server and 419'd on the real one. Contract-pinned now.)
+            'chat', '*/chat',
             'clienterror', '*/clienterror',
             // No-login task links: actions are authorized by the unguessable nonce + rate-limit,
             // not by a session CSRF token (which a public, session-less visitor may not have).

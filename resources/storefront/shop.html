@@ -1382,7 +1382,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.81';
+var SHOP_BUILD='v4.81.1';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3316,6 +3316,11 @@ function whChatSend(text,action){
   .then(function(x){
     whChatDone();
     if(x.st===429){ whChatErr('One moment — still finishing your last message.',true); return; }
+    if(x.j && x.j.error==='chat_off'){
+      whChatErr('Chat isn\'t switched on right now.',false);
+      if(SHOP.waNumber){ bd.insertAdjacentHTML('beforeend','<div class="row bot"><a class="bub doc" target="_blank" rel="noopener" href="'+whChatWaHref()+'">'+WH_IC.wa+' Message us on WhatsApp</a></div>'); whChatScroll(); }
+      return;
+    }
     if(!x.j || x.j.ok===false){ whChatErr('Something went wrong.',true); return; }
     (x.j.messages||[]).forEach(function(m){ whChatPaint(m); });
     (x.j.products||[]).forEach(function(p){ whChatPaint({type:'card',p:p}); });
