@@ -157,6 +157,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/trust', [\App\Http\Controllers\Panel\TrustPanelController::class, 'page']); // Inventory Trust (T6)
     Route::get('/panel/pos', [\App\Http\Controllers\Panel\PosController::class, 'page']); // POS till (supermarket checkout)
     Route::get('/panel/pos-display', [\App\Http\Controllers\Panel\PosController::class, 'display']); // customer-facing second screen (v4.1)
+    Route::get('/panel/returns', [\App\Http\Controllers\Panel\ReturnsController::class, 'page']); // v4.88 (ADR-019) return items against an invoice
     Route::get('/panel/ai-campaign', [\App\Http\Controllers\Panel\AiCampaignController::class, 'page']); // AI campaign generator (v4.5, owner)
     Route::get('/panel/training', [\App\Http\Controllers\Panel\TrainingController::class, 'page']); // in-product Training Center
     Route::get('/panel/cash-position', [\App\Http\Controllers\Panel\CashPositionController::class, 'page']);
@@ -468,6 +469,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('pos-shift-close', [\App\Http\Controllers\Panel\PosController::class, 'shiftClose']);
         Route::get('pos-find-sale',    [\App\Http\Controllers\Panel\PosController::class, 'findSale']);    // v4.0 returns
         Route::post('pos-return',      [\App\Http\Controllers\Panel\PosController::class, 'processReturn']);
+        Route::get('return-find',      [\App\Http\Controllers\Panel\ReturnsController::class, 'find']);     // v4.88 (ADR-019)
+        Route::post('return-process',  [\App\Http\Controllers\Panel\ReturnsController::class, 'process']);
         Route::post('pos-quote',       [\App\Http\Controllers\Panel\PosController::class, 'quoteCreate']); // v4.2 counter quotes
         Route::get('pos-quotes',       [\App\Http\Controllers\Panel\PosController::class, 'quotes']);
         Route::get('pos-quote-load',   [\App\Http\Controllers\Panel\PosController::class, 'quoteLoad']);

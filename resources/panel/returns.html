@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Return items · __TENANT__</title>
+<style>
+:root{--ink:#101828;--muted:#667085;--line:#e4e7ec;--bg:#f6f7f9;--brand:#0C831F;--brand-d:#0A6E1A;--red:#B4232A;--amber:#B54708}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+.wrap{max-width:840px;margin:0 auto;padding:18px 16px 60px}
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.hd h1{font-size:20px;margin:0;flex:1}
+.back{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;color:var(--ink)}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:14px;margin:0 0 12px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:18px;font-size:13.5px}
+.meta b{display:block;font-size:11.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:0 8px 8px;font-weight:700}
+th.r,td.r{text-align:right}
+td{padding:10px 8px;border-top:1px solid var(--line);vertical-align:middle}
+.nm{font-weight:600}
+.sub{font-size:12px;color:var(--muted)}
+.stp{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.stp button{border:0;background:#f8f9fb;width:32px;height:36px;font-size:17px;font-weight:700;cursor:pointer;color:var(--ink)}
+.stp button:disabled{opacity:.35;cursor:not-allowed}
+.stp input{width:62px;height:36px;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:center;font-size:14px;font-weight:700;outline:none}
+.none{color:var(--muted);font-size:12.5px}
+.mrow{display:flex;flex-wrap:wrap;gap:8px}
+.m{flex:1 1 190px;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:12px 13px;cursor:pointer;text-align:left}
+.m.on{border-color:var(--brand);background:#f2fbf4}
+.m b{display:block;font-size:13.5px;margin-bottom:2px}
+.m span{font-size:12px;color:var(--muted)}
+input[type=text]{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:14px;outline:none}
+input[type=text]:focus{border-color:var(--brand)}
+.lbl{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+.foot{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:14px 16px;margin:0 -16px -60px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.tot{flex:1;min-width:150px}
+.tot b{display:block;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.tot span{font-size:22px;font-weight:800}
+.go{border:0;background:var(--brand);color:#fff;font-weight:800;font-size:15px;border-radius:11px;padding:14px 26px;cursor:pointer}
+.go:disabled{background:#c9cfd6;cursor:not-allowed}
+.msg{padding:12px 14px;border-radius:10px;font-size:13.5px;margin-bottom:14px;display:none}
+.msg.err{display:block;background:#fef3f2;border:1px solid #fee4e2;color:var(--red)}
+.msg.warn{display:block;background:#fffaeb;border:1px solid #fedf89;color:var(--amber)}
+.ok{text-align:center;padding:30px 16px}
+.ok .tick{width:64px;height:64px;border-radius:50%;background:var(--brand);color:#fff;font-size:34px;line-height:64px;margin:0 auto 14px}
+.ok h2{margin:0 0 6px;font-size:22px;text-transform:none;color:var(--ink);letter-spacing:0}
+.ok p{color:var(--muted);margin:0 0 6px}
+.ok .cn{font-size:15px;font-weight:800;margin:10px 0}
+.ok a.dl{display:inline-block;margin-top:8px;background:var(--brand);color:#fff;text-decoration:none;font-weight:800;border-radius:10px;padding:12px 20px}
+.hint{font-size:12.5px;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd">
+    <a class="back" href="#" onclick="history.back();return false">‹ Back</a>
+    <h1>Return items</h1>
+  </div>
+  <div id="msg" class="msg"></div>
+  <div id="app"></div>
+</div>
+<script>
+var CUR='__CURRENCY__', D=null, DONE=false;
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function qp(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
+function money(n){n=Number(n)||0;var d=(CUR==='USD')?2:0;return CUR+' '+n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});}
+function num(n){n=Number(n)||0;return String(Math.round(n*1000)/1000);}
+function say(t,kind){var m=$('msg');m.className='msg '+(kind||'err');m.textContent=t;window.scrollTo(0,0);}
+function clear(){$('msg').className='msg';$('msg').textContent='';}
+
+function load(){
+  var q=qp('invoice')?('invoice='+encodeURIComponent(qp('invoice'))):(qp('order')?('order='+encodeURIComponent(qp('order'))):'');
+  if(!q){ say('Open this from an invoice or an order.'); return; }
+  fetch('/papi/return-find?'+q,{headers:{'Accept':'application/json'}})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(!j||!j.ok){ say((j&&j.error)||'Could not load this sale.'); return; }
+      D=j; CUR=j.currency||CUR; paint();
+    })
+    .catch(function(){ say('Network error — please reload.'); });
+}
+
+function paint(){
+  var anyReturnable=D.lines.some(function(l){return l.returnable>0.0001;});
+  var rows=D.lines.map(function(l,i){
+    var can=l.returnable>0.0001;
+    return '<tr>'
+      +'<td><div class="nm">'+esc(l.name)+'</div>'
+        +'<div class="sub">Sold '+num(l.sold)+(l.returned>0?(' · already returned '+num(l.returned)):'')+'</div></td>'
+      +'<td class="r">'+money(l.price)+'</td>'
+      +'<td class="r">'+(can
+        ? ('<div class="stp"><button onclick="bump('+i+',-1)">−</button>'
+           +'<input id="q'+i+'" value="0" inputmode="decimal" oninput="recalc()">'
+           +'<button onclick="bump('+i+',1)">+</button></div>'
+           +'<div class="sub" style="margin-top:4px">max '+num(l.returnable)+'</div>')
+        : '<span class="none">Fully returned</span>')+'</td>'
+      +'<td class="r" id="a'+i+'">'+money(0)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var invLine=D.invoice?('Invoice '+esc(D.invoice.no)+' · balance '+money(D.invoice.balance)):'No invoice yet';
+  var methods=''
+    /* The subtitle states the CURRENT amount due — the credit comes off it. Saying "they pay
+       X less" with the balance in X would be a plain untruth: X is what they owe, not the credit. */
+    +(D.invoice?mBtn('invoice','Reduce this invoice','Comes off the '+money(D.invoice.balance)+' due'):'')
+    +mBtn('credit','Credit on account','Held for their next order')
+    +mBtn('cash','Cash back','Money leaves the drawer')
+    +mBtn('momo','Mobile money back','Sent back by mobile money');
+
+  $('app').innerHTML=
+    '<div class="card"><h2>The sale</h2><div class="meta">'
+      +'<div><b>Order</b>'+esc(D.order.no)+'</div>'
+      +'<div><b>Date</b>'+esc(D.order.date||'—')+'</div>'
+      +'<div><b>Customer</b>'+esc(D.customer.name||'—')+'</div>'
+      +'<div><b>Invoice</b>'+invLine+'</div>'
+    +'</div></div>'
+    +'<div class="card"><h2>What is coming back</h2>'
+      +(anyReturnable?('<table><thead><tr><th>Item</th><th class="r">Price paid</th><th class="r">Return qty</th><th class="r">Amount</th></tr></thead><tbody>'+rows+'</tbody></table>')
+                    :'<div class="none">Every line on this sale has already been returned.</div>')
+      +'<div class="hint">Quantities are capped at what was sold minus what came back before. The invoice itself is never changed — a numbered credit note is issued for these lines.</div>'
+    +'</div>'
+    +(anyReturnable?('<div class="card"><h2>How the money comes back</h2><div class="mrow">'+methods+'</div>'
+      +'<div style="margin-top:14px"><label class="lbl" for="phone">Customer phone</label><input type="text" id="phone" value="'+esc(D.customer.phone||'')+'" placeholder="For credit on account"></div>'
+      +'<div style="margin-top:12px"><label class="lbl" for="reason">Reason (optional)</label><input type="text" id="reason" placeholder="Damaged in transit, wrong item, over-supplied…"></div>'
+      +'<div id="pinbox" style="margin-top:12px;display:none"><label class="lbl" for="pin">Manager PIN</label><input type="text" id="pin" inputmode="numeric" placeholder="Required for returns"></div>'
+    +'</div>'
+    +'<div class="foot"><div class="tot"><b>Credit note total</b><span id="tot">'+money(0)+'</span></div>'
+      +'<button class="go" id="go" onclick="submit()" disabled>Return items</button></div>'):'');
+  recalc();
+}
+function mBtn(k,t,s){return '<button class="m'+(k===METHOD?' on':'')+'" data-m="'+k+'" onclick="pick(\''+k+'\')"><b>'+esc(t)+'</b><span>'+esc(s)+'</span></button>';}
+var METHOD='';
+function pick(m){
+  METHOD=m;
+  [].forEach.call(document.querySelectorAll('.m'),function(b){ b.classList.toggle('on', b.getAttribute('data-m')===m); });
+  recalc();
+}
+function bump(i,d){
+  var el=$('q'+i); if(!el) return;
+  var v=(parseFloat(el.value)||0)+d;
+  var max=D.lines[i].returnable;
+  if(v<0)v=0; if(v>max)v=max;
+  el.value=String(Math.round(v*1000)/1000);
+  recalc();
+}
+function lines(){
+  var out=[];
+  D.lines.forEach(function(l,i){
+    var el=$('q'+i); if(!el) return;
+    var v=parseFloat(el.value)||0;
+    if(v>l.returnable){ v=l.returnable; el.value=String(v); }
+    if(v<0){ v=0; el.value='0'; }
+    if(v>0) out.push({product_id:l.product_id,name:l.name,price:l.price,qty:v});
+  });
+  return out;
+}
+function recalc(){
+  if(!D) return;
+  var total=0;
+  D.lines.forEach(function(l,i){
+    var el=$('q'+i); if(!el) return;
+    var v=parseFloat(el.value)||0;
+    /* Clamp AS THEY TYPE, not only on submit: a box reading 99 against a cap of 6 shows a total
+       the shop cannot honour, and the person reading it is about to promise it to a customer. */
+    if(v>l.returnable){ v=l.returnable; el.value=String(Math.round(v*1000)/1000); }
+    if(v<0){ v=0; el.value='0'; }
+    var amt=v*l.price; total+=amt;
+    var c=$('a'+i); if(c) c.textContent=money(amt);
+  });
+  var t=$('tot'); if(t) t.textContent=money(total);
+  var go=$('go'); if(go) go.disabled=!(total>0 && METHOD!=='');
+}
+function submit(){
+  clear();
+  var L=lines();
+  if(!L.length){ say('Choose at least one item to return.'); return; }
+  if(!METHOD){ say('Choose how the money comes back.'); return; }
+  var body={order_id:D.order.id, invoice_id:D.invoice?D.invoice.id:null, lines:L, refund_method:METHOD,
+            reason:($('reason')&&$('reason').value||'').trim(), phone:($('phone')&&$('phone').value||'').trim()};
+  var pin=($('pin')&&$('pin').value||'').trim(); if(pin) body.manager_pin=pin;
+  var go=$('go'); go.disabled=true; go.textContent='Working…';
+  fetch('/papi/return-process',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      go.textContent='Return items';
+      if(j&&j.need_pin){ $('pinbox').style.display='block'; say(j.error||'Returns need the manager PIN.','warn'); go.disabled=false; return; }
+      if(!j||!j.ok){ say((j&&j.error)||'Could not complete the return.'); go.disabled=false; return; }
+      done(j);
+    })
+    .catch(function(){ go.textContent='Return items'; go.disabled=false; say('Network error — nothing was saved. Please try again.'); });
+}
+function done(j){
+  DONE=true; clear();
+  $('app').innerHTML='<div class="card ok"><div class="tick">✓</div>'
+    +'<h2>Return recorded</h2>'
+    +'<p>'+esc(j.method_label||'')+' · '+money(j.amount)+'</p>'
+    +(j.credit_note_no?('<div class="cn">Credit note '+esc(j.credit_note_no)+'</div>'):'<div class="cn" style="color:#B54708">Credit note pending — the office has been alerted</div>')
+    +(j.invoice_balance!=null?('<p>Invoice '+esc(j.invoice_no||'')+' now shows '+money(j.invoice_balance)+' due.</p>'):'')
+    +(j.restocked_lines?('<p>'+j.restocked_lines+' line(s) put back into stock.</p>'):'')
+    +(j.credit_note_pdf?('<a class="dl" href="'+esc(j.credit_note_pdf)+'" target="_blank" rel="noopener">Download credit note</a>'):'')
+    +'<p style="margin-top:16px"><a class="back" href="#" onclick="history.back();return false">‹ Back to the invoice</a></p>'
+  +'</div>';
+}
+load();
+</script>
+</body>
+</html>

@@ -451,21 +451,22 @@ class PosController extends Controller
 
     /* ------------- returns (v4.0): find receipt → select lines → stock back + credit note ------------- */
 
-    /** Per-product quantities already returned against an order (from structured POS returns). */
+    /**
+     * Per-product quantities already returned against an order (from structured returns).
+     * v4.88 (ADR-019) — delegates to ReturnPolicy so the till and the panel share ONE cap rule
+     * and ONE line-identity rule. Two doors computing "how much is left to return" from two
+     * copies of the same arithmetic is how a customer ends up returning 60 of 50 cartons.
+     */
     private function returnedMap(int $orderId, int $tenantId): array
     {
-        $map = [];
         try {
-            foreach (\App\Models\ReturnRecord::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)->where('order_id', $orderId)->get() as $r) {
-                foreach ((array) ($r->items_json ?? []) as $l) {
-                    $key = (int) ($l['product_id'] ?? 0) ?: ('n:' . mb_strtolower((string) ($l['name'] ?? '')));
-                    $map[$key] = ($map[$key] ?? 0) + (float) ($l['qty'] ?? 0);
-                }
-            }
+            return \App\Services\Sales\ReturnPolicy::returnedMap(
+                \App\Models\ReturnRecord::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)->where('order_id', $orderId)->get()
+            );
         } catch (\Throwable $e) { /* legacy rows without items_json simply don't restrict */ }
 
-        return $map;
+        return [];
     }
 
     public function findSale(Request $request)
@@ -499,7 +500,7 @@ class PosController extends Controller
             $returned = $this->returnedMap($o->id, $t->id);
             $lines = [];
             foreach (\App\Services\Inventory\OrderStockIssuer::lines($o) as $ln) {
-                $key = $ln['product_id'] ?: ('n:' . mb_strtolower($ln['name']));
+                $key = \App\Services\Sales\ReturnPolicy::key($ln);   // v4.88 — one identity rule
                 $lines[] = [
                     'product_id' => $ln['product_id'], 'name' => $ln['name'], 'qty' => $ln['qty'],
                     'returned' => round((float) ($returned[$key] ?? 0), 3),
@@ -509,7 +510,7 @@ class PosController extends Controller
             $prices = [];
             foreach ((array) $o->items_json as $l) {
                 if (is_array($l)) {
-                    $k = (int) ($l['product_id'] ?? 0) ?: ('n:' . mb_strtolower((string) ($l['name'] ?? '')));
+                    $k = \App\Services\Sales\ReturnPolicy::key($l);   // v4.88 — one identity rule
                     $prices[$k] = (float) ($l['price'] ?? 0);
                 }
             }
@@ -517,7 +518,7 @@ class PosController extends Controller
                 $prices[(int) $it->product_id] = (float) $it->price;
             }
             foreach ($lines as &$ln) {
-                $k = $ln['product_id'] ?: ('n:' . mb_strtolower($ln['name']));
+                $k = \App\Services\Sales\ReturnPolicy::key($ln);   // v4.88 — one identity rule
                 $ln['price'] = round((float) ($prices[$k] ?? 0), 2);
             }
             unset($ln);
@@ -567,14 +568,14 @@ class PosController extends Controller
         // Validate each line against what was SOLD minus what was ALREADY returned.
         $sold = [];
         foreach (\App\Services\Inventory\OrderStockIssuer::lines($o) as $ln) {
-            $key = $ln['product_id'] ?: ('n:' . mb_strtolower($ln['name']));
+            $key = \App\Services\Sales\ReturnPolicy::key($ln);   // v4.88 — one identity rule
             $sold[$key] = ($sold[$key] ?? 0) + $ln['qty'];
         }
         $returned = $this->returnedMap($o->id, $t->id);
         $amount = 0.0;
         $clean = [];
         foreach ($data['lines'] as $l) {
-            $key = (int) ($l['product_id'] ?? 0) ?: ('n:' . mb_strtolower((string) $l['name']));
+            $key = \App\Services\Sales\ReturnPolicy::key($l);   // v4.88 — one identity rule
             $max = (float) ($sold[$key] ?? 0) - (float) ($returned[$key] ?? 0);
             if ((float) $l['qty'] > $max + 0.0001) {
                 return response()->json(['ok' => false, 'error' => 'Cannot return ' . $l['qty'] . ' × ' . $l['name'] . ' — only ' . max(0, $max) . ' left to return on this sale.'], 422);

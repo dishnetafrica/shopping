@@ -94,6 +94,13 @@ final class InvoiceCapability implements ObjectCapability
         $sendInvoice = ! $isVoid ? ['key' => 'send_invoice', 'label' => 'Send on WhatsApp', 'method' => 'POST', 'endpoint' => '/papi/invoice-send', 'actor' => 'human', 'tone' => 'default', 'body' => ['id' => (int) $i->id], 'confirm' => 'Send invoice ' . $i->invoice_no . ' to ' . ($i->customer_name ?: 'the customer') . ' on WhatsApp?'] : null;
         // Void (kept for records) via the panel's owner/manager-gated endpoint.
         $voidInvoice = ! $isVoid ? ['key' => 'void_invoice', 'label' => 'Void invoice', 'method' => 'POST', 'endpoint' => '/papi/invoice-void', 'actor' => 'human', 'tone' => 'danger', 'body' => ['id' => (int) $i->id], 'confirm' => 'Void invoice ' . $i->invoice_no . '? It stays on record but is marked void and excluded from balances.'] : null;
+        // v4.88 (ADR-019) — returning 1–2 lines out of a bulk invoice. The invoice itself is never
+        // edited: this opens the line picker, which raises a numbered credit note for the returned
+        // items only. Offered only when there is an order behind the invoice to take lines from.
+        $returnItems = (! $isVoid && $order) ? [
+            'key' => 'return_items', 'label' => 'Return items',
+            'href' => '/panel/returns?invoice=' . $i->id, 'actor' => 'human', 'tone' => 'default',
+        ] : null;
         // Download via the panel's proven streaming route (same session, correct headers).
         $downloadPdf = ['key' => 'invoice_pdf', 'label' => 'Download PDF', 'href' => '/papi/invoice-pdf?id=' . $i->id, 'actor' => 'human', 'tone' => 'default'];
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
@@ -101,7 +108,7 @@ final class InvoiceCapability implements ObjectCapability
 
         // Credit already in hand beats asking for money again, so it leads when there is any.
         $primary = $useCredit ?: ((! $isVoid && $balance > 0.01) ? $recordPay : $downloadPdf);
-        $quick = array_values(array_filter([$useCredit, (! $isVoid && $balance > 0.01) ? $recordPay : null, $downloadPdf, $sendInvoice, $openOrder, $openCustomer]));
+        $quick = array_values(array_filter([$useCredit, (! $isVoid && $balance > 0.01) ? $recordPay : null, $downloadPdf, $sendInvoice, $returnItems, $openOrder, $openCustomer]));
 
         // --- pipeline ---
         $st = fn ($done, $now) => $done ? 'done' : ($now ? 'now' : 'wait');
@@ -242,7 +249,7 @@ final class InvoiceCapability implements ObjectCapability
                 ['key' => 'documents', 'label' => 'Documents', 'count' => count($docs)],
             ])
             ->actions(array_values(array_filter([$primary])))
-            ->more(array_values(array_filter([$primary === $downloadPdf ? null : $downloadPdf, $sendInvoice, $openOrder, $openCustomer, $voidInvoice])))
+            ->more(array_values(array_filter([$primary === $downloadPdf ? null : $downloadPdf, $sendInvoice, $returnItems, $openOrder, $openCustomer, $voidInvoice])))
             ->meta(['capability' => 'invoice', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'invoices', 'permissions' => ['menu:finance']]);
     }
 

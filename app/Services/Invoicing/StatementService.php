@@ -69,20 +69,29 @@ class StatementService
             if ($name === '' && trim((string) $cn->customer_name) !== '') $name = trim((string) $cn->customer_name);
             $cur = (string) $cn->currency;
             $amt = round((float) $cn->total, 2);
+            // v4.88 (ADR-019) — an APPLIED credit note has already come off its invoice's balance
+            // above (InvoiceService nets it). Subtracting it here as well would credit the customer
+            // twice on their own statement. It still gets a line — they need the document number —
+            // but with nothing left to draw on, exactly like a paid invoice: a total, no balance.
+            $isApplied = (bool) $cn->applied && (int) $cn->invoice_id > 0;
             $lines[] = [
                 'no'       => $cn->credit_note_no,
                 'date'     => optional($cn->issued_at)->format('d M Y'),
                 'currency' => $cur,
                 'total'    => -$amt,          // negative — a credit on the account
                 'paid'     => 0.0,
-                'balance'  => -$amt,
-                'status'   => 'credit',
+                'balance'  => $isApplied ? 0.0 : -$amt,
+                'status'   => $isApplied ? 'applied' : 'credit',
                 'kind'     => 'credit',
-                'reason'   => CreditNote::reasonLabel((string) $cn->reason_code),
+                'reason'   => CreditNote::reasonLabel((string) $cn->reason_code)
+                    . ($isApplied && $cn->invoice_no ? ' — applied to ' . $cn->invoice_no : ''),
                 'against'  => (string) ($cn->invoice_no ?? ''),
                 'id'       => $cn->id,
                 'due'      => '',
             ];
+            if ($isApplied) {
+                continue;                     // the invoice line already carries this reduction
+            }
             $out[$cur]      = round(($out[$cur] ?? 0) - $amt, 2);
             $credited[$cur] = round(($credited[$cur] ?? 0) + $amt, 2);
         }

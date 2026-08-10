@@ -259,9 +259,39 @@ class InvoiceService
             }
             $paid = round($paid, 2);
 
+            // v4.88 (ADR-019) — goods that came BACK reduce this invoice too, when the credit note
+            // was applied to it. Before this, a partial return moved the customer's statement but
+            // not the invoice row: the statement said 1,960 while the invoice screen and aged
+            // receivables still said 2,000. Same class of split-brain as v4.53; one source now.
+            // Only APPLIED, non-void notes count — a credit held on account or paid out in cash
+            // did not reduce this invoice, and must not pretend to.
+            $credited = 0.0;
+            try {
+                $cns = \App\Models\CreditNote::withoutGlobalScopes()
+                    ->where('tenant_id', $inv->tenant_id)
+                    ->where('invoice_id', $inv->id)
+                    ->where('applied', true)
+                    ->where('status', '!=', 'void')
+                    ->get();
+                foreach ($cns as $cn) {
+                    $cnCur = strtoupper((string) $cn->currency);
+                    if ($cnCur === $cur) {
+                        $credited += (float) $cn->total;                       // same currency → exact
+                    } else {
+                        // Cross-currency credit: convert through the ONE FX source, same as payments.
+                        $usd = $cnCur === 'USD' ? (float) $cn->total : ((float) $cn->total / max(1e-9, $fx->ratePerUsd($cnCur)));
+                        $credited += $cur === 'USD' ? $usd : $usd * $fx->ratePerUsd($cur);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // A credit-note read that fails must not stop a payment from being recorded.
+                \Log::warning('invoice credit-note netting failed: ' . $e->getMessage());
+            }
+            $credited = round($credited, 2);
+
             $inv->amount_paid = $paid;
-            $inv->balance     = round(max(0, (float) $inv->total - $paid), 2);
-            $inv->status      = $inv->balance <= 0.5 ? 'paid' : ($paid > 0 ? 'part_paid' : 'issued');
+            $inv->balance     = round(max(0, (float) $inv->total - $paid - $credited), 2);
+            $inv->status      = $inv->balance <= 0.5 ? 'paid' : (($paid + $credited) > 0 ? 'part_paid' : 'issued');
             // drop the cached PDF so a re-download shows the new balance
             if ($inv->pdf_path) { try { Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {} $inv->pdf_path = null; }
             $inv->save();

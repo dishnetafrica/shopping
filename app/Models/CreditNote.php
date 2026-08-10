@@ -16,12 +16,20 @@ class CreditNote extends Model
         'tenant_id', 'credit_note_no', 'invoice_id', 'invoice_no', 'order_id', 'return_id',
         'customer_name', 'customer_phone', 'bill_address', 'currency', 'subtotal', 'total',
         'reason_code', 'title', 'status', 'source', 'notes', 'issued_at', 'pdf_path', 'meta',
+        'applied', 'refund_method',   // v4.88 (ADR-019) — allocated to its invoice, or held on account
     ];
 
     protected $casts = [
         'subtotal' => 'decimal:2', 'total' => 'decimal:2',
         'issued_at' => 'datetime', 'meta' => 'array',
+        'applied' => 'boolean',
     ];
+
+    /** v4.88 — a live credit that has been netted off its own invoice's balance. */
+    public function isAppliedToInvoice(): bool
+    {
+        return (bool) $this->applied && ! $this->isVoid() && (int) $this->invoice_id > 0;
+    }
 
     public function items(): HasMany { return $this->hasMany(CreditNoteItem::class); }
     public function invoice(): BelongsTo { return $this->belongsTo(Invoice::class); }
