@@ -64,6 +64,7 @@ class WebchatStatsCommand extends Command
             ['…with product cards',                $g('web_cards')],
             ['ADD from chat (browser)',            $e('chat_add')],
             ['Orders after chat ADD (browser)',    $e('chat_order')],
+            ['Contacts captured (pre-chat form)',  $g('web_contact')],   // v4.85
             ['Signed-in links',                    $g('web_linked')],
             ['Asked for a person',                 $g('web_human_requested')],
             ['Session caps hit',                   $g('web_session_cap')],

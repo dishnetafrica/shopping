@@ -32,11 +32,13 @@ class ChatController extends Controller
         $tenant = $this->resolve($shop);
 
         $data = $request->validate([
-            'message'    => 'required|string|max:2000',
-            'session_id' => 'nullable|string|max:80',
-            'location'   => 'nullable|string|max:40',       // v4.80 — the storefront's chosen delivery place
-            'action'     => 'nullable|string|in:human',     // v4.80 — "Talk to a person"
-            'auth'       => 'nullable|string|max:2000',     // v4.81 — the customer login token, validated server-side
+            'message'       => 'required|string|max:2000',
+            'session_id'    => 'nullable|string|max:80',
+            'location'      => 'nullable|string|max:40',    // v4.80 — the storefront's chosen delivery place
+            'action'        => 'nullable|string|in:human',  // v4.80 — "Talk to a person"
+            'auth'          => 'nullable|string|max:2000',  // v4.81 — the customer login token, validated server-side
+            'contact_name'  => 'nullable|string|max:60',    // v4.85 — pre-chat form (owner's contact-first rule)
+            'contact_phone' => 'nullable|string|max:32',    // v4.85 — WhatsApp number, canonicalised server-side
         ]);
 
         $sid = (string) ($data['session_id'] ?? '');
@@ -54,7 +56,30 @@ class ChatController extends Controller
         }
 
         try {
-            $convo = Conversation::firstOrCreate(
+            // v4.85 — THE CONTACT GATE (owner's rule, 10 Aug): "collect first customer name and
+            // his whatsapp number then only we add to customers." Until a visitor gives a name
+            // and a plausible WhatsApp number — or proves identity with a login token — NOTHING
+            // is written: no conversation row, no message log, no counters, no AI spend.
+            // Anonymous browsing therefore leaves ZERO residue in the portal. The form in the
+            // widget is UI; this check is the law (fail closed). Gate: web_chat_contact,
+            // default ON — protections default on, features default off.
+            $convo = Conversation::where('customer_phone', $from)
+                ->where('instance', WebChatPolicy::INSTANCE)->first();
+            $state = ($convo && is_array($convo->state)) ? $convo->state : [];
+
+            $auth      = trim((string) ($data['auth'] ?? ''));
+            $authPhone = $auth !== '' ? CustomerAuthController::customerPhoneFromToken($tenant->id, $auth) : null;
+
+            $cName  = trim((string) ($data['contact_name'] ?? ''));
+            $cPhone = \App\Support\PhoneNormalizer::canonical((string) ($data['contact_phone'] ?? ''));
+            $cOk    = mb_strlen($cName) >= 2 && preg_match('/^\d{7,15}$/', $cPhone) === 1;
+
+            if ((bool) $tenant->setting('web_chat_contact', true)
+                && empty($state['contact_phone']) && $authPhone === null && ! $cOk) {
+                return response()->json(['ok' => false, 'error' => 'need_contact'], 422);
+            }
+
+            $convo = $convo ?: Conversation::firstOrCreate(
                 ['customer_phone' => $from, 'instance' => WebChatPolicy::INSTANCE],
                 ['state' => [], 'cart' => []]
             );
@@ -69,14 +94,46 @@ class ChatController extends Controller
 
             $state = is_array($convo->state) ? $convo->state : [];
 
+            // v4.85 — first valid contact: remember it on the conversation, tell the inbox and
+            // the brain who this is, and create the customer master the way ORDERS do
+            // (PhoneNormalizer::canonical; fill blanks, never clobber a curated name).
+            // SECURITY: a TYPED number is unverified — it must NEVER link this web session to an
+            // existing WhatsApp history (anyone could type someone else's number and read their
+            // conversation). linked_phone stays exclusive to the signed-in path below.
+            if ($cOk && empty($state['contact_phone'])) {
+                $state['contact_name']  = mb_substr($cName, 0, 60);
+                $state['contact_phone'] = $cPhone;
+                $state['contact_at']    = time();
+                $convo->state = $state;
+                $convo->save();
+                MessageLog::record($tenant->id, $from, WebChatPolicy::INSTANCE, 'out', 'system',
+                    '[Website visitor introduced themselves on the pre-chat form: ' . $state['contact_name'] . ', WhatsApp +' . $cPhone . ']');
+                BotTrace::log($tenant->id, 'web', $from, 'web_contact', $cPhone);
+                try {
+                    $prof = \App\Models\CustomerProfile::withoutGlobalScopes()->firstOrNew(
+                        ['tenant_id' => $tenant->id, 'phone' => $cPhone]
+                    );
+                    if (trim((string) $prof->name) === '') {
+                        $prof->name = $state['contact_name'];
+                    }
+                    if (! $prof->exists) {
+                        $prof->notes = trim((string) $prof->notes . "\nMet on website chat (pre-chat form).");
+                    }
+                    if (! $prof->exists || $prof->isDirty()) {
+                        $prof->save();
+                    }
+                } catch (\Throwable $e) {
+                    // the chat must not die on a CRM hiccup; the system line above still names them
+                }
+            }
+
             // v4.81 (M-CHAT-4) — a signed-in visitor links this conversation to their customer
             // identity ONCE. The token is the same encrypted, tenant-pinned, expiring credential
             // the account area uses — validated server-side; an invalid token simply leaves the
             // visitor anonymous. The link line lands in the SAME message history, so the inbox
             // AND the brain both know who they're talking to from here on.
-            $auth = trim((string) ($data['auth'] ?? ''));
-            if ($auth !== '' && empty($state['linked_phone'])) {
-                $phone = \App\Http\Controllers\Storefront\CustomerAuthController::customerPhoneFromToken($tenant->id, $auth);
+            if ($authPhone !== null && empty($state['linked_phone'])) {   // v4.85 — token already validated once at the gate
+                $phone = $authPhone;
                 if ($phone !== null) {
                     $name = '';
                     try {

@@ -43,6 +43,12 @@ class RelationshipExtractor
     }
 
     /** Process one settled conversation. Returns true if the profile was updated. */
+    /** v4.85 — a bare international phone (digits only, 7–15). "web:<sid>" and friends fail. */
+    public static function realPhone(string $p): bool
+    {
+        return preg_match('/^\d{7,15}$/', $p) === 1;
+    }
+
     public function process(Tenant $tenant, Conversation $c): bool
     {
         try {
@@ -59,6 +65,16 @@ class RelationshipExtractor
                 return false;
             }
 
+            // v4.85 — ONLY real phone identities become customer profiles. Web-channel
+            // conversations are keyed "web:<session>" (ADR-018); before this guard the extractor
+            // was quietly minting junk customers like phone="web:Kx8p…" — exactly the portal
+            // pollution the owner flagged. A web visitor becomes a customer through the pre-chat
+            // contact form (ChatController) with a canonical phone, never through this loop.
+            if (! self::realPhone((string) $c->customer_phone)) {
+                $c->summarized_at = now();
+                $c->save();
+                return false;
+            }
             $profile = CustomerProfile::withoutGlobalScopes()->firstOrCreate(
                 ['tenant_id' => $tenant->id, 'phone' => $c->customer_phone], []
             );

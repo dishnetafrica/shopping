@@ -193,6 +193,7 @@ class StorefrontController extends Controller
             'home'         => $this->wholesaleHome($tenant),
             // v4.79 (M-CHAT-2) — the chat UI renders only when the owner switched the channel on.
             'webChat'      => (bool) $tenant->setting('web_chat', false),
+            'webChatContact' => (bool) $tenant->setting('web_chat_contact', true),   // v4.85 — contact-first gate; server enforces regardless
         ];
 
         $path = resource_path('storefront/shop.html');

@@ -1237,6 +1237,14 @@ button{ -webkit-tap-highlight-color:transparent }
 .whchat .snd svg{width:18px;height:18px}
 .whchat .pw{text-align:center;font-size:10.5px;color:#98a1ab;padding:3px 0 8px;background:#fff}
 .whchat .pw b{color:#667085}
+/* v4.85 — pre-chat contact form */
+.whchat .ctc{display:flex;flex-direction:column;gap:7px;padding:12px;background:#fff;border-top:1px solid #ececf0}
+.whchat .ctc b{font-size:13.5px}
+.whchat .ctc>span{font-size:12px;color:#667085}
+.whchat .ctc input{border:1px solid #E3E6EA;background:#F4F4F6;border-radius:10px;padding:0 13px;height:41px;font-size:14px;outline:none;color:var(--ink)}
+.whchat .ctc input:focus{border-color:var(--green)}
+.whchat .ctc .go{border:0;background:var(--green);color:#fff;font-weight:800;font-size:13px;border-radius:10px;padding:11px;cursor:pointer}
+.whchat .ctc .er{font-size:11.5px;color:var(--red);min-height:1px}
 @media(min-width:1024px){
   .whcfab{right:26px;bottom:26px}
   .whwfab{right:26px;bottom:88px}
@@ -1420,7 +1428,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.84';
+var SHOP_BUILD='v4.85';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3368,6 +3376,7 @@ function whChatBtns(){
 function whChatToggle(){ if(WHCHAT.open){ whChatHide(); } else { whChatShow(); } }
 function whChatShow(){
   if(!WHCHAT.built) whChatBuild();
+  try{ whChatCtcSync(); }catch(e){}   // v4.85 — login state may have changed since last open
   document.getElementById('whChat').classList.add('on');
   var f=document.getElementById('whChatFab'); if(f) f.classList.add('hid');
   WHCHAT.open=true; sTrack('chat_open',{});
@@ -3401,11 +3410,21 @@ function whChatBuild(){
     +(SHOP.waNumber?('<a target="_blank" rel="noopener" href="'+whChatWaHref()+'" onclick="sTrack(\'whatsapp\',{src:\'chat\'})">'+WH_IC.wa+'Continue on WhatsApp</a>'):'')
     +'<button onclick="whChatSend(\'__human__\')">'+WH_IC.headset+'Talk to a person</button>'
     +'</div>'
+    /* v4.85 — pre-chat contact form (owner's rule: name + WhatsApp number FIRST, then chat).
+       The form is only the polite face; the SERVER refuses formless sessions (need_contact)
+       and writes nothing until a valid contact arrives. Signed-in customers never see it. */
+    +'<div class="ctc" id="whChatCtc" style="display:none"><b>Before we start 👋</b>'
+    +'<span>Your name and WhatsApp number — so we can follow up on WhatsApp if you get disconnected.</span>'
+    +'<input id="whCtcName" maxlength="60" placeholder="Your name" autocomplete="name">'
+    +'<input id="whCtcPhone" maxlength="32" inputmode="tel" placeholder="WhatsApp number — e.g. 0929245020" autocomplete="tel">'
+    +'<span class="er" id="whCtcErr"></span>'
+    +'<button class="go" onclick="whChatCtcGo()">Start chat</button></div>'
     +'<div class="ft"><input id="whChatIn" placeholder="Ask about products, prices, delivery…" maxlength="2000" autocomplete="off" enterkeyhint="send">'
     +(voiceSupported()?('<button class="mic" aria-label="Dictate your message" onclick="whChatVoice(this)">'+WH_SIC.mic+'</button>'):'')
     +'<button class="snd" aria-label="Send" onclick="whChatSubmit()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg></button></div>'
     +'<div class="pw">Powered by '+esc(SHOP.name||'')+' AI</div>';
   document.body.appendChild(p);
+  whChatCtcSync();
   document.getElementById('whChatIn').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); whChatSubmit(); } });
   var saved=[]; try{ saved=JSON.parse(localStorage.getItem('cb_chat_log_'+(SHOP.slug||'shop'))||'[]'); }catch(e){}
   if(saved.length){ WHCHAT.log=saved; saved.forEach(function(m){ whChatPaint(m,false); }); whChatScroll(); }
@@ -3474,11 +3493,18 @@ function whChatSend(text,action){
   try{ var dl=(typeof DELV!=='undefined'&&DELV&&DELV.branch&&DELV.branch.name)?String(DELV.branch.name):''; if(dl) body.location=dl.slice(0,40); }catch(e){}
   if(action) body.action=action;
   try{ if(typeof AUTHTOK!=='undefined'&&AUTHTOK) body.auth=AUTHTOK; }catch(e){}   // v4.81 — server validates; never trusted client-side
+  var ctc=whChatContact(); if(ctc){ body.contact_name=ctc.name; body.contact_phone=ctc.phone; }   // v4.85 — rides every message; server stores once
   fetch((SHOP.base||'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
   .then(function(r){ return r.json().then(function(j){ return {st:r.status,j:j}; }).catch(function(){ return {st:r.status,j:null}; }); })
   .then(function(x){
     whChatDone();
     if(x.st===429){ whChatErr('One moment — still finishing your last message.',true); return; }
+    if(x.j && x.j.error==='need_contact'){   // v4.85 — the server is the law; the form reappears
+      whChatErr('Please share your name and WhatsApp number first.',false);
+      try{ localStorage.removeItem('cb_chat_ctc_'+(SHOP.slug||'shop')); }catch(e){}
+      whChatCtcSync();
+      return;
+    }
     /* v4.84 — ✓✓ means DELIVERED to our server and answered: it upgrades only on paths where a
        real reply (or the honest chat-off notice) came back — never on errors, never before. */
     if(x.j && (x.j.ok!==false || x.j.error==='chat_off')) whChatTick();
@@ -3500,6 +3526,40 @@ function whChatSend(text,action){
 }
 function whChatDone(){ WHCHAT.busy=false; var t=document.getElementById('whChatTyp'); if(t) t.remove(); }
 function whChatTick(){ var tks=document.querySelectorAll('#whChatBd .row.me .tk'); var lt=tks.length?tks[tks.length-1]:null; if(lt){ lt.textContent='✓✓'; lt.classList.add('dd'); } }
+/* v4.85 — contact-first (owner's rule). The saved contact is the visitor's OWN typed details,
+   kept on this device only and sent with every message; the server stores it on the
+   conversation and creates the customer record ONCE. Signed-in visitors (AUTHTOK) skip the
+   form entirely — the server already knows them better than a form would. */
+function whChatContact(){
+  try{ var c=JSON.parse(localStorage.getItem('cb_chat_ctc_'+(SHOP.slug||'shop'))||'null');
+    if(c&&c.name&&c.phone) return c; }catch(e){}
+  return null;
+}
+function whChatNeedCtc(){
+  if(SHOP.webChatContact===false) return false;
+  try{ if(typeof AUTHTOK!=='undefined'&&AUTHTOK) return false; }catch(e){}
+  return !whChatContact();
+}
+function whChatCtcSync(){
+  var f=document.getElementById('whChatCtc'), ft=document.querySelector('#whChat .ft');
+  if(!f||!ft) return;
+  var need=whChatNeedCtc();
+  f.style.display=need?'':'none';
+  ft.style.display=need?'none':'';
+  var sg=document.querySelector('#whChatBd .sugg'); if(sg) sg.style.display=need?'none':'';
+}
+function whChatCtcGo(){
+  var n=(document.getElementById('whCtcName')||{value:''}).value.trim();
+  var pRaw=(document.getElementById('whCtcPhone')||{value:''}).value;
+  var p=String(pRaw).replace(/\D+/g,'').replace(/^0+/,'');
+  var er=document.getElementById('whCtcErr');
+  if(n.length<2){ if(er)er.textContent='Please write your name.'; return; }
+  if(p.length<7||p.length>15){ if(er)er.textContent='That number looks short — use your full WhatsApp number.'; return; }
+  if(er)er.textContent='';
+  try{ localStorage.setItem('cb_chat_ctc_'+(SHOP.slug||'shop'),JSON.stringify({name:n.slice(0,60),phone:p})); }catch(e){}
+  whChatCtcSync();
+  var i=document.getElementById('whChatIn'); if(i){ try{ i.focus(); }catch(e){} }
+}
 /* v4.84 — dictate into the chat input (same Web Speech API the search mic uses; progressive
    enhancement — the button only renders when the browser supports it). The buyer still presses
    send: on an order channel, autosubmitting a misheard sentence is worse than one extra tap. */
