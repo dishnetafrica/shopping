@@ -1257,6 +1257,20 @@ button{ -webkit-tap-highlight-color:transparent }
 .whpage .row{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #f1f1f4;font-size:14px}
 .whpage .row b{flex:none;width:90px;color:#5a6572;font-weight:700}
 .whpage .row a{color:var(--green);font-weight:700;text-decoration:none}
+/* v4.83 M4 — autocomplete rows + wishlist counter + Saved page. Every selector below matches
+   only DOM that whOn() injection creates (.whac rows, #whWishBtn, .whsaved), so classic shops
+   cannot pick up one pixel of it. */
+.srow.whac .sthumb{background:transparent;color:#98a1ab}
+.srow.whac .st b{color:var(--green-d)}
+.whwish{position:relative;flex:none;border:0;background:none;cursor:pointer;padding:7px;color:var(--ink);display:inline-flex;align-items:center}
+.whwish svg{width:21px;height:21px}
+.whwish .wn{position:absolute;top:0;right:-1px;min-width:15px;height:15px;border-radius:8px;background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:15px;text-align:center;padding:0 3px}
+.whsaved .srow{padding:10px 2px;border-bottom:1px solid var(--line)}
+.whsaved .srow:last-child{border-bottom:0}
+.whsaved .srow .sthumb{width:52px;height:52px}
+.whsaved .wrm{flex:none;border:0;background:none;color:var(--muted);font-size:21px;line-height:1;cursor:pointer;padding:4px 6px}
+.skwh .skhero{height:clamp(340px,36vw,500px);border-radius:18px;margin:10px 12px}
+@media(min-width:1024px){.skwh .skhero{margin:14px 0}}
 
 /* ---- Smart search: "why it matched" chips on product cards ---- */
 .pcmatch{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 3px}
@@ -1382,7 +1396,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.82';
+var SHOP_BUILD='v4.83';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -1832,8 +1846,8 @@ function loadRSearch(){try{RSEARCH=JSON.parse(localStorage.getItem(RSRCH_KEY)||'
 function pushRSearch(v){ v=(v||'').trim(); if(!v)return; RSEARCH=RSEARCH.filter(function(x){return x.toLowerCase()!==v.toLowerCase();}); RSEARCH.unshift(v); RSEARCH=RSEARCH.slice(0,8); try{localStorage.setItem(RSRCH_KEY,JSON.stringify(RSEARCH));}catch(e){} }
 function searchOpen(){ var o=$('searchOverlay'); if(!o)return; closeSheet(); o.classList.add('show'); document.body.style.overflow='hidden'; var sq=$('sq'); if(sq)sq.value=Q||''; searchRender(Q||''); setTimeout(function(){ if(sq)sq.focus(); },60); }
 function searchClose(){ var o=$('searchOverlay'); if(o)o.classList.remove('show'); document.body.style.overflow=''; try{stopVoice();}catch(e){} cancelAutorun(); }
-function searchSubmit(v,src){ if(_voiceTimer){clearTimeout(_voiceTimer);_voiceTimer=null;} v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); if($('q'))$('q').value=v; Q=v; _catShown=24; if(v){ pushRSearch(v); sTrack(src==='voice'?'voice_submit':'search',{q:v}); } render(); window.scrollTo(0,0); }
-function searchPickCat(c){ searchClose(); if($('q'))$('q').value=''; Q=''; setCat(c); }
+function searchSubmit(v,src){ if(_voiceTimer){clearTimeout(_voiceTimer);_voiceTimer=null;} v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); WHPAGE=''; if($('q'))$('q').value=v; Q=v; _catShown=24; if(v){ pushRSearch(v); sTrack(src==='voice'?'voice_submit':'search',{q:v}); } render(); window.scrollTo(0,0); }   /* v4.83 — WHPAGE='' : searching from a wh page (About/Contact/Saved) must LEAVE that page — the router checks WHPAGE before Q, so a stale page swallowed every search. No-op for classic shops (WHPAGE is always ''). */
+function searchPickCat(c){ searchClose(); WHPAGE=''; if($('q'))$('q').value=''; Q=''; setCat(c); }   /* v4.83 — same escape for category picks */
 function searchOpenProduct(id,name){ var qv=($('sq')&&$('sq').value)||Q||''; sTrack('search_click',{q:qv.trim(),id:id||0,name:name}); searchClose(); if(id){ goDetail(id); } else { searchSubmit(name); } }
 function toast(msg,type){ try{ var t=$('cbToast'); if(!t){ t=document.createElement('div'); t.id='cbToast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); document.body.appendChild(t); } t.className='cbtoast'+(type?(' '+type):''); t.textContent=msg; void t.offsetWidth; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); }, 2400); }catch(e){} }
 /* ============================================================================
@@ -2052,6 +2066,7 @@ function searchRender(q){
   if(brands.length){ html+='<div class="sgroup">Brands</div>'+brands.slice(0,4).map(function(br){return '<div class="srow" onclick="searchSubmit('+jk(br)+')"><div class="sthumb">🏷️</div><div class="smeta"><div class="st">'+esc(br)+'</div><div class="ss">Brand</div></div></div>';}).join(''); }
   if(cats.length){ html+='<div class="sgroup">Categories</div>'+cats.slice(0,4).map(function(c){return '<div class="srow" onclick="searchPickCat('+jk(c)+')"><div class="sthumb">'+catIcon(c)+'</div><div class="smeta"><div class="st">'+esc(c)+'</div><div class="ss">Category</div></div></div>';}).join(''); }
   if(results.length){ html+='<div class="sgroup">Products</div>'+results.map(function(r){return _srow(r.p,r.reasons);}).join('')+_seeAllRow(q); }
+  if(html){ var ac=(typeof whAcRows==='function')?whAcRows(q,2):''; html=ac+html; }   // v4.83 — gated autocomplete on top; '' for classic shops
   b.innerHTML = html || searchZero(q);
 }
 
@@ -2191,12 +2206,21 @@ function searchDefault(){
 }
 function searchZero(q){
   var wa=SHOP.waNumber?('https://wa.me/'+SHOP.waNumber+'?text='+encodeURIComponent('Hi, do you have: '+q+'?')):'#';
-  return '<div class="szero">No matches for “'+esc(q)+'”.<br>We may still have it — just ask us.'
+  var ac=(typeof whAcRows==='function')?whAcRows(q,3):'';   // v4.83 — typo rescue before the dead end; '' for classic shops, so their zero state is byte-identical
+  return ac+'<div class="szero">No matches for “'+esc(q)+'”.<br>We may still have it — just ask us.'
     + '<br><a class="wa" href="'+wa+'" target="_blank" rel="noopener">Request “'+esc(q)+'” on WhatsApp</a></div>';
 }
 
 /* Skeleton grid — content-shaped placeholders so the screen looks populated in <100ms. */
 function skeletonGrid(n){ n=n||8; var s=''; for(var i=0;i<n;i++){ s+='<div class="sk shimmer"><div class="a"></div><div class="b w70"></div><div class="b w45 last"></div></div>'; } return '<div class="skgrid">'+s+'</div>'; }
+/* v4.83 — the wholesale home needs a wholesale-SHAPED skeleton: an 8-card grid placeholder is
+   the wrong silhouette for hero + rails, so the catalogue swap moved every pixel below it
+   (Lighthouse: the single biggest layout shift on the desktop home, CLS 0.89). A hero-shaped
+   block followed by a card row swaps into roughly its own footprint instead. Gated: classic
+   shops keep their grid skeleton byte-for-byte. */
+function whSkeleton(){
+  return '<div class="skwh"><div class="sk shimmer skhero"></div>'+skeletonGrid(4)+'</div>';
+}
 
 /* Fly-to-cart: a dot launches from the last-tapped control to the cart nav icon, badge bumps,
    light haptic. Skipped under reduced-motion. Purely visual — never touches cart/checkout logic. */
@@ -2574,11 +2598,16 @@ var WISH_KEY='cb_wish_'+(SHOP.slug||'shop'), WISH={};
 function loadWish(){try{(JSON.parse(localStorage.getItem(WISH_KEY)||'[]')||[]).forEach(function(id){WISH[Number(id)]=1;});}catch(e){}}
 function saveWish(){try{localStorage.setItem(WISH_KEY,JSON.stringify(Object.keys(WISH).map(Number)));}catch(e){}}
 function isWished(id){return id!=null && !!WISH[Number(id)];}
-function toggleWish(id,btn,ev){ if(ev)ev.stopPropagation(); id=Number(id); if(WISH[id]){delete WISH[id];} else {WISH[id]=1; try{if(navigator.vibrate)navigator.vibrate(6);}catch(e){}} saveWish(); if(btn){btn.classList.toggle('on',!!WISH[id]); btn.setAttribute('aria-pressed',WISH[id]?'true':'false');} }
+/* v4.83 — ALL-SHOPS BUGFIX (found by the t475 browser harness, verified pre-existing in the
+   pristine file): the ♡/compare buttons live INSIDE the card's real <a href="/p/…"> (v4.27 SEO
+   link). stopPropagation() stops the card's own click handler, but an ancestor anchor's DEFAULT
+   navigation is only stopped by preventDefault() — so tapping Save yanked the buyer to the
+   product page on every shop. Same class of deliberate ungated fix as v4.75.1 (320px input). */
+function toggleWish(id,btn,ev){ if(ev){ev.stopPropagation();if(ev.preventDefault)ev.preventDefault();} id=Number(id); if(WISH[id]){delete WISH[id];} else {WISH[id]=1; try{if(navigator.vibrate)navigator.vibrate(6);}catch(e){}} saveWish(); if(btn){btn.classList.toggle('on',!!WISH[id]); btn.setAttribute('aria-pressed',WISH[id]?'true':'false');} if(typeof whWishBadge==='function'){try{whWishBadge();}catch(e){}} }   /* v4.83 — guarded: classic builds without the badge stay exactly as before */
 
 /* ---------- Compare (local, up to 4) ---------- */
 var CMP={};
-function toggleCompare(id,btn,ev){ if(ev)ev.stopPropagation(); id=Number(id);
+function toggleCompare(id,btn,ev){ if(ev){ev.stopPropagation();if(ev.preventDefault)ev.preventDefault();} id=Number(id);   /* v4.83 — same anchor-default fix as toggleWish */
   if(CMP[id]){delete CMP[id];} else { if(Object.keys(CMP).length>=4){ try{toast('Compare up to 4 items');}catch(e){} return; } CMP[id]=1; }
   if(btn)btn.classList.toggle('on',!!CMP[id]); renderCmpBar(); }
 function clearCompare(){ CMP={}; renderCmpBar(); render(); }
@@ -3160,6 +3189,18 @@ function whChrome(){
       +'<button data-lic="1" class="lic hb" aria-label="Scan barcode" onclick="event.stopPropagation();barcodeSearch()">'+WH_SIC.cam+'</button>';
     top.insertBefore(hs, top.querySelector('.dnav'));
   }
+  // v4.83 — wishlist counter: heart + live count beside the account icon, opens the Saved page.
+  if(top && !document.getElementById('whWishBtn')){
+    var ua=top.querySelector('.uacct');
+    if(ua){
+      var wbn=document.createElement('button'); wbn.id='whWishBtn'; wbn.className='whwish';
+      wbn.setAttribute('aria-label','Saved items');
+      wbn.onclick=function(){ whPage('saved'); };
+      wbn.innerHTML=HEART_SVG+'<span class="wn" id="whWishN" style="display:none">0</span>';
+      top.insertBefore(wbn,ua);
+      try{ whWishBadge(); }catch(e){}
+    }
+  }
   // v4.76 — About Us lives in the footer now (owner's review: wholesale buyers don't start at
   // About Us). Injected only when the owner wrote one, before the FAQ link, once.
   if(C.about && !document.getElementById('whAboutF')){
@@ -3197,6 +3238,75 @@ function whPopChips(){
     return '<button class="pc" onclick="'+(custom?('whSearchFor('+jk(t)+')'):('setCat('+jk(t)+')'))+'">'+esc(t)+'</button>';
   }).join('');
 }
+/* WH-AC v4.83 — M4: typo-tolerant search autocomplete ──────────────────────────────────────────
+   The ENGINE has forgiven typos since the smart-search build (_fuzzyHit / _candidates): a
+   misspelled word still finds products. What was missing is the SURFACE — the overlay never
+   completed a half-typed word, never said "Did you mean…?", and a dead query fell straight to
+   the WhatsApp fallback without offering the near-miss. These suggestions are honest by
+   construction:
+     · candidates come ONLY from the catalogue's own token vocabulary (SITOKENS) — never invented;
+     · every suggestion is VERIFIED against the live engine before display — a query we offer is
+       a query that returns at least one product. This is also what keeps words that exist only
+       on hidden/POA products out of the suggestion list: they are in the index, but they verify
+       to zero results, so they are never shown;
+     · typo rescue never floods: at most the two closest candidates (edit distance first, then
+       how common the word is), and only when nothing completes by prefix;
+     · only the word being typed (the tail) is completed/rescued — earlier words are the buyer's
+       own and the engine's fuzzy matching already handles typos there.
+   Gated: whAcRows() returns '' unless whOn(), so classic shops render byte-identically. */
+function whAcVerify(q){ try{ return smartSearch(q,1).length>0; }catch(e){ return false; } }
+function whAcSuggest(q,max){
+  max=max||4;
+  if(!SIDX||!SITOKENS) return [];
+  var n=_normStr(q); if(!n) return [];
+  var words=n.split(/[^a-z0-9]+/).filter(Boolean); if(!words.length) return [];
+  var tail=words[words.length-1], head=words.slice(0,-1).join(' '); head=head?head+' ':'';
+  if(tail.length<2) return [];
+  var cand=[], k, st;
+  for(k=0;k<SITOKENS.length;k++){ st=SITOKENS[k];
+    if(st!==tail && st.indexOf(tail)===0) cand.push({t:st,d:0,f:SIDX[st].length,dym:false}); }
+  cand.sort(function(a,b){ return b.f-a.f; });
+  if(!cand.length && tail.length>=4){
+    var thr=tail.length>=7?2:1;
+    for(k=0;k<SITOKENS.length;k++){ st=SITOKENS[k];
+      if(st===tail||Math.abs(st.length-tail.length)>thr) continue;
+      var d=_lev(st,tail); if(d<=thr) cand.push({t:st,d:d,f:SIDX[st].length,dym:true});
+    }
+    cand.sort(function(a,b){ if(a.d!==b.d)return a.d-b.d; return b.f-a.f; });
+    cand=cand.slice(0,2);   // ambiguity never floods: two best guesses, ranked, or nothing
+  }
+  /* SITOKENS keys are unique and completions/rescue are mutually exclusive, so every candidate
+     yields a distinct full query — no dedupe needed. tried<8 is the cost fence: at most eight
+     verification searches per keystroke, no matter how big the vocabulary. */
+  var out=[], tried=0;
+  for(k=0;k<cand.length && out.length<max && tried<8;k++){
+    tried++;
+    var full=(head+cand[k].t).replace(/\s+/g,' ').trim();
+    if(whAcVerify(full)) out.push({q:full,dym:cand[k].dym});
+  }
+  return out;
+}
+function whAcRows(q,max){
+  if(typeof whOn!=='function'||!whOn()) return '';
+  var sug=whAcSuggest(q,max||4); if(!sug.length) return '';
+  var mg='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
+  return '<div class="sgroup">Suggestions</div>'+sug.map(function(s){
+    return '<div class="srow whac" onclick="searchSubmit('+jk(s.q)+')"><div class="sthumb">'+mg+'</div><div class="smeta"><div class="st">'
+      +(s.dym?'Did you mean “<b>'+esc(s.q)+'</b>”?':esc(s.q))+'</div></div></div>';
+  }).join('');
+}
+/* WH-AC-END */
+/* WH-WISH v4.83 — M4: the ♡ hearts existed on every card but counted nowhere and went nowhere.
+   A heart button with a live count now sits in the header (injected only when whOn(), so classic
+   shops keep their exact header), and opens a Saved-items page via the existing whPage router.
+   The badge element is the gate: it only exists when whChrome() injected it. */
+function whWishBadge(){
+  var el=document.getElementById('whWishN'); if(!el) return;   // element exists only when whChrome injected it (gated)
+  var n=Object.keys(WISH).length;
+  el.textContent=String(n);
+  el.style.display=n>0?'':'none';
+}
+/* WH-WISH-END */
 /* ── M-CHAT-2 (v4.79, ADR-018): the storefront face of the ONE brain ───────────────────────────
    Everything here is a CLIENT for POST /chat (M-CHAT-1) — no product logic, no prices, no rules,
    no keys. Injected only when whChatOn(); classic shops carry zero extra DOM and zero listeners.
@@ -3367,7 +3477,9 @@ function whChatAdd(name,btn,id){
 }
 /* the nav needs the catalogue (deals/brands existence), so it builds after load() */
 function whNav(){
-  if(!whOn() || document.getElementById('whNav')) return;
+  if(!whOn()) return;
+  var existing=document.getElementById('whNav');
+  if(existing){ whNavDeals(existing); return; }   /* v4.83 — row is built at boot (pre-catalogue); Deals joins when the fetch lands */
   var top=document.querySelector('.top'); if(!top) return;
   var C=(SHOP.home&&SHOP.home.chrome)||{};
   /* v4.76 — the owner's own nav review, applied: no Home (the logo IS home), Brands promoted
@@ -3388,6 +3500,19 @@ function whNav(){
   var anchor=document.getElementById('whTopbar')?top.nextSibling:top.nextSibling;
   top.parentNode.insertBefore(nav,anchor&&anchor.nextSibling?anchor:top.nextSibling);
 }
+/* v4.83 — the nav row now exists BEFORE the catalogue fetch (CLS fix), so the Deals link —
+   which depends on real promotions arriving WITH the catalogue — is inserted late, once,
+   in the owner's approved slot (before Contact). A link to an empty section stays forbidden. */
+function whNavDeals(nav){
+  if(!(BANNERS&&Array.isArray(BANNERS.promotions)&&BANNERS.promotions.length)) return;
+  if(nav.querySelector('[data-deals]')) return;
+  var links=nav.querySelectorAll('.lnk'); var last=links.length?links[links.length-1]:null;
+  var b=document.createElement('button'); b.className='lnk'; b.setAttribute('data-deals','1');
+  b.setAttribute('onclick',"whGo('whDeals')"); b.textContent='Deals';
+  if(last && last.textContent==='Contact'){ last.parentNode.insertBefore(b,last); }
+  else if(last){ last.parentNode.insertBefore(b,last.nextSibling); }
+  else { var inr=nav.querySelector('.in'); if(inr) inr.appendChild(b); }
+}
 /* v4.76.1 — owner's repro: Browse Categories → "Shop by Business" did nothing. The old guard
    only left CATEGORY/SEARCH state (CAT/Q); the category BROWSER (CATLIST), business drill-ins
    and the detail page all kept their view, so the target section never existed to scroll to.
@@ -3404,6 +3529,23 @@ function whGo(id){
 function whPage(kind){ WHPAGE=kind; CAT='all'; Q=''; BIZVIEW=''; COLLVIEW=null; CATLIST=false; if($('q'))$('q').value=''; closeSheet(); render(); window.scrollTo(0,0); }
 function whPageHtml(){
   var C=(SHOP.home&&SHOP.home.chrome)||{};
+  if(WHPAGE==='saved'){   /* WH-SAVED v4.83 */
+    var items=PRODUCTS.filter(function(p){ return p.id!=null && WISH[Number(p.id)]; });
+    var body;
+    if(!items.length){
+      body='<div class="szero">Nothing saved yet.<br>Tap the ♡ on any product to keep it here for your next order.</div>'
+        +'<div style="text-align:center;margin-top:8px"><button class="whbtn p" onclick="WHPAGE=\'\';goHome()">Browse products</button></div>';
+    } else {
+      body=items.map(function(p){ var oos=oosOf(p);
+        return '<div class="srow" onclick="goDetail('+(p.id||0)+')"><div class="sthumb">'+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div>'
+          +'<div class="smeta"><div class="st">'+esc(p.name)+'</div><div class="ss">'+(p.poa?'Price on request':ugx(p.price))+(oos?' · Out of stock':'')+'</div></div>'
+          +((oos||p.poa)?'':'<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>')
+          +'<button class="wrm" aria-label="Remove from saved" onclick="event.stopPropagation();toggleWish('+p.id+',null,event);render()">×</button></div>';
+      }).join('');
+    }
+    return wsBar()+'<div class="backbar"><button onclick="WHPAGE=\'\';goHome()">‹ Home</button><b>Saved items'+(items.length?' ('+items.length+')':'')+'</b></div>'
+      +'<div class="whpage whsaved">'+body+'</div>';
+  }   /* WH-SAVED-END */
   if(WHPAGE==='about'){
     return wsBar()+'<div class="backbar"><button onclick="WHPAGE=\'\';goHome()">‹ Home</button><b>About us</b></div>'
       +'<div class="whpage"><h2>About '+esc(SHOP.name||'us')+'</h2><p>'+esc(C.about).replace(/\n+/g,'</p><p>')+'</p></div>';
@@ -3588,13 +3730,16 @@ function whHome(){
 
 function render(){
   var c=$('content');
-  /* chrome + nav inject at first render, not at boot: function declarations hoist but the icon
-     set (var WH_IC) only has a VALUE once its line runs, and boot is before that line. */
+  /* v4.83 — chrome/nav now ALSO inject at boot (the boot line runs after every var has its
+     value, so the old WH_IC hoisting hazard is gone): on desktop the topbar + nav row used to
+     arrive only after the catalogue fetch and shove the whole page down — Lighthouse measured
+     CLS 0.89 on the wholesale home. Injected before first paint they cost zero shift. This
+     try-chain stays as the idempotent safety net and the late-data pass (Deals link, chips). */
   try{whChrome();whNav();whSearchIcons();whPopChips();whChatBtns();}catch(e){}
   SEARCH_ACTIVE=false;
   dLayout();
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
-  if(!PRODUCTS.length){c.innerHTML=skeletonGrid(8);return;}
+  if(!PRODUCTS.length){c.innerHTML=(whOn()?whSkeleton():skeletonGrid(8));return;}   /* v4.83 — same shape rule pre-catalogue */
   if(whOn()&&WHPAGE){c.innerHTML=whPageHtml();return;}
   var q=Q.trim().toLowerCase();
   if(q){
@@ -4187,7 +4332,7 @@ window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return
   enhance();
 })();
 
-loadCart(); loadCust(); loadWish(); loadRSearch(); bar(); restoreDelv(); if($('content'))$('content').innerHTML=skeletonGrid(8); load();
+loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopChips();whSearchIcons();}catch(e){} bar(); restoreDelv(); if($('content'))$('content').innerHTML=(whOn()?whSkeleton():skeletonGrid(8)); load();   /* v4.83 — wholesale chrome + a wholesale-shaped skeleton BEFORE first paint (the desktop CLS fix). Gated: classic shops boot exactly as before. */
 </script>
 <div id="detail" class="detail" aria-hidden="true"></div>
 </body>
