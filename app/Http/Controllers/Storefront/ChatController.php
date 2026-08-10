@@ -167,7 +167,31 @@ class ChatController extends Controller
                     $cur = strtoupper(trim((string) $tenant->setting('currency', 'UGX')));
                     $rows = \App\Models\Product::withoutGlobalScopes()
                         ->where('tenant_id', $tenant->id)->whereIn('name', $names)->get()->keyBy('name');
+                    // v4.82 — second pass for the misses: candidates fetched by the name's
+                    // longest token, then accepted ONLY on normalized equality (case/suffix
+                    // drift). Ambiguity or spelling drift → no card, never a guessed product.
                     foreach ($names as $n) {
+                        if (! $rows->has($n)) {
+                            $tokens = preg_split('/\s+/u', $n) ?: [];
+                            usort($tokens, fn ($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+                            $tok = (string) ($tokens[0] ?? '');
+                            if (mb_strlen($tok) >= 4) {
+                                $cands = \App\Models\Product::withoutGlobalScopes()
+                                    ->where('tenant_id', $tenant->id)
+                                    ->where('name', 'like', '%' . $tok . '%')->limit(12)->get();
+                                $want = \App\Services\Bot\ChatCards::normalize($n);
+                                $hit = null;
+                                foreach ($cands as $c) {
+                                    if (\App\Services\Bot\ChatCards::normalize((string) $c->name) === $want) {
+                                        if ($hit !== null) { $hit = null; break; }   // two matches = ambiguous = no card
+                                        $hit = $c;
+                                    }
+                                }
+                                if ($hit !== null) {
+                                    $rows->put($n, $hit);
+                                }
+                            }
+                        }
                         if ($rows->has($n)) {
                             $p = $rows[$n];
                             $cards[] = \App\Services\Bot\ChatCards::card([

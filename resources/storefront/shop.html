@@ -1382,7 +1382,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.81.1';
+var SHOP_BUILD='v4.82';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3289,12 +3289,19 @@ function whChatPaint(m,save){
     +'<div class="ca"><button class="add" onclick="whChatAdd('+jk(m.p.name||'')+',this,'+(+m.p.id||0)+')">ADD</button>'
     +'<button class="vc" onclick="whChatHide();openCart()">View cart</button></div>'
     +'</div></div></div>';
-  else h='<div class="row bot"><div class="bub">'+esc(m.text||'').replace(/\n/g,'<br>')+'</div></div>';
+  else h='<div class="row bot"><div class="bub">'+whChatFmt(m.text||'')+'</div></div>';
   bd.insertAdjacentHTML('beforeend',h);
   if(save!==false){
     WHCHAT.log.push(m); if(WHCHAT.log.length>40) WHCHAT.log=WHCHAT.log.slice(-40);
     try{ localStorage.setItem('cb_chat_log_'+(SHOP.slug||'shop'),JSON.stringify(WHCHAT.log)); }catch(e){}
   }
+}
+/* v4.82 — the model's *stars* (and any stray markdown **stars**) render as bold, never as raw
+   asterisks. Escaping happens FIRST; only <b> is introduced after, so nothing else can inject. */
+function whChatFmt(t){
+  return esc(t).replace(/\n/g,'<br>')
+    .replace(/\*\*([^*<]{1,80}?)\*\*/g,'<b>$1</b>')
+    .replace(/\*([^*<]{1,80}?)\*/g,'<b>$1</b>');
 }
 function whChatScroll(){ var bd=document.getElementById('whChatBd'); if(bd) bd.scrollTop=bd.scrollHeight; }
 function whChatSubmit(){ var i=document.getElementById('whChatIn'); var v=(i&&i.value||'').trim(); if(!v) return; i.value=''; whChatSend(v); }

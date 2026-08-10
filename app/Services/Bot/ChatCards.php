@@ -44,6 +44,22 @@ final class ChatCards
     }
 
     /**
+     * v4.82 — tolerant-but-unambiguous name matching. The model is told to use exact names,
+     * but case and the trailing "(Carton of 6pc)" style suffix drift in practice. Two names
+     * are the same product when they normalise equal: casefolded, trailing parenthetical
+     * groups stripped, whitespace collapsed. Spelling differences (Aluminum/Aluminium) are
+     * NOT bridged — a guess about which product was meant is worse than no card.
+     */
+    public static function normalize(string $name): string
+    {
+        $n = mb_strtolower(trim($name));
+        $n = (string) preg_replace('/\s*\([^)]*\)\s*$/u', '', $n);   // trailing (…) group
+        $n = (string) preg_replace('/\s+/u', ' ', $n);
+
+        return trim($n);
+    }
+
+    /**
      * One card from REAL product attributes. Nulls mean "the product doesn't carry this" —
      * the UI says "price on request" instead of a made-up figure.
      *
