@@ -604,6 +604,12 @@ class PosController extends Controller
                 'items_text'     => collect($clean)->map(fn ($l) => rtrim(rtrim(number_format($l['qty'], 2), '0'), '.') . 'x ' . $l['name'])->implode(', '),
                 'items_json'     => $clean,
                 'amount'         => $amount,
+                // v4.89 — the till stays ONE step on purpose: the customer is standing here with the
+                // goods, so recording and receiving are the same moment. Stated explicitly rather
+                // than leaning on the column default, so the intent survives a schema change.
+                'status'         => \App\Services\Sales\ReturnPolicy::COMPLETED,
+                'received_at'    => now(),
+                'received_by'    => (string) ($u->name ?? ''),
                 // 'credit' feeds the EXISTING store-credit-per-phone map; cash/momo are pure refunds.
                 'resolution'     => $data['refund_method'] === 'store_credit' ? 'credit' : 'refund',
                 'refund_method'  => $data['refund_method'],

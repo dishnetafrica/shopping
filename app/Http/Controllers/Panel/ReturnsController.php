@@ -19,10 +19,22 @@ use Illuminate\Support\Facades\Storage;
  * since v4.0. This controller is the wholesale door to that flow: the till serves a customer
  * standing at the counter, this serves an invoice with a truck coming back.
  *
- * Order of operations is deliberate and mirrors the till: validate against server-side caps →
- * record the return → issue the credit note → put stock back → move the money. Each later step
- * is best-effort and logged, because a return that is recorded but whose PDF hiccuped is
- * recoverable, while a silent half-return is not.
+ * v4.89 — TWO STEPS, because wholesale goods travel back on a later truck (owner, 10 Aug):
+ *
+ *   process()  record the return. Nothing moves — no credit note, no stock, no money — but the
+ *              cartons are held against the cap from this moment, so the same ones cannot be
+ *              promised twice.
+ *   confirm()  the goods arrived. Quantities may be SHORT of what was promised (that is the truth
+ *              of the delivery and is accepted); more is refused. NOW the credit note is issued,
+ *              stock goes back and the money settles.
+ *   cancel()   the goods never came. The record stays; the cap is freed.
+ *
+ * The POS till stays one-step by design: a customer at the counter holding the goods is the one
+ * case where recording and receiving are the same moment.
+ *
+ * Within confirm(), the order is deliberate: validate → mark received → credit note → stock →
+ * money. Each later step is best-effort and logged (and a missing credit note raises the owner),
+ * because a recorded return whose PDF hiccuped is recoverable while a silent half-return is not.
  */
 class ReturnsController extends Controller
 {
@@ -99,8 +111,31 @@ class ReturnsController extends Controller
             ];
         }
 
+        // v4.89 — returns already recorded and waiting for the goods. Staff need to see these:
+        // they are holding cap, and one of them is probably the truck that just pulled in.
+        $pending = [];
+        foreach (ReturnRecord::withoutGlobalScopes()->where('tenant_id', $t->id)
+            ->where('order_id', $order->id)->where('status', ReturnPolicy::PENDING)
+            ->orderByDesc('id')->get() as $p) {
+            $pending[] = [
+                'id' => $p->id,
+                'recorded' => optional($p->created_at)->format('d M Y'),
+                'by' => (string) ($p->operator ?? ''),
+                'method' => (string) ($p->refund_method ?? ''),
+                'method_label' => ReturnPolicy::methodLabel((string) ($p->refund_method ?? '')),
+                'amount' => round((float) $p->amount, 2),
+                'lines' => array_values(array_map(fn ($l) => [
+                    'product_id' => (int) ($l['product_id'] ?? 0),
+                    'name' => (string) ($l['name'] ?? ''),
+                    'price' => round((float) ($l['price'] ?? 0), 2),
+                    'qty' => (float) ($l['qty'] ?? 0),
+                ], (array) ($p->requested_json ?? []))),
+            ];
+        }
+
         return response()->json([
             'ok'       => true,
+            'pending'  => $pending,
             'order'    => ['id' => $order->id, 'no' => (string) $order->order_no, 'date' => optional($order->created_at)->format('d M Y')],
             'invoice'  => $invoice ? ['id' => $invoice->id, 'no' => (string) $invoice->invoice_no, 'balance' => round((float) $invoice->balance, 2)] : null,
             'customer' => ['name' => (string) ($order->customer_name ?? ''), 'phone' => (string) ($order->customer_phone ?? '')],
@@ -196,6 +231,9 @@ class ReturnsController extends Controller
             return response()->json(['ok' => false, 'error' => 'Credit on account needs the customer phone number — that is how the credit finds them next time.'], 422);
         }
 
+        // v4.89 — STEP ONE: record only. No credit note, no stock, no money until the goods are
+        // physically confirmed (owner's call, 10 Aug: "never restock cartons you haven't seen").
+        // The row still holds cap from this moment, so the same cartons cannot be promised twice.
         try {
             $ret = ReturnRecord::create([
                 'tenant_id'      => $t->id,
@@ -204,8 +242,10 @@ class ReturnsController extends Controller
                 'customer_phone' => $phone,
                 'customer_name'  => (string) ($o->customer_name ?? ''),
                 'items_text'     => collect($clean)->map(fn ($l) => rtrim(rtrim(number_format($l['qty'], 2), '0'), '.') . 'x ' . $l['name'])->implode(', '),
-                'items_json'     => $clean,
-                'amount'         => $amount,
+                'items_json'     => [],                 // nothing has arrived yet
+                'requested_json' => $clean,             // what was promised
+                'status'         => ReturnPolicy::PENDING,
+                'amount'         => $amount,            // expected value; re-derived on arrival
                 // 'credit' keeps feeding the EXISTING store-credit-per-phone map the till uses.
                 'resolution'     => $method === 'credit' ? 'credit' : 'refund',
                 'refund_method'  => $method,
@@ -219,72 +259,127 @@ class ReturnsController extends Controller
             return response()->json(['ok' => false, 'error' => 'Could not save the return.'], 500);
         }
 
-        // The accounting reverse — the document the customer keeps and the books trust.
+        return response()->json([
+            'ok'            => true,
+            'stage'         => 'recorded',
+            'return_id'     => $ret->id,
+            'amount'        => $amount,
+            'currency'      => \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t),
+            'refund_method' => $method,
+            'method_label'  => ReturnPolicy::methodLabel($method),
+            'order_no'      => (string) $o->order_no,
+            'invoice_no'    => $inv?->invoice_no,
+            'customer'      => (string) ($o->customer_name ?? ''),
+            'phone'         => $phone,
+        ]);
+    }
+
+    /**
+     * STEP TWO — the goods arrived. Quantities may be SHORT of what was promised (that is normal
+     * and is the truth of the delivery); more than promised is refused, because those extra units
+     * never passed the sale caps. This is where the credit note, the stock and the money move.
+     */
+    public function confirm(Request $request)
+    {
+        $u = $request->user();
+        $t = $u?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+
+        $data = $request->validate([
+            'return_id'          => 'required|integer',
+            'lines'              => 'required|array|min:1',
+            'lines.*.product_id' => 'nullable|integer',
+            'lines.*.name'       => 'required|string|max:200',
+            'lines.*.price'      => 'required|numeric|min:0',
+            'lines.*.qty'        => 'required|numeric|min:0',
+            'manager_pin'        => 'nullable|string|max:20',
+        ]);
+
+        $ret = ReturnRecord::withoutGlobalScopes()->where('tenant_id', $t->id)->find((int) $data['return_id']);
+        if (! $ret) {
+            return response()->json(['ok' => false, 'error' => 'Return not found.'], 404);
+        }
+        if (! ReturnPolicy::canConfirm((string) $ret->status)) {
+            return response()->json(['ok' => false, 'error' => 'This return is already ' . (string) $ret->status . '.'], 422);
+        }
+
+        $pin = trim((string) $t->setting('pos_manager_pin', ''));
+        if ($pin !== '' && ! hash_equals($pin, trim((string) ($data['manager_pin'] ?? '')))) {
+            return response()->json(['ok' => false, 'need_pin' => true, 'error' => 'Returns need the manager PIN.'], 422);
+        }
+
+        $o = Order::withoutGlobalScopes()->where('tenant_id', $t->id)->find((int) $ret->order_id);
+        if (! $o) {
+            return response()->json(['ok' => false, 'error' => 'The sale behind this return no longer exists.'], 404);
+        }
+        $method = (string) ($ret->refund_method ?: 'credit');
+
+        $v = ReturnPolicy::checkArrival($data['lines'], (array) ($ret->requested_json ?? []));
+        if (! $v['ok']) {
+            return response()->json(['ok' => false, 'error' => $v['error']], 422);
+        }
+        $clean = $v['clean'];
+        $amount = $v['amount'];
+
+        $inv = Invoice::withoutGlobalScopes()->where('tenant_id', $t->id)
+            ->where('order_id', $o->id)->orderByDesc('id')->first();
+        if ($inv && strtolower((string) $inv->status) === 'void') {
+            $inv = null;                        // a voided invoice cannot absorb a credit
+        }
+
+        $ret->items_json = $clean;
+        $ret->amount = $amount;
+        $ret->items_text = collect($clean)->map(fn ($l) => rtrim(rtrim(number_format($l['qty'], 2), '0'), '.') . 'x ' . $l['name'])->implode(', ');
+        $ret->status = ReturnPolicy::COMPLETED;
+        $ret->received_at = now();
+        $ret->received_by = (string) ($u->name ?? '');
+        $ret->save();
+
+        $phone = (string) ($ret->customer_phone ?? '');
         $cnNo = null;
         $cn = null;
-        try {
-            $cn = app(\App\Services\Invoicing\CreditNoteService::class)->issue($t, [
-                'customer'    => (string) ($o->customer_name ?? ''),
-                'phone'       => $phone,
-                'cur'         => \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t),
-                'total'       => $amount,
-                'reason_code' => 'return',
-                'notes'       => 'Return on ' . $o->order_no . ($inv ? ' / ' . $inv->invoice_no : '')
-                    . ' — ' . ReturnPolicy::methodLabel($method)
-                    . (trim((string) ($data['reason'] ?? '')) !== '' ? ' — ' . trim((string) $data['reason']) : ''),
-                'invoice_id'  => $inv?->id,
-                'invoice_no'  => $inv?->invoice_no,
-                'order_id'    => $o->id,
-                'return_id'   => $ret->id,
-                'lines'       => array_map(fn ($l) => [
-                    'name' => $l['name'], 'qty' => $l['qty'], 'unit' => $l['price'],
-                    'amount' => round($l['price'] * $l['qty'], 2),
-                ], $clean),
-            ], 'panel');
-            // v4.88 — the allocation decision, stored on the note itself: applied to this invoice,
-            // or held. InvoiceService reads exactly this flag when it recomputes the balance.
-            $cn->applied = ReturnPolicy::appliesToInvoice($method) && $inv !== null;
-            $cn->refund_method = $method;
-            $cn->save();
-            $cnNo = (string) $cn->credit_note_no;
-            $ret->credit_note_no = $cnNo;
-            $ret->save();
-        } catch (\Throwable $e) {
-            \Log::warning('panel-return credit note failed: ' . $e->getMessage());
-            // A return without its document needs a human, not a shrug.
+        // A REPLACEMENT credits nothing: the goods come back, a good one goes out, no money moves.
+        if (ReturnPolicy::issuesCredit($method)) {
             try {
-                \App\Jobs\NotifyOwner::dispatch($t->id,
-                    '⚠️ A return was recorded on ' . $o->order_no . ' but its credit note failed to issue — please check return #' . $ret->id . '.');
-            } catch (\Throwable $e2) { /* alerting is best-effort */ }
-        }
-
-        // Stock back on the shelf — the SAME ledger the sale used, gated the same way.
-        $restocked = 0;
-        try {
-            if (\App\Services\Inventory\OrderStockIssuer::active($t)) {
-                $sl = \App\Services\Inventory\StockLedger::forTenant($t);
-                foreach ($clean as $l) {
-                    if ($l['product_id'] > 0) {
-                        $sl->receive([
-                            'product_id' => $l['product_id'], 'sku' => null,
-                            'location'   => \App\Services\Inventory\StockLedger::home($t),
-                            'qty'        => $l['qty'],
-                            'ref_type'   => 'return', 'ref_id' => $ret->id,
-                            'note'       => 'Return ' . ($cnNo ?: ('#' . $ret->id)) . ' on ' . $o->order_no . ' — ' . $l['name'],
-                            'created_by' => (string) ($u->name ?? 'panel'),
-                        ]);
-                        $restocked++;
-                    }
-                }
+                $cn = app(\App\Services\Invoicing\CreditNoteService::class)->issue($t, [
+                    'customer'    => (string) ($o->customer_name ?? ''),
+                    'phone'       => $phone,
+                    'cur'         => \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t),
+                    'total'       => $amount,
+                    'reason_code' => 'return',
+                    'notes'       => 'Return received on ' . $o->order_no . ($inv ? ' / ' . $inv->invoice_no : '')
+                        . ' — ' . ReturnPolicy::methodLabel($method)
+                        . (trim((string) ($ret->reason ?? '')) !== '' ? ' — ' . trim((string) $ret->reason) : ''),
+                    'invoice_id'  => $inv?->id,
+                    'invoice_no'  => $inv?->invoice_no,
+                    'order_id'    => $o->id,
+                    'return_id'   => $ret->id,
+                    'lines'       => array_map(fn ($l) => [
+                        'name' => $l['name'], 'qty' => $l['qty'], 'unit' => $l['price'],
+                        'amount' => round($l['price'] * $l['qty'], 2),
+                    ], $clean),
+                ], 'panel');
+                $cn->applied = ReturnPolicy::appliesToInvoice($method) && $inv !== null;
+                $cn->refund_method = $method;
+                $cn->save();
+                $cnNo = (string) $cn->credit_note_no;
+                $ret->credit_note_no = $cnNo;
+                $ret->save();
+            } catch (\Throwable $e) {
+                \Log::warning('panel-return credit note failed: ' . $e->getMessage());
+                try {
+                    \App\Jobs\NotifyOwner::dispatch($t->id,
+                        '⚠️ A return was received on ' . $o->order_no . ' but its credit note failed to issue — please check return #' . $ret->id . '.');
+                } catch (\Throwable $e2) { /* alerting is best-effort */ }
             }
-        } catch (\Throwable $e) {
-            \Log::warning('panel-return restock failed: ' . $e->getMessage());
         }
 
-        // The money. Three shapes, one per owner-approved method.
+        $restocked = $this->restock($t, $o, $ret, $clean, $cnNo, (string) ($u->name ?? 'panel'));
+
         $newBalance = null;
         if (ReturnPolicy::appliesToInvoice($method) && $inv) {
-            // Recompute from source rather than subtracting here — one formula owns the balance.
             try {
                 app(\App\Services\Invoicing\InvoiceService::class)->syncPaidFromPayments($inv->fresh());
                 $newBalance = round((float) $inv->fresh()->balance, 2);
@@ -300,14 +395,24 @@ class ReturnsController extends Controller
                     'method' => $method, 'received_by' => (string) ($u->name ?? ''),
                     'note' => 'Return ' . ($cnNo ?: ('#' . $ret->id)) . ' on ' . $o->order_no,
                 ]);
-            } catch (\Throwable $e) { /* cash-book mirror only; the credit note is authoritative */ }
+            } catch (\Throwable $e) { /* cash-book mirror only */ }
+        }
+        // A replacement leaves someone owing goods. Say so out loud rather than trusting memory.
+        if (ReturnPolicy::owesReplacement($method)) {
+            try {
+                \App\Jobs\NotifyOwner::dispatch($t->id,
+                    '🔄 Replacement owed to ' . ($o->customer_name ?: 'a customer') . ' on ' . $o->order_no
+                    . ' — ' . $ret->items_text . ' came back and must be sent again.');
+            } catch (\Throwable $e) { /* alerting is best-effort */ }
         }
 
         return response()->json([
             'ok'              => true,
+            'stage'           => 'received',
             'return_id'       => $ret->id,
             'credit_note_no'  => $cnNo,
             'credit_note_pdf' => ($cn && $cn->pdf_path) ? Storage::disk('public')->url($cn->pdf_path) : null,
+            'credits'         => ReturnPolicy::issuesCredit($method),
             'amount'          => $amount,
             'currency'        => \App\Services\Money\SalesBaseCurrency::txnCurrency($o, $t),
             'refund_method'   => $method,
@@ -320,4 +425,55 @@ class ReturnsController extends Controller
             'phone'           => $phone,
         ]);
     }
+
+    /** The goods never came. Frees the cap again; the record stays for the history. */
+    public function cancel(Request $request)
+    {
+        $u = $request->user();
+        $t = $u?->tenant;
+        if (! $t) {
+            return response()->json(['ok' => false], 401);
+        }
+        $ret = ReturnRecord::withoutGlobalScopes()->where('tenant_id', $t->id)->find((int) $request->input('return_id'));
+        if (! $ret) {
+            return response()->json(['ok' => false, 'error' => 'Return not found.'], 404);
+        }
+        if (! ReturnPolicy::canConfirm((string) $ret->status)) {
+            return response()->json(['ok' => false, 'error' => 'Only a return still waiting for goods can be cancelled.'], 422);
+        }
+        $ret->status = ReturnPolicy::CANCELLED;
+        $ret->reason = trim((string) ($ret->reason . ' | cancelled by ' . ($u->name ?? '')));
+        $ret->save();
+
+        return response()->json(['ok' => true, 'stage' => 'cancelled', 'return_id' => $ret->id]);
+    }
+
+    /** Stock back on the shelf — the SAME ledger the sale used, gated the same way. */
+    private function restock($t, Order $o, ReturnRecord $ret, array $clean, ?string $cnNo, string $by): int
+    {
+        $restocked = 0;
+        try {
+            if (\App\Services\Inventory\OrderStockIssuer::active($t)) {
+                $sl = \App\Services\Inventory\StockLedger::forTenant($t);
+                foreach ($clean as $l) {
+                    if ($l['product_id'] > 0) {
+                        $sl->receive([
+                            'product_id' => $l['product_id'], 'sku' => null,
+                            'location'   => \App\Services\Inventory\StockLedger::home($t),
+                            'qty'        => $l['qty'],
+                            'ref_type'   => 'return', 'ref_id' => $ret->id,
+                            'note'       => 'Return ' . ($cnNo ?: ('#' . $ret->id)) . ' on ' . $o->order_no . ' — ' . $l['name'],
+                            'created_by' => $by,
+                        ]);
+                        $restocked++;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('panel-return restock failed: ' . $e->getMessage());
+        }
+
+        return $restocked;
+    }
+
 }

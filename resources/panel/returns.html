@@ -109,7 +109,29 @@ function paint(){
     +(D.invoice?mBtn('invoice','Reduce this invoice','Comes off the '+money(D.invoice.balance)+' due'):'')
     +mBtn('credit','Credit on account','Held for their next order')
     +mBtn('cash','Cash back','Money leaves the drawer')
-    +mBtn('momo','Mobile money back','Sent back by mobile money');
+    +mBtn('momo','Mobile money back','Sent back by mobile money')
+    +mBtn('replace','Send a replacement','No money moves — goods go back out');
+
+  var pend=(D.pending||[]).map(function(p){
+    var rows=p.lines.map(function(l,j){
+      return '<tr><td><div class="nm">'+esc(l.name)+'</div><div class="sub">'+num(l.qty)+' promised · '+money(l.price)+' each</div></td>'
+        +'<td class="r"><div class="stp"><button onclick="pbump('+p.id+','+j+',-1)">−</button>'
+        +'<input id="p'+p.id+'_'+j+'" value="'+num(l.qty)+'" inputmode="decimal" oninput="precalc('+p.id+')">'
+        +'<button onclick="pbump('+p.id+','+j+',1)">+</button></div>'
+        +'<div class="sub" style="margin-top:4px">max '+num(l.qty)+'</div></td>'
+        +'<td class="r" id="pa'+p.id+'_'+j+'">'+money(l.price*l.qty)+'</td></tr>';
+    }).join('');
+    return '<div class="card"><h2>Waiting for goods · recorded '+esc(p.recorded)+'</h2>'
+      +'<div class="sub" style="margin-bottom:10px">'+esc(p.method_label)+(p.by?(' · recorded by '+esc(p.by)):'')+'</div>'
+      +'<table><thead><tr><th>Item</th><th class="r">Arrived qty</th><th class="r">Value</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<div class="hint">Nothing has moved yet. Confirm only what actually came off the truck — short is fine and is recorded as the truth. Stock, the credit note and the money move when you confirm.</div>'
+      +'<div id="ppin'+p.id+'" style="margin-top:12px;display:none"><label class="lbl">Manager PIN</label><input type="text" id="ppinv'+p.id+'" inputmode="numeric" placeholder="Required for returns"></div>'
+      +'<div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">'
+        +'<button class="go" onclick="confirmArrival('+p.id+')">Goods arrived · confirm</button>'
+        +'<button class="back" onclick="cancelPending('+p.id+')">Goods never came · cancel</button>'
+        +'<span style="flex:1"></span><b id="ptot'+p.id+'">'+money(p.amount)+'</b>'
+      +'</div></div>';
+  }).join('');
 
   $('app').innerHTML=
     '<div class="card"><h2>The sale</h2><div class="meta">'
@@ -118,7 +140,8 @@ function paint(){
       +'<div><b>Customer</b>'+esc(D.customer.name||'—')+'</div>'
       +'<div><b>Invoice</b>'+invLine+'</div>'
     +'</div></div>'
-    +'<div class="card"><h2>What is coming back</h2>'
+    +pend
+    +'<div class="card"><h2>Record a new return</h2>'
       +(anyReturnable?('<table><thead><tr><th>Item</th><th class="r">Price paid</th><th class="r">Return qty</th><th class="r">Amount</th></tr></thead><tbody>'+rows+'</tbody></table>')
                     :'<div class="none">Every line on this sale has already been returned.</div>')
       +'<div class="hint">Quantities are capped at what was sold minus what came back before. The invoice itself is never changed — a numbered credit note is issued for these lines.</div>'
@@ -174,6 +197,69 @@ function recalc(){
   var t=$('tot'); if(t) t.textContent=money(total);
   var go=$('go'); if(go) go.disabled=!(total>0 && METHOD!=='');
 }
+/* ── v4.89: the pending returns waiting for their truck ─────────────────────────────────────── */
+function pfind(id){ for(var i=0;i<(D.pending||[]).length;i++){ if(D.pending[i].id===id) return D.pending[i]; } return null; }
+function pbump(id,j,d){
+  var p=pfind(id); if(!p) return;
+  var el=$('p'+id+'_'+j); if(!el) return;
+  var v=(parseFloat(el.value)||0)+d, max=p.lines[j].qty;
+  if(v<0)v=0; if(v>max)v=max;
+  el.value=String(Math.round(v*1000)/1000);
+  precalc(id);
+}
+function precalc(id){
+  var p=pfind(id); if(!p) return 0;
+  var total=0;
+  p.lines.forEach(function(l,j){
+    var el=$('p'+id+'_'+j); if(!el) return;
+    var v=parseFloat(el.value)||0;
+    /* Clamp as they type: you cannot receive more than was recorded as coming back. */
+    if(v>l.qty){ v=l.qty; el.value=String(Math.round(v*1000)/1000); }
+    if(v<0){ v=0; el.value='0'; }
+    var amt=v*l.price; total+=amt;
+    var c=$('pa'+id+'_'+j); if(c) c.textContent=money(amt);
+  });
+  var t=$('ptot'+id); if(t) t.textContent=money(total);
+  return total;
+}
+function plines(id){
+  var p=pfind(id), out=[];
+  if(!p) return out;
+  p.lines.forEach(function(l,j){
+    var el=$('p'+id+'_'+j); if(!el) return;
+    var v=parseFloat(el.value)||0;
+    if(v>l.qty) v=l.qty;
+    if(v>0) out.push({product_id:l.product_id,name:l.name,price:l.price,qty:v});
+  });
+  return out;
+}
+function confirmArrival(id){
+  clear();
+  var L=plines(id);
+  if(!L.length){ say('Nothing arrived? Use “Goods never came · cancel” instead — confirming zero would credit nothing and close the return.'); return; }
+  var body={return_id:id, lines:L};
+  var pin=($('ppinv'+id)&&$('ppinv'+id).value||'').trim(); if(pin) body.manager_pin=pin;
+  fetch('/papi/return-confirm',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(j&&j.need_pin){ $('ppin'+id).style.display='block'; say(j.error||'Returns need the manager PIN.','warn'); return; }
+      if(!j||!j.ok){ say((j&&j.error)||'Could not confirm the return.'); return; }
+      done(j);
+    })
+    .catch(function(){ say('Network error — nothing was changed. Please try again.'); });
+}
+function cancelPending(id){
+  clear();
+  if(!window.confirm('Cancel this return? The goods will be treated as never coming back, and those items become returnable again.')) return;
+  fetch('/papi/return-cancel',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({return_id:id})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(!j||!j.ok){ say((j&&j.error)||'Could not cancel.'); return; }
+      location.reload();
+    })
+    .catch(function(){ say('Network error — nothing was changed.'); });
+}
+
 function submit(){
   clear();
   var L=lines();
@@ -195,10 +281,22 @@ function submit(){
 }
 function done(j){
   DONE=true; clear();
-  $('app').innerHTML='<div class="card ok"><div class="tick">✓</div>'
-    +'<h2>Return recorded</h2>'
+  var recorded=(j.stage==='recorded');
+  var cnBlock='';
+  if(recorded){
+    cnBlock='<p>Nothing has moved yet — no credit note, no stock, no money. '
+      +'Open this invoice again when the goods arrive and press <b>Goods arrived · confirm</b>.</p>';
+  } else if(j.credits===false){
+    cnBlock='<p>No credit note — a replacement is owed, and the office has been told.</p>';
+  } else if(j.credit_note_no){
+    cnBlock='<div class="cn">Credit note '+esc(j.credit_note_no)+'</div>';
+  } else {
+    cnBlock='<div class="cn" style="color:#B54708">Credit note pending — the office has been alerted</div>';
+  }
+  $('app').innerHTML='<div class="card ok"><div class="tick">'+(recorded?'🕑':'✓')+'</div>'
+    +'<h2>'+(recorded?'Return recorded — waiting for the goods':'Return received')+'</h2>'
     +'<p>'+esc(j.method_label||'')+' · '+money(j.amount)+'</p>'
-    +(j.credit_note_no?('<div class="cn">Credit note '+esc(j.credit_note_no)+'</div>'):'<div class="cn" style="color:#B54708">Credit note pending — the office has been alerted</div>')
+    +cnBlock
     +(j.invoice_balance!=null?('<p>Invoice '+esc(j.invoice_no||'')+' now shows '+money(j.invoice_balance)+' due.</p>'):'')
     +(j.restocked_lines?('<p>'+j.restocked_lines+' line(s) put back into stock.</p>'):'')
     +(j.credit_note_pdf?('<a class="dl" href="'+esc(j.credit_note_pdf)+'" target="_blank" rel="noopener">Download credit note</a>'):'')

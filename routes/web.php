@@ -471,6 +471,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('pos-return',      [\App\Http\Controllers\Panel\PosController::class, 'processReturn']);
         Route::get('return-find',      [\App\Http\Controllers\Panel\ReturnsController::class, 'find']);     // v4.88 (ADR-019)
         Route::post('return-process',  [\App\Http\Controllers\Panel\ReturnsController::class, 'process']);
+        Route::post('return-confirm',  [\App\Http\Controllers\Panel\ReturnsController::class, 'confirm']);  // v4.89 goods arrived
+        Route::post('return-cancel',   [\App\Http\Controllers\Panel\ReturnsController::class, 'cancel']);
         Route::post('pos-quote',       [\App\Http\Controllers\Panel\PosController::class, 'quoteCreate']); // v4.2 counter quotes
         Route::get('pos-quotes',       [\App\Http\Controllers\Panel\PosController::class, 'quotes']);
         Route::get('pos-quote-load',   [\App\Http\Controllers\Panel\PosController::class, 'quoteLoad']);
