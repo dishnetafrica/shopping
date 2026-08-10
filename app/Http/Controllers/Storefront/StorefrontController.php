@@ -191,6 +191,8 @@ class StorefrontController extends Controller
             // this line is invisible to the other twelve shops. All copy comes from settings via
             // the pure builder; only the image paths need the controller's storage knowledge.
             'home'         => $this->wholesaleHome($tenant),
+            // v4.79 (M-CHAT-2) — the chat UI renders only when the owner switched the channel on.
+            'webChat'      => (bool) $tenant->setting('web_chat', false),
         ];
 
         $path = resource_path('storefront/shop.html');

@@ -1157,6 +1157,58 @@ button{ -webkit-tap-highlight-color:transparent }
 .whpop .pl{flex:none;font-size:12px;font-weight:700;color:#98a1ab;text-transform:uppercase;letter-spacing:.4px}
 .whpop .pc{flex:none;border:1px solid #e4e7ec;background:#fff;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;color:#344054;cursor:pointer}
 .whpop .pc:hover{border-color:var(--green);color:var(--green)}
+/* M-CHAT-2 (v4.79) — chat UI. Every selector below matches only nodes whChatBtns/whChatBuild
+   inject behind whChatOn(); classic shops never render them. The panel floats ABOVE the bottom
+   nav (btmnav is z-index:45, height var(--nav-h)+var(--safe-b)) — it may never cover it. */
+.whcfab{position:fixed;right:14px;bottom:calc(var(--nav-h) + var(--safe-b) + 14px);z-index:46;display:flex;align-items:center;gap:8px;border:0;background:var(--green);color:#fff;font-weight:800;font-size:13.5px;padding:12px 16px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.18);cursor:pointer}
+.whcfab svg{width:19px;height:19px}
+.whcfab.hid{display:none}
+.whwfab{position:fixed;right:14px;bottom:calc(var(--nav-h) + var(--safe-b) + 72px);z-index:46;width:44px;height:44px;border-radius:50%;background:#25D366;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.16)}
+.whwfab svg{width:24px;height:24px}
+.whchat{position:fixed;z-index:47;right:0;left:0;bottom:calc(var(--nav-h) + var(--safe-b));top:7dvh;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden}
+.whchat.on{display:flex}
+.whchat .hd{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--green);color:#fff}
+.whchat .hd .t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.whchat .hd .t b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.whchat .hd .t .s{font-size:11.5px;opacity:.92;display:flex;align-items:center;gap:5px}
+.whchat .hd .dot{width:7px;height:7px;border-radius:50%;background:#4ade80;display:inline-block;flex:none}
+.whchat .hd .wa{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border-radius:999px;padding:6px 11px;color:#fff;font-size:12px;font-weight:700;text-decoration:none;flex:none}
+.whchat .hd .wa svg{width:16px;height:16px}
+.whchat .hd .x{border:0;background:none;color:#fff;font-size:16px;cursor:pointer;padding:6px;flex:none}
+.whchat .bd{flex:1;overflow-y:auto;padding:14px;background:#F6F7F9;display:flex;flex-direction:column;gap:8px}
+.whchat .row{display:flex}
+.whchat .row.me{justify-content:flex-end}
+.whchat .bub{max-width:82%;background:#fff;border:1px solid #ececf0;border-radius:14px;padding:9px 12px;font-size:13.5px;line-height:1.45;color:#1a202c;box-shadow:0 1px 2px rgba(16,24,40,.04);overflow-wrap:break-word}
+.whchat .row.me .bub{background:var(--green);border-color:var(--green);color:#fff;border-bottom-right-radius:4px}
+.whchat .row.bot .bub{border-bottom-left-radius:4px}
+.whchat .bub.im{padding:6px}
+.whchat .bub.im img{max-width:min(210px,60vw);border-radius:10px;display:block}
+.whchat .bub.im span{display:block;padding:7px 4px 2px;font-size:12.5px}
+.whchat .bub.doc{display:flex;align-items:center;gap:7px;text-decoration:none;font-weight:700;color:var(--green-d)}
+.whchat .bub.doc svg{width:16px;height:16px}
+.whchat .bub.err{background:#FEF3F2;border-color:#FEE4E2;color:#B42318}
+.whchat .bub .rt{border:1px solid #B42318;background:#fff;color:#B42318;border-radius:8px;font-size:12px;font-weight:700;padding:3px 9px;margin-left:6px;cursor:pointer}
+.whchat .bub.typ{display:flex;gap:4px;padding:12px 14px}
+.whchat .bub.typ span{width:6px;height:6px;border-radius:50%;background:#c3c9d1;animation:whtyp 1s infinite}
+.whchat .bub.typ span:nth-child(2){animation-delay:.18s}
+.whchat .bub.typ span:nth-child(3){animation-delay:.36s}
+@keyframes whtyp{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+.whchat .hello{display:flex;flex-direction:column;gap:4px;background:#fff;border:1px solid #ececf0;border-radius:14px;padding:13px 14px}
+.whchat .hello b{font-size:14.5px}
+.whchat .hello span{font-size:12.5px;color:#667085}
+.whchat .sugg{display:flex;flex-wrap:wrap;gap:7px}
+.whchat .sg{border:1px solid #e4e7ec;background:#fff;border-radius:999px;padding:8px 13px;font-size:12.5px;font-weight:600;color:#344054;cursor:pointer}
+.whchat .sg:hover{border-color:var(--green);color:var(--green)}
+.whchat .ft{display:flex;gap:8px;padding:10px 12px;background:#fff;border-top:1px solid #ececf0}
+.whchat .ft input{flex:1;min-width:0;border:1px solid #E3E6EA;background:#F4F4F6;border-radius:11px;padding:0 12px;height:42px;font-size:14px;outline:none;color:var(--ink)}
+.whchat .ft input:focus{border-color:var(--green)}
+.whchat .snd{border:0;background:var(--green);color:#fff;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;cursor:pointer;flex:none}
+.whchat .snd svg{width:18px;height:18px}
+@media(min-width:1024px){
+  .whcfab{right:26px;bottom:26px}
+  .whwfab{right:26px;bottom:88px}
+  .whchat{left:auto;top:auto;right:26px;bottom:26px;width:390px;height:min(620px,calc(100dvh - 60px));border-radius:16px}
+}
 /* the wide wordmark needs a size at EVERY width — phones included, where the header stays compact */
 .whchrome .top .lg.whlogo{width:auto;max-width:58vw;height:46px;border-radius:0;background:none;box-shadow:none;padding:0;display:flex;align-items:center}
 .whchrome .top .lg.whlogo img{height:46px;width:auto;display:block;max-width:100%;object-fit:contain}
@@ -1321,7 +1373,7 @@ button{ -webkit-tap-highlight-color:transparent }
 window.SHOP = __SHOP_CONFIG__;
 /* v4.70 — the build stamps itself, storefront edition of the stock:reconcile lesson: twice a page
    was debugged at length that turned out to be a stale copy. One glance settles it. */
-var SHOP_BUILD='v4.76.1';
+var SHOP_BUILD='v4.79';
 try{ console.info('cloudbss storefront · '+SHOP_BUILD); }catch(e){}
 window.__OPEN_PRODUCT_ID__ = __OPEN_PRODUCT__;   /* v4.27 — set by the server on /p/{slug}-{id} */
 var SHOP = window.SHOP || {};
@@ -3136,6 +3188,135 @@ function whPopChips(){
     return '<button class="pc" onclick="'+(custom?('whSearchFor('+jk(t)+')'):('setCat('+jk(t)+')'))+'">'+esc(t)+'</button>';
   }).join('');
 }
+/* ── M-CHAT-2 (v4.79, ADR-018): the storefront face of the ONE brain ───────────────────────────
+   Everything here is a CLIENT for POST /chat (M-CHAT-1) — no product logic, no prices, no rules,
+   no keys. Injected only when whChatOn(); classic shops carry zero extra DOM and zero listeners.
+   The panel itself is built LAZILY on first open — a visitor who never chats pays nothing. */
+var WHCHAT={sid:'',open:false,built:false,busy:false,last:'',log:[]};
+function whChatOn(){ return whOn() && !!SHOP.webChat; }
+function whChatSid(){
+  if(WHCHAT.sid) return WHCHAT.sid;
+  var k='cb_chat_sid_'+(SHOP.slug||'shop');
+  try{ var s=localStorage.getItem(k); if(s&&/^[A-Za-z0-9][A-Za-z0-9_-]{15,63}$/.test(s)){ WHCHAT.sid=s; return s; } }catch(e){}
+  var sid='w-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12)+Math.random().toString(36).slice(2,10);
+  WHCHAT.sid=sid; try{ localStorage.setItem(k,sid); }catch(e){}
+  return sid;
+}
+function whChatWaHref(){
+  var ref=whChatSid().slice(0,10);
+  return 'https://wa.me/'+SHOP.waNumber+'?text='+encodeURIComponent('Hi '+(SHOP.name||'')+', I was chatting on your website (ref web-'+ref+').');
+}
+function whChatBtns(){
+  if(!whChatOn() || document.getElementById('whChatFab')) return;
+  var f=document.createElement('button'); f.id='whChatFab'; f.className='whcfab';
+  f.setAttribute('aria-label','Chat with '+(SHOP.name||'us'));
+  f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg><span>Chat here</span>';
+  f.onclick=function(){ whChatToggle(); };
+  document.body.appendChild(f);
+  if(SHOP.waNumber && !document.getElementById('whWaFab')){
+    var w=document.createElement('a'); w.id='whWaFab'; w.className='whwfab';
+    w.href='https://wa.me/'+SHOP.waNumber; w.target='_blank'; w.rel='noopener';
+    w.setAttribute('aria-label','Chat on WhatsApp');
+    w.onclick=function(){ sTrack('whatsapp',{src:'fab'}); };
+    w.innerHTML=WH_IC.wa;
+    document.body.appendChild(w);
+  }
+}
+function whChatToggle(){ if(WHCHAT.open){ whChatHide(); } else { whChatShow(); } }
+function whChatShow(){
+  if(!WHCHAT.built) whChatBuild();
+  document.getElementById('whChat').classList.add('on');
+  var f=document.getElementById('whChatFab'); if(f) f.classList.add('hid');
+  WHCHAT.open=true; sTrack('chat_open',{});
+  var i=document.getElementById('whChatIn'); if(i) setTimeout(function(){ try{ i.focus(); }catch(e){} },80);
+}
+function whChatHide(){
+  var p=document.getElementById('whChat'); if(p) p.classList.remove('on');
+  var f=document.getElementById('whChatFab'); if(f) f.classList.remove('hid');
+  WHCHAT.open=false;
+}
+function whChatBuild(){
+  WHCHAT.built=true;
+  var p=document.createElement('div'); p.id='whChat'; p.className='whchat';
+  p.innerHTML=
+    '<div class="hd"><div class="t"><b>'+esc(SHOP.name||'Chat')+'</b><span class="s"><span class="dot"></span>AI Shopping Assistant · Online</span></div>'
+    +(SHOP.waNumber?'<a class="wa" target="_blank" rel="noopener" href="'+whChatWaHref()+'" onclick="sTrack(\'whatsapp\',{src:\'chat\'})">'+WH_IC.wa+'<span>WhatsApp</span></a>':'')
+    +'<button class="x" aria-label="Close chat" onclick="whChatHide()">✕</button></div>'
+    +'<div class="bd" id="whChatBd"></div>'
+    +'<div class="ft"><input id="whChatIn" placeholder="Ask about products, prices, delivery…" maxlength="2000" autocomplete="off" enterkeyhint="send">'
+    +'<button class="snd" aria-label="Send" onclick="whChatSubmit()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg></button></div>';
+  document.body.appendChild(p);
+  document.getElementById('whChatIn').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); whChatSubmit(); } });
+  var saved=[]; try{ saved=JSON.parse(localStorage.getItem('cb_chat_log_'+(SHOP.slug||'shop'))||'[]'); }catch(e){}
+  if(saved.length){ WHCHAT.log=saved; saved.forEach(function(m){ whChatPaint(m,false); }); whChatScroll(); }
+  else whChatLauncher();
+}
+/* The launcher: REAL data only — the shop's own businesses and its popular terms / categories.
+   No invented product names ever appear as suggestions. */
+function whChatLauncher(){
+  var bd=document.getElementById('whChatBd'); if(!bd) return;
+  var chips=[];
+  activeBiz().slice(0,3).forEach(function(b){ if(b.label) chips.push([b.label,'Show me '+b.label]); });
+  var C=(SHOP.home&&SHOP.home.chrome)||{};
+  var terms=(C.popular&&C.popular.length)?C.popular.slice(0,3):CATS.slice(0,3).map(function(c){ return c.name; });
+  terms.forEach(function(t){ chips.push([t,'Find '+t]); });
+  chips.push(['Help me place an order','Help me place an order']);
+  bd.innerHTML='<div class="hello"><b>What are you buying today?</b><span>Ask about products, prices, pack sizes or delivery — or tap one:</span></div>'
+    +'<div class="sugg">'+chips.map(function(c){ return '<button class="sg" onclick="whChatSend('+jk(c[1])+')">'+esc(c[0])+'</button>'; }).join('')+'</div>';
+}
+function whChatPaint(m,save){
+  var bd=document.getElementById('whChatBd'); if(!bd) return;
+  var h='';
+  if(m.role==='me') h='<div class="row me"><div class="bub">'+esc(m.text||'')+'</div></div>';
+  else if(m.type==='image') h='<div class="row bot"><div class="bub im"><img loading="lazy" src="'+esc(m.url||'')+'" alt="">'+(m.caption?'<span>'+esc(m.caption).replace(/\n/g,'<br>')+'</span>':'')+'</div></div>';
+  else if(m.type==='document') h='<div class="row bot"><a class="bub doc" target="_blank" rel="noopener" href="'+esc(m.url||'')+'">📄 '+esc(m.name||'Document')+'</a></div>';
+  else if(m.type==='location') h='<div class="row bot"><a class="bub doc" target="_blank" rel="noopener" href="https://maps.google.com/?q='+(+m.lat||0)+','+(+m.lng||0)+'">📍 '+esc(m.name||'Location')+'</a></div>';
+  else h='<div class="row bot"><div class="bub">'+esc(m.text||'').replace(/\n/g,'<br>')+'</div></div>';
+  bd.insertAdjacentHTML('beforeend',h);
+  if(save!==false){
+    WHCHAT.log.push(m); if(WHCHAT.log.length>40) WHCHAT.log=WHCHAT.log.slice(-40);
+    try{ localStorage.setItem('cb_chat_log_'+(SHOP.slug||'shop'),JSON.stringify(WHCHAT.log)); }catch(e){}
+  }
+}
+function whChatScroll(){ var bd=document.getElementById('whChatBd'); if(bd) bd.scrollTop=bd.scrollHeight; }
+function whChatSubmit(){ var i=document.getElementById('whChatIn'); var v=(i&&i.value||'').trim(); if(!v) return; i.value=''; whChatSend(v); }
+function whChatSend(text){
+  if(WHCHAT.busy) return;
+  var hl=document.querySelector('#whChatBd .hello'); if(hl) hl.remove();
+  var sg=document.querySelector('#whChatBd .sugg'); if(sg) sg.remove();
+  whChatPaint({role:'me',text:text}); whChatScroll();
+  WHCHAT.busy=true; WHCHAT.last=text;
+  var bd=document.getElementById('whChatBd');
+  bd.insertAdjacentHTML('beforeend','<div class="row bot" id="whChatTyp"><div class="bub typ"><span></span><span></span><span></span></div></div>'); whChatScroll();
+  fetch((SHOP.base||'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,session_id:whChatSid()})})
+  .then(function(r){ return r.json().then(function(j){ return {st:r.status,j:j}; }).catch(function(){ return {st:r.status,j:null}; }); })
+  .then(function(x){
+    whChatDone();
+    if(x.st===429){ whChatErr('One moment — still finishing your last message.',true); return; }
+    if(!x.j || x.j.ok===false){ whChatErr('Something went wrong.',true); return; }
+    (x.j.messages||[]).forEach(function(m){ whChatPaint(m); });
+    if(x.j.wa && SHOP.waNumber){
+      bd.insertAdjacentHTML('beforeend','<div class="row bot"><a class="bub doc" target="_blank" rel="noopener" href="'+whChatWaHref()+'">'+WH_IC.wa+' Continue on WhatsApp</a></div>');
+    }
+    whChatScroll(); sTrack('chat_msg',{});
+  })
+  .catch(function(){ whChatDone(); whChatErr('No connection.',true); });
+}
+function whChatDone(){ WHCHAT.busy=false; var t=document.getElementById('whChatTyp'); if(t) t.remove(); }
+function whChatErr(msg,retry){
+  var bd=document.getElementById('whChatBd'); if(!bd) return;
+  bd.insertAdjacentHTML('beforeend','<div class="row bot"><div class="bub err">'+esc(msg)+(retry?' <button class="rt" onclick="whChatRetry(this)">Retry</button>':'')+'</div></div>');
+  whChatScroll();
+}
+function whChatRetry(btn){
+  var r=btn.closest('.row'); if(r) r.remove();
+  var t=WHCHAT.last; if(!t) return;
+  var l=WHCHAT.log;
+  if(l.length && l[l.length-1].role==='me' && l[l.length-1].text===t){ l.pop(); }
+  var rows=document.querySelectorAll('#whChatBd .row.me'); var lastMe=rows[rows.length-1];
+  if(lastMe && lastMe.textContent===t) lastMe.remove();
+  whChatSend(t);
+}
 /* the nav needs the catalogue (deals/brands existence), so it builds after load() */
 function whNav(){
   if(!whOn() || document.getElementById('whNav')) return;
@@ -3361,7 +3542,7 @@ function render(){
   var c=$('content');
   /* chrome + nav inject at first render, not at boot: function declarations hoist but the icon
      set (var WH_IC) only has a VALUE once its line runs, and boot is before that line. */
-  try{whChrome();whNav();whSearchIcons();whPopChips();}catch(e){}
+  try{whChrome();whNav();whSearchIcons();whPopChips();whChatBtns();}catch(e){}
   SEARCH_ACTIVE=false;
   dLayout();
   var hb=$('hback');if(hb)hb.style.display=(CAT!=='all'||Q)?'grid':'none';
