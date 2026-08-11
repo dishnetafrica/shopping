@@ -16,13 +16,33 @@ Upload keeping the paths, commit, press **Deploy**. The migration runs automatic
 
 ```bash
 php artisan wa:verify                        # is this shop delivering right now?
-php artisan wa:verify --send=2119xxxxxxxx    # LIVE test, waits for WhatsApp's receipt
+php artisan wa:verify --hours=2              # narrow the window while watching a recovery
+php artisan wa:verify --send=2119xxxxxxxx    # LIVE test against ONE contact
 php artisan wa:watchdog                      # runs every 5 min anyway
 ```
 
-Exit code 0 = delivering, 1 = not. Neither fixes the outage; they make the next one visible in six hours instead of twenty-four days.
+Exit code 0 = delivering or partly, 1 = not.
 
-The watchdog now also alarms when **rejections are arriving AND nothing has delivered for 6 hours**. The AND matters — a quiet shop has a stale timestamp and nothing wrong with it. Alerts go via `PLATFORM_WA_INSTANCE`, never the shop's own number, because that is the one that cannot deliver. **If that env var is unset the alert cannot be sent** — it logs `wa.no_ops_instance` and gives up.
+`--send` tests **one contact**. Error 463 is per-contact, so a single rejection is not a verdict — it now sharpens the ratio rather than overriding it. That was another way the first version misled: three rejected test messages looked like a dead number when seven customers in ten were being answered fine.
+
+### The verdict is a ratio, not a timestamp — and three states, not two
+
+Both commands judge delivery on **how many distinct customers were refused, out of how many we tried to reach**, over the last 6 hours. Measured on this shop: an ordinary day refuses 3-5% (wrong numbers, blocks, deleted accounts); the real outage refused **9 of 30, 30%**. No ambiguity between those.
+
+| | |
+|---|---|
+| under 12% refused | **DELIVERING** |
+| 12-25% | **PARTLY DELIVERING** |
+| over 25% | **NOT DELIVERING** |
+| fewer than 8 customers | **too quiet to judge** — a quiet shop is not a broken one |
+
+**Why not `wa_send_ok_at`?** Because it lies. It froze on 18 July while this shop delivered ~1,000 messages a day for three more weeks: Evolution's SUCCESS callbacks stopped matching the `in_array($status, ['DELIVERY_ACK','READ','PLAYED'])` check in `WebhookController`, while the ERROR branch kept matching. Refusals record perfectly; successes silently stopped. A tool built on that stamp reported a three-week total outage that had never happened — and would have gone on reporting one forever after the real problem was fixed.
+
+The stamp is still shown, labelled unreliable. It is not the verdict.
+
+**Three states, not two,** because "70% working" is a real and common condition. During the actual outage 21 of 30 customers *were* being answered while a boolean verdict shouted NOT WORKING at them.
+
+Alerts go via `PLATFORM_WA_INSTANCE`, never the shop's own number, because that is the one failing. **If that env var is unset the alert cannot be sent** — it logs `wa.no_ops_instance` and gives up. The alert message also tells the operator **not to delete and recreate the WhatsApp connection**, because that is what caused this outage in the first place.
 
 ---
 

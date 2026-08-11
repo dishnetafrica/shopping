@@ -8,6 +8,7 @@ use App\Services\WhatsApp\EvolutionGateway;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -27,18 +28,21 @@ use Illuminate\Support\Facades\Log;
  * 11 Aug 2026 — DELIVERY WATCHDOG.
  *
  * This command asked one question — "is the connection open?" — and Evolution answered "open"
- * every five minutes for twenty-four days while every single outbound message was rejected by
- * WhatsApp with error 463. The shop's bot wrote perfect replies to 24 days of customers and not
- * one of them was delivered. Nobody found out until somebody happened to notice.
+ * every five minutes while WhatsApp refused nine of every thirty replies. "Connected" and "able
+ * to answer customers" are different facts and only the second one matters.
  *
- * "Connected" and "able to deliver" are different facts and only the second one matters. The
- * webhook has been stamping wa_send_ok_at on every delivery receipt and wa_send_err_at on every
- * rejection the whole time. Nothing ever read them. Now something does.
+ * The first attempt at fixing that judged delivery by whether wa_send_ok_at was recent. It was
+ * wrong, and the way it was wrong is worth keeping: that stamp froze on 18 July while the shop
+ * went on delivering roughly a thousand messages a day for three more weeks. Evolution's SUCCESS
+ * callbacks had stopped matching the in_array($status, ['DELIVERY_ACK','READ','PLAYED']) check in
+ * WebhookController; the ERROR branch still matched, so refusals recorded perfectly and successes
+ * silently stopped. A watchdog on that stamp would have alarmed daily from 18 July about an
+ * outage that did not exist — and been muted long before the real one arrived on 11 August.
  *
- * The discriminator that makes this safe is deliberate: alarm only when there are RECENT ERRORS
- * *and* no recent success. A quiet shop with no traffic has a stale wa_send_ok_at and nothing
- * wrong with it; alarming on staleness alone would cry wolf every Sunday and get the watchdog
- * muted, and a muted watchdog is worse than none.
+ * So the signal is two numbers written on every single message: how many distinct customers we
+ * tried to reach, and how many of those were refused. Measured on this shop, an ordinary day
+ * refuses 3-5% of customers (wrong numbers, blocks, deleted accounts). The real outage refused
+ * 30%. There is no ambiguity between those.
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  */
 class WaWatchdogCommand extends Command
@@ -53,10 +57,12 @@ class WaWatchdogCommand extends Command
     /** Don't nudge a reconnect more than once per this many minutes. */
     private const RECONNECT_EVERY_MIN = 10;
 
-    /** A delivery rejection this recent means we are actively trying and actively failing. */
-    private const DELIVERY_ERR_WINDOW_MIN = 90;
-    /** No successful delivery for this long, while errors keep arriving, is a dead number. */
-    private const DELIVERY_STALE_HOURS = 6;
+    /** How far back to judge delivery. Stable enough to trust, short enough to notice today. */
+    private const DELIVERY_WINDOW_H = 6;
+    /** Below this many customers the sample says nothing. */
+    private const DELIVERY_MIN_CUSTOMERS = 8;
+    /** Fraction of customers refused that means something is genuinely wrong. */
+    private const DELIVERY_BROKEN_RATIO = 0.25;
     /** Re-alert at most this often while delivery is still broken (hours). */
     private const DELIVERY_REALERT_HOURS = 12;
 
@@ -135,43 +141,48 @@ class WaWatchdogCommand extends Command
     }
 
     /**
-     * Connected, but is anything actually arriving?
+     * Connected, but are customers actually being answered?
      *
-     * Reads the two stamps the webhook has always written:
-     *   wa_send_ok_at  — a DELIVERY_ACK / READ came back
-     *   wa_send_err_at — WhatsApp rejected a send (status ERROR)
+     * NOT judged on wa_send_ok_at. That stamp froze on 18 Jul 2026 while this shop went on
+     * delivering roughly a thousand messages a day for three more weeks — Evolution's SUCCESS
+     * callbacks stopped matching the in_array($status, ['DELIVERY_ACK','READ','PLAYED']) check
+     * in WebhookController, while the ERROR branch kept matching. A watchdog built on that stamp
+     * would have alarmed every day since 18 July about an outage that did not exist, and then
+     * been muted long before the real one arrived on 11 August.
+     *
+     * So the signal is two numbers written on every single message: distinct customers we tried
+     * to reach, and distinct customers who were refused.
+     *
+     *   measured on this shop, ordinary days   3-5% of customers refused (bad numbers, blocks)
+     *   measured during the real outage        9 of 30 customers, 30%
      *
      * Returns true when this tenant is currently undeliverable.
      */
     private function deliveryCheck(Tenant $t, Carbon $now): bool
     {
-        $errAt = $this->stamp($t->setting('wa_send_err_at'));
-        $okAt  = $this->stamp($t->setting('wa_send_ok_at'));
+        $since = $now->copy()->subHours(self::DELIVERY_WINDOW_H);
+        $messaged = (int) DB::table('messages')->where('tenant_id', $t->id)
+            ->where('direction', 'out')->where('created_at', '>=', $since)
+            ->distinct()->count('customer_phone');
 
-        // No rejection ever, or none for a while: either healthy or simply quiet. A shop with no
-        // traffic must never be alarmed at — that is how a watchdog gets muted.
-        if (! $errAt || $errAt->diffInMinutes($now) > self::DELIVERY_ERR_WINDOW_MIN) {
-            return $this->deliveryHealthy($t, $now);
-        }
-        // The most recent thing that happened was a success — a single rejection is normal
-        // (blocked contact, number not on WhatsApp) and must not raise an alarm.
-        if ($okAt && $okAt->greaterThan($errAt)) {
-            return $this->deliveryHealthy($t, $now);
-        }
-        // Rejections are arriving, but something got through recently enough that the number
-        // is clearly still working.
-        if ($okAt && $okAt->diffInHours($now) < self::DELIVERY_STALE_HOURS) {
-            return $this->deliveryHealthy($t, $now);
-        }
+        // A quiet shop is not a broken one. Alarming on a thin sample is how a watchdog earns
+        // its way onto the ignore list, and an ignored watchdog is worse than none.
+        if ($messaged < self::DELIVERY_MIN_CUSTOMERS) return $this->deliveryHealthy($t, $now);
 
-        // Errors now, nothing delivered for hours. The number is up and mute.
-        $since = $t->setting('wa_delivery_since') ?: ($okAt ? $okAt->toIso8601String() : $now->toIso8601String());
+        $rejected = min((int) DB::table('bot_events')->where('tenant_id', $t->id)
+            ->where('stage', 'send_failed')->where('created_at', '>=', $since)
+            ->distinct()->count('phone'), $messaged);
+
+        $ratio = $rejected / $messaged;
+        if ($ratio < self::DELIVERY_BROKEN_RATIO) return $this->deliveryHealthy($t, $now);
+
+        $since_str = $t->setting('wa_delivery_since') ?: $now->toIso8601String();
         $t->putSetting('wa_delivery', 'failing');
-        $t->putSetting('wa_delivery_since', $since);
+        $t->putSetting('wa_delivery_since', $since_str);
 
-        $mutedFor = $okAt ? $okAt->diffForHumans($now, ['syntax' => Carbon::DIFF_ABSOLUTE]) : 'as long as we have records';
         Log::warning('wa.delivery_failing', [
-            'tenant' => $t->id, 'last_ok' => $okAt?->toIso8601String(), 'last_err' => $errAt->toIso8601String(),
+            'tenant' => $t->id, 'messaged' => $messaged, 'rejected' => $rejected,
+            'ratio' => round($ratio, 3),
         ]);
 
         $lastAlert = $this->stamp($t->setting('wa_delivery_alerted_at'));
@@ -180,16 +191,21 @@ class WaWatchdogCommand extends Command
 
         $t->putSetting('wa_delivery_alerted_at', $now->toIso8601String());
 
-        // NOTE: deliberately NOT NotifyOwner. That sends through the shop's own number, which is
-        // precisely the one that cannot deliver — the alert would be swallowed by the fault it is
-        // reporting. Same reasoning as WhatsappConnectionAlert's separate alert instance.
-        $this->platformPush($t,
-            "⚠️ {$t->name}: your WhatsApp is CONNECTED but messages are not reaching customers.\n\n"
-            . "Nothing has been delivered for {$mutedFor}. The bot is still replying — those replies "
-            . "are being rejected by WhatsApp.\n\nThis needs the operator; reconnecting will not fix it.");
+        // NOT NotifyOwner: that sends through the shop's own number, which is the one failing —
+        // the alert would be swallowed by the fault it reports.
+        $this->platformPush($t, sprintf(
+            "⚠️ %s: %d of your last %d customers did NOT receive their reply.
+
+"
+            . "WhatsApp is connected and the bot is answering — those answers are being refused.
+
+"
+            . "This needs the operator. Do NOT delete and recreate the WhatsApp connection: a "
+            . "fresh session makes this worse, not better.",
+            $t->name, $rejected, $messaged));
 
         if (function_exists('Sentry\\captureMessage')) {
-            try { \Sentry\captureMessage("WhatsApp delivering nothing for tenant {$t->id} (last ok {$mutedFor} ago)"); }
+            try { \Sentry\captureMessage("WhatsApp refusing {$rejected}/{$messaged} for tenant {$t->id}"); }
             catch (\Throwable $e) {}
         }
 

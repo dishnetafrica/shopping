@@ -17,28 +17,49 @@ use Illuminate\Support\Facades\Http;
  *   php artisan wa:verify --send=211922281312      LIVE: really sends, waits for WhatsApp's receipt
  *   php artisan wa:verify --quiet                  exit code only (cron / uptime checks)
  *
- * Exit 0 = delivering. Exit 1 = not delivering.
+ * Exit 0 = delivering (or partly). 1 = not delivering.
  *
- * Written because on 11 Aug 2026 the honest answer had been "no" for twenty-four days while every
- * single thing anyone would think to check said yes. The connection was open, webhooks were
- * arriving, the queue worker was healthy, the AI was writing good replies — and WhatsApp was
- * rejecting every one of them with error 463. Nothing in the stack disagreed with itself, so
- * nothing looked wrong. The only fact that mattered was whether a delivery receipt had come back,
- * and nothing in the system had ever asked.
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * THE VERDICT DOES NOT COME FROM wa_send_ok_at, AND THAT LESSON COST A MORNING.
+ *
+ * The first version of this command judged delivery by whether a success stamp was recent. On
+ * 11 Aug 2026 that stamp read 18 July, so it reported a three-week total outage — with total
+ * confidence, in red, repeatedly.
+ *
+ * It was wrong. The shop had delivered roughly a thousand messages a day right through to the
+ * previous evening. What had actually happened on 18 July was that Evolution's SUCCESS callbacks
+ * stopped matching the in_array($status, ['DELIVERY_ACK','READ','PLAYED']) check in
+ * WebhookController — a status-vocabulary change on their side. The ERROR branch still matched,
+ * so refusals recorded perfectly while successes silently stopped. A frozen wa_send_ok_at proves
+ * nothing whatsoever.
+ *
+ * The real outage began that same morning at 07:26, when the Evolution instance was deleted and
+ * recreated: a fresh session holds none of the privacy tokens WhatsApp requires for replying to
+ * existing contacts, so replies started failing with error 463. And even then it was PARTIAL —
+ * 21 of 30 customers were still being answered while this command shouted NOT WORKING at them.
+ *
+ * So the verdict now rests on two numbers that are provably written on every single message:
+ * how many customers we tried to reach, and how many of those were refused. And it has three
+ * states, not two, because "70% working" is a real and common condition that a boolean cannot
+ * express.
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
  */
 class WaVerifyCommand extends Command
 {
     protected $signature = 'wa:verify
         {--tenant=17 : Which shop to check}
         {--send= : Send a real test message to this number and wait for the receipt}
-        {--wait=45 : Seconds to wait for WhatsApp to confirm the test message}';
+        {--wait=45 : Seconds to wait for WhatsApp to confirm the test message}
+        {--hours=6 : How many hours back to judge delivery over}';
 
     protected $description = 'Verify end to end that a shop can actually deliver WhatsApp messages.';
 
-    /** A rejection this recent means we are actively trying and actively failing. */
-    private const ERR_WINDOW_MIN = 90;
-    /** Nothing delivered for this long, while rejections keep arriving, is a mute number. */
-    private const STALE_HOURS = 6;
+    /** Below this many customers the sample says nothing — a quiet shop is not a broken one. */
+    private const MIN_CUSTOMERS = 8;
+    /** Measured on this shop: a healthy day refuses ~3-5% of customers (bad numbers, blocks). */
+    private const DEGRADED_RATIO = 0.12;
+    /** Measured during the real outage: 9 of 30 customers refused, 30%. */
+    private const BROKEN_RATIO = 0.25;
 
     private int $fails = 0;
     private int $warns = 0;
@@ -53,37 +74,109 @@ class WaVerifyCommand extends Command
         }
 
         $this->line('');
-        $this->line("  <options=bold>CloudBSS WhatsApp — verification</>");
+        $this->line('  <options=bold>CloudBSS WhatsApp — verification</>');
         $this->line("  <fg=gray>{$t->name} · tenant {$tenantId} · " . now()->format('D j M Y H:i T') . '</>');
 
         [$base, $key, $instance] = $this->configBlock($t);
         $this->channelsBlock($t, $instance);
         $this->connectionBlock($base, $key, $instance);
         $failedSends = $this->pipelineBlock($tenantId);
-        $delivering = $this->deliveryBlock($t, $tenantId, $failedSends);
+        [$delivering, $state] = $this->deliveryBlock($t, $tenantId, $failedSends);
 
         if ($to = preg_replace('/\D/', '', (string) $this->option('send'))) {
             $live = $this->liveTest($t, $base, $key, $instance, $to);
-            if ($live === false) $delivering = false;
-            if ($live === true) $delivering = true;
+            // One test message is one data point about ONE contact. Error 463 is per-contact, so
+            // a single rejection does not mean the shop is mute — that is exactly the mistake
+            // this command used to make. It sharpens the verdict, it does not replace it.
+            if ($live === false && $state === 'delivering') $state = 'degraded';
+            if ($live === true && $state === 'broken') $state = 'degraded';
         }
 
         $this->line('');
         $this->line('  ' . str_repeat('─', 68));
-        if ($delivering && ! $this->fails) {
-            $this->line('  <fg=green;options=bold>WORKING</> — messages are reaching customers.');
-        } elseif (! $delivering) {
-            $this->line('  <fg=red;options=bold>NOT WORKING</> — the shop cannot answer its customers.');
+        if ($state === 'broken') {
+            $this->line('  <fg=red;options=bold>NOT WORKING</> — most customers are not being answered.');
             $this->line('  <fg=gray>Everything upstream can look perfectly healthy while this is true.</>');
+            $delivering = false;
+        } elseif ($state === 'degraded') {
+            $this->line('  <fg=yellow;options=bold>PARTLY WORKING</> — some customers are answered, some are refused.');
+            $this->line('  <fg=gray>Usually per-contact: a session missing privacy tokens for older contacts.</>');
+        } elseif ($state === 'quiet') {
+            $this->line('  <fg=yellow;options=bold>TOO QUIET TO JUDGE</> — not enough messages in the window.');
         } else {
-            $this->line("  <fg=yellow;options=bold>DEGRADED</> — {$this->fails} failed check(s), {$this->warns} warning(s). Delivery itself is alive.");
+            $this->line('  <fg=green;options=bold>WORKING</> — messages are reaching customers.');
         }
         $this->line('');
 
         return $delivering ? self::SUCCESS : self::FAILURE;
     }
 
-    // ── blocks ────────────────────────────────────────────────────────────────────
+    // ── the verdict ───────────────────────────────────────────────────────────────
+
+    /** @return array{0: bool, 1: string}  [exit-ok, state] */
+    private function deliveryBlock(Tenant $t, int $tenantId, int $failedSends): array
+    {
+        $this->head('DELIVERY  ← the one that matters');
+
+        $hours = max(1, (int) $this->option('hours'));
+        [$messaged, $rejected] = $this->reach($tenantId, now()->subHours($hours));
+        [$dayMessaged, $dayRejected] = $this->reach($tenantId, today());
+
+        // Shown, but NOT used for the verdict. See the class docblock: this stamp froze on
+        // 18 July while the shop delivered a thousand messages a day for three more weeks.
+        $this->row('info', 'last delivered stamp', $this->ago($this->stamp($t->setting('wa_send_ok_at')))
+            . '  (unreliable — see docblock)');
+        $this->row('info', 'last rejected', $this->ago($this->stamp($t->setting('wa_send_err_at'))));
+        $this->row($failedSends ? 'warn' : 'pass', 'rejection events (24h)', (string) $failedSends);
+        $this->row('info', 'today', "{$dayRejected} of {$dayMessaged} customers refused");
+
+        $ratio = $messaged > 0 ? $rejected / $messaged : 0.0;
+        $label = sprintf('%d of %d customers refused (%.0f%%) in the last %dh',
+            $rejected, $messaged, $ratio * 100, $hours);
+
+        if ($messaged < self::MIN_CUSTOMERS) {
+            $this->row('warn', 'VERDICT', "too few messages to judge — {$label}");
+            return [true, 'quiet'];
+        }
+        if ($ratio >= self::BROKEN_RATIO) {
+            $this->row('fail', 'VERDICT', "NOT DELIVERING — {$label}");
+            if ($last = DB::table('bot_events')->where('tenant_id', $tenantId)
+                ->where('stage', 'send_failed')->latest('created_at')->first()) {
+                $this->row('info', 'most recent rejection', (string) $last->detail);
+            }
+            return [false, 'broken'];
+        }
+        if ($ratio >= self::DEGRADED_RATIO) {
+            $this->row('warn', 'VERDICT', "PARTLY DELIVERING — {$label}");
+            return [true, 'degraded'];
+        }
+        $this->row('pass', 'VERDICT', "DELIVERING — {$label}");
+        return [true, 'delivering'];
+    }
+
+    /**
+     * Distinct customers we tried to message, and distinct customers who were refused.
+     *
+     * Counted by CUSTOMER, not by message, because "9 of your 30 customers got no answer today"
+     * is a sentence a shopkeeper can act on and "70 rejections" is not. Both tables are written
+     * on every message, unlike the settings stamps.
+     *
+     * @return array{0:int, 1:int}
+     */
+    private function reach(int $tenantId, Carbon $since): array
+    {
+        $messaged = (int) DB::table('messages')->where('tenant_id', $tenantId)
+            ->where('direction', 'out')->where('created_at', '>=', $since)
+            ->distinct()->count('customer_phone');
+        $rejected = (int) DB::table('bot_events')->where('tenant_id', $tenantId)
+            ->where('stage', 'send_failed')->where('created_at', '>=', $since)
+            ->distinct()->count('phone');
+
+        // A refusal can outlive its outbound row's window; never report more refused than tried.
+        return [$messaged, $messaged > 0 ? min($rejected, $messaged) : $rejected];
+    }
+
+    // ── the other blocks ──────────────────────────────────────────────────────────
 
     private function configBlock(Tenant $t): array
     {
@@ -121,8 +214,7 @@ class WaVerifyCommand extends Command
         if ($primaries->count() === 0) {
             $this->row('fail', 'primary channel', 'NONE — proactive sends have nowhere to go');
         } elseif ($primaries->count() > 1) {
-            // Two primaries is undefined behaviour: which one a proactive send picks depends on
-            // row order. Family Shoppers had exactly this on 11 Aug, pointing at a dead instance.
+            // Which one a proactive send picks depends on row order. This shop had exactly that.
             $this->row('fail', 'primary channel', $primaries->count() . ' marked primary — which one wins is undefined');
         } else {
             $this->row('pass', 'primary channel', 'exactly one');
@@ -159,9 +251,20 @@ class WaVerifyCommand extends Command
             $state = (string) ($live['connectionStatus'] ?? $live['status'] ?? '?');
             $who = (string) ($live['profileName'] ?? '?');
             $num = preg_replace('/@.*/', '', (string) ($live['ownerJid'] ?? ''));
-            // "open" is necessary and nowhere near sufficient — it read open for 24 days
-            // while every send was refused.
+            // "open" is necessary and nowhere near sufficient: it read open throughout the outage.
             $this->row($state === 'open' ? 'pass' : 'fail', 'connection state', "{$state}  ({$who} · {$num})");
+
+            // A session created minutes ago has no privacy tokens for existing contacts, which is
+            // the 463 failure. Worth surfacing, because recreating the instance LOOKS like a fix.
+            if ($created = (string) ($live['createdAt'] ?? '')) {
+                try {
+                    $age = Carbon::parse($created);
+                    $this->row($age->diffInHours(now()) < 24 ? 'warn' : 'info', 'session created',
+                        $age->format('Y-m-d H:i') . ($age->diffInHours(now()) < 24
+                            ? '  ← RECREATED TODAY. A fresh session loses the privacy tokens for '
+                              . 'existing contacts, and replies to them fail with 463.' : ''));
+                } catch (\Throwable $e) { /* informational only */ }
+            }
         } catch (\Throwable $e) {
             $this->row('fail', 'evolution reachable', substr($e->getMessage(), 0, 70));
         }
@@ -182,7 +285,7 @@ class WaVerifyCommand extends Command
 
         $this->row($queued > 0 ? 'pass' : 'warn', 'inbound received',
             $queued . ' queued' . ($queued ? '' : '  (quiet, or webhooks are not arriving)'));
-        // The sharpest single check in this block: messages accepted but never picked up.
+        // The sharpest single check here: messages accepted but never picked up.
         $this->row($queued && ! $started ? 'fail' : 'pass', 'queue worker',
             $started . ' jobs started' . ($queued && ! $started ? '  ← QUEUED BUT NEVER STARTED: the worker is dead' : ''));
         $this->row($replied > 0 || ! $started ? 'pass' : 'warn', 'ai replies written', (string) $replied);
@@ -198,47 +301,6 @@ class WaVerifyCommand extends Command
         }
 
         return $failed;
-    }
-
-    private function deliveryBlock(Tenant $t, int $tenantId, int $failedSends): bool
-    {
-        $this->head('DELIVERY  ← the one that matters');
-        $okAt = $this->stamp($t->setting('wa_send_ok_at'));
-        $errAt = $this->stamp($t->setting('wa_send_err_at'));
-
-        $this->row($okAt && $okAt->diffInHours(now()) < self::STALE_HOURS ? 'pass' : 'fail',
-            'last delivered', $this->ago($okAt));
-        $this->row('info', 'last rejected', $this->ago($errAt));
-        $this->row($failedSends ? 'fail' : 'pass', 'rejections (24h)', (string) $failedSends);
-
-        $delivering = $this->isDelivering($okAt, $errAt);
-
-        if ($delivering) {
-            $this->row('pass', 'VERDICT', 'DELIVERING — customers are being answered');
-        } else {
-            $this->row('fail', 'VERDICT', 'NOT DELIVERING — the bot is answering into a void');
-            $last = DB::table('bot_events')->where('tenant_id', $tenantId)
-                ->where('stage', 'send_failed')->latest('created_at')->first();
-            if ($last) $this->row('info', 'most recent rejection', (string) $last->detail);
-        }
-
-        return $delivering;
-    }
-
-    /**
-     * Rejections arriving NOW *and* nothing delivered for hours.
-     *
-     * The AND is the whole design. A quiet shop has a stale wa_send_ok_at and nothing wrong with
-     * it; judging on staleness alone would fail every Sunday, the owner would stop believing it,
-     * and a monitor nobody believes is worse than no monitor.
-     */
-    private function isDelivering(?Carbon $okAt, ?Carbon $errAt): bool
-    {
-        if (! $errAt) return true;                                  // nothing is being refused
-        if ($errAt->diffInMinutes(now()) > self::ERR_WINDOW_MIN) return true;   // refusals are stale
-        if ($okAt && $okAt->greaterThan($errAt)) return true;        // the last event was a success
-        if ($okAt && $okAt->diffInHours(now()) < self::STALE_HOURS) return true; // delivered recently
-        return false;
     }
 
     /** Returns true = delivered, false = rejected, null = no receipt (inconclusive). */
@@ -257,7 +319,7 @@ class WaVerifyCommand extends Command
             $r = Http::withHeaders(['apikey' => $key])->timeout(25)
                 ->post("{$base}/message/sendText/{$instance}",
                     ['number' => $to, 'text' => 'CloudBSS delivery test ' . now()->format('H:i:s')]);
-            // ACCEPTED IS NOT DELIVERED. This returns 201 today, while completely broken.
+            // ACCEPTED IS NOT DELIVERED. This returns 201 even while every message is refused.
             $this->row($r->successful() ? 'pass' : 'fail', 'evolution accepted', 'HTTP ' . $r->status());
             if ($id = (string) data_get($r->json(), 'key.id', '')) {
                 $this->row('info', 'message id', $id);
@@ -273,20 +335,23 @@ class WaVerifyCommand extends Command
         for ($i = 0; $i < $wait; $i += 3) {
             sleep(3);
             $f = $t->fresh();
-            $nowOk = $this->stamp($f->setting('wa_send_ok_at'));
             $nowErr = $this->stamp($f->setting('wa_send_err_at'));
-            if ($nowOk && (! $beforeOk || $nowOk->greaterThan($beforeOk))) {
-                $this->row('pass', 'WHATSAPP RECEIPT', 'DELIVERED — it is working');
-                return true;
-            }
             if ($nowErr && (! $beforeErr || $nowErr->greaterThan($beforeErr))) {
-                $this->row('fail', 'WHATSAPP RECEIPT', 'REJECTED — WhatsApp refused it (error 463 territory)');
+                $this->row('fail', 'WHATSAPP RECEIPT', 'REJECTED for THIS contact (error 463 territory)');
+                $this->row('info', '', 'one contact, not a verdict — 463 is per-contact');
                 return false;
+            }
+            // The success stamp is unreliable (class docblock), so an absent rejection within the
+            // window is the best positive signal a single test can offer. Reported as such.
+            $nowOk = $this->stamp($f->setting('wa_send_ok_at'));
+            if ($nowOk && (! $beforeOk || $nowOk->greaterThan($beforeOk))) {
+                $this->row('pass', 'WHATSAPP RECEIPT', 'DELIVERED');
+                return true;
             }
         }
         $this->row('warn', 'WHATSAPP RECEIPT',
-            "no receipt in {$wait}s — inconclusive. Check the handset, and that Evolution posts "
-            . 'messages.update to the webhook.');
+            "no rejection in {$wait}s — probably delivered. Check the handset: the success "
+            . 'callback has not been recorded on this tenant since 18 Jul.');
         return null;
     }
 
