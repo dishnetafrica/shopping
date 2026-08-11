@@ -112,6 +112,28 @@ class ZoneIn(BaseModel):
     polygon: list[list[int]]
     empty_below: float = 0.35
     low_below: float = 0.65
+    # P0-6 identity. Optional at creation because the installer draws zones before they
+    # know the aisle numbering, and refusing the zone would cost the site visit.
+    aisle: str = ""
+    shelf: str = ""
+    face: str = ""
+    skus: list[str] = []
+
+
+class ZonePatch(BaseModel):
+    """Everything about a zone that a person is allowed to change afterwards.
+
+    Note what is absent: `zone_uid`, and `camera_id`. The uid is the thing CloudBSS
+    joins on — letting it be edited would recreate the problem this endpoint exists to
+    solve. Moving a zone to a different camera is a different shelf; delete and redraw.
+    """
+    name: str | None = None
+    aisle: str | None = None
+    shelf: str | None = None
+    face: str | None = None
+    skus: list[str] | None = None
+    empty_below: float | None = None
+    low_below: float | None = None
 
 
 # ---------- pages ----------
@@ -252,6 +274,10 @@ ZONE_MIN_FRAME_FRACTION = 0.004
 # every evaluation, since each frame is scored against every reference.
 MAX_REFERENCES = 6
 
+# A zone is one shelf face. If someone is mapping more than this many products to it,
+# the zone is drawn round too much shelf and the alert would name the wrong thing.
+MAX_SKUS_PER_ZONE = 12
+
 
 def _zcol(row, name: str, default=None):
     """sqlite3.Row raises on an unknown key, so a box mid-upgrade needs this."""
@@ -282,17 +308,89 @@ def _check_zone_geometry(camera_id: int, polygon: list) -> None:
             f"Zoom the camera or draw a larger zone."))
 
 
+def _clean_skus(skus) -> list[str]:
+    """Trimmed, de-duplicated, order preserved, empties dropped.
+
+    Order is preserved because the first SKU is the one an alert names — "Sugar 1kg is
+    out on Aisle 3" reads better than a list of nine, and the installer puts the main line
+    first without being told to.
+    """
+    out, seen = [], set()
+    for s in (skus or []):
+        s = str(s).strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out[:MAX_SKUS_PER_ZONE]
+
+
 @app.post("/api/zones")
 def add_zone(z: ZoneIn):
     if len(z.polygon) < 3:
         raise HTTPException(400, "polygon needs at least 3 points")
     _check_zone_geometry(z.camera_id, z.polygon)
+    uid = db.new_zone_uid()
     with db.tx() as con:
         cur = con.execute(
-            "INSERT INTO zones (camera_id,name,polygon,empty_below,low_below) "
-            "VALUES (?,?,?,?,?)",
-            (z.camera_id, z.name, json.dumps(z.polygon), z.empty_below, z.low_below))
-        return {"id": cur.lastrowid}
+            "INSERT INTO zones (camera_id,name,polygon,empty_below,low_below,"
+            "zone_uid,aisle,shelf,face,skus) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (z.camera_id, z.name, json.dumps(z.polygon), z.empty_below, z.low_below,
+             uid, z.aisle.strip(), z.shelf.strip(), z.face.strip(),
+             json.dumps(_clean_skus(z.skus))))
+        return {"id": cur.lastrowid, "zone_uid": uid}
+
+
+@app.patch("/api/zones/{zone_id}")
+def update_zone(zone_id: int, patch: ZonePatch):
+    """Edit a zone without destroying it.
+
+    Before this existed there was no update path at all: POST, enroll, DELETE. Fixing a
+    typo in a zone name meant deleting and redrawing, which threw away the enrolled
+    reference, reset the state machine, and — because events travelled keyed on the NAME
+    — orphaned every past event for that shelf in CloudBSS under a name nothing pointed
+    at any more. An install with one typo lost its history to fix it.
+
+    `zone_uid` is deliberately not patchable. It is what CloudBSS joins on, and a
+    mutable join key is the problem, not the fix.
+    """
+    z = db.db().execute("SELECT * FROM zones WHERE id=?", (zone_id,)).fetchone()
+    if not z:
+        raise HTTPException(404, "no such zone")
+
+    sets, args = [], []
+    for col in ("name", "aisle", "shelf", "face"):
+        v = getattr(patch, col)
+        if v is not None:
+            v = v.strip()
+            if col == "name" and not v:
+                raise HTTPException(400, "a zone needs a name")
+            sets.append(f"{col}=?")
+            args.append(v)
+    if patch.skus is not None:
+        sets.append("skus=?")
+        args.append(json.dumps(_clean_skus(patch.skus)))
+    for col in ("empty_below", "low_below"):
+        v = getattr(patch, col)
+        if v is not None:
+            if not 0.0 <= v <= 1.0:
+                raise HTTPException(400, f"{col} must be between 0 and 1")
+            sets.append(f"{col}=?")
+            args.append(float(v))
+
+    lo = patch.empty_below if patch.empty_below is not None else z["empty_below"]
+    hi = patch.low_below if patch.low_below is not None else z["low_below"]
+    if lo is not None and hi is not None and lo >= hi:
+        raise HTTPException(400, (
+            f"empty_below ({lo}) must be below low_below ({hi}) — otherwise no fill "
+            f"score can ever be LOW and the zone jumps straight from stocked to empty"))
+
+    if not sets:
+        return {"ok": True, "changed": 0}
+    args.append(zone_id)
+    with db.tx() as con:
+        con.execute(f"UPDATE zones SET {', '.join(sets)} WHERE id=?", args)
+    row = db.db().execute("SELECT * FROM zones WHERE id=?", (zone_id,)).fetchone()
+    return {"ok": True, "changed": len(sets), "zone": db.row_to_dict(row)}
 
 
 @app.post("/api/zones/{zone_id}/enroll")

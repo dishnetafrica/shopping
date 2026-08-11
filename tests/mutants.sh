@@ -544,6 +544,76 @@ mutate "restocking no longer re-arms the escalation" app/scheduler.py \
   'escalated_at=NULL ' \
   ''
 
+# ── P0-6 mutants ──────────────────────────────────────────────────────────────────
+# Identity failures are silent by construction: the events keep arriving, they just
+# cannot be joined to anything. Each mutant restores a version of that silence.
+
+mutate "zones stop getting a uid" app/main.py \
+  '    uid = db.new_zone_uid()' \
+  '    uid = ""'
+
+mutate "every zone gets the SAME uid" app/db.py \
+  '    return uuid.uuid4().hex[:16]' \
+  '    return "0000000000000000"'
+
+mutate "pre-P0-6 zones are never backfilled" app/db.py \
+  '    _backfill_zone_uids(con)' \
+  '    pass'
+
+mutate "the backfill overwrites uids that already exist" app/db.py \
+  '        rows = con.execute("SELECT id FROM zones WHERE zone_uid IS NULL' \
+  '        rows = con.execute("SELECT id FROM zones WHERE 1 OR zone_uid IS NULL'
+
+mutate "the identity stops travelling in shelf events" app/events.py \
+  '        **zone_identity(zone_row),' \
+  ''
+
+mutate "a camera-level quality event invents a zone identity" app/scheduler.py \
+  '        zone_row=row if table == "zones" else None))' \
+  '        zone_row=row))'
+
+mutate "the sku list stops travelling" app/events.py \
+  '        "skus": skus,' \
+  '        "skus": [],'
+
+mutate "the named sku is taken from the end of the list" app/events.py \
+  '        "sku": skus[0] if skus else "",' \
+  '        "sku": skus[-1] if skus else "",'
+
+mutate "corrupt sku json blows up instead of degrading" app/events.py \
+  '    except ValueError:
+        skus = []' \
+  '    except ValueError:
+        raise'
+
+mutate "the zone patch endpoint is removed" app/main.py \
+  '@app.patch("/api/zones/{zone_id}")' \
+  '@app.get("/api/zones/{zone_id}/__disabled")'
+
+mutate "patching lets the uid be changed" app/main.py \
+  '    for col in ("name", "aisle", "shelf", "face"):' \
+  '    for col in ("name", "aisle", "shelf", "face", "zone_uid"):'
+
+mutate "an empty zone name is accepted" app/main.py \
+  '            if col == "name" and not v:' \
+  '            if False:'
+
+mutate "thresholds may cross over" app/main.py \
+  '    if lo is not None and hi is not None and lo >= hi:' \
+  '    if False:'
+
+mutate "thresholds may sit outside 0..1" app/main.py \
+  '            if not 0.0 <= v <= 1.0:' \
+  '            if False:'
+
+mutate "skus are stored unclean (duplicates, blanks, whitespace)" app/main.py \
+  '        args.append(json.dumps(_clean_skus(patch.skus)))' \
+  '        args.append(json.dumps(patch.skus))'
+
+mutate "the sku cap is removed" app/main.py \
+  '    return out[:MAX_SKUS_PER_ZONE]' \
+  '    return out'
+
 echo
 echo "  $killed killed, $survived survived"
 echo

@@ -6,6 +6,7 @@ import os
 import sqlite3
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 
 from . import redact
@@ -125,6 +126,18 @@ _ADDED_COLUMNS = [
     # different number and claimed to have happened at retry time. Storing what was
     # built removes the whole class of drift: the retry re-sends it verbatim.
     ("events", "payload", "TEXT"),
+    # P0-6, zone identity. Events used to travel keyed on the zone NAME alone, and there
+    # was no way to edit a zone at all — the only way to fix a typo was to delete and
+    # recreate, which destroys the enrolled reference and orphans every past event in
+    # CloudBSS under the old name. zone_uid is minted once and never changes.
+    ("zones", "zone_uid", "TEXT"),
+    ("zones", "aisle", "TEXT DEFAULT ''"),
+    ("zones", "shelf", "TEXT DEFAULT ''"),
+    ("zones", "face", "TEXT DEFAULT ''"),
+    # The zone→SKU map. CloudBSS's ingest controller says in as many words that joining
+    # shelf events to stock "needs zone→SKU mapping"; this is that mapping, captured at
+    # the moment someone is standing in front of the shelf drawing the zone.
+    ("zones", "skus", "TEXT DEFAULT '[]'"),
 ]
 
 
@@ -133,6 +146,30 @@ def _ensure_columns(con: sqlite3.Connection) -> None:
         have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
         if col not in have:
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    _backfill_zone_uids(con)
+
+
+def _backfill_zone_uids(con: sqlite3.Connection) -> None:
+    """Give every pre-P0-6 zone a permanent id.
+
+    An ALTER cannot generate one per row, and a zone without a uid would fall back to
+    being identified by its name — which is the exact failure P0-6 exists to end. Done
+    here rather than in a one-shot script so a box that upgrades, is restored from a
+    backup, and upgrades again still ends up with every zone identified.
+    """
+    try:
+        rows = con.execute("SELECT id FROM zones WHERE zone_uid IS NULL OR zone_uid=''").fetchall()
+    except sqlite3.Error:
+        return
+    for r in rows:
+        con.execute("UPDATE zones SET zone_uid=? WHERE id=?", (new_zone_uid(), r["id"]))
+
+
+def new_zone_uid() -> str:
+    """Opaque and permanent. Not derived from the name, the polygon or the camera —
+    all three are things an operator is allowed to change without the shelf becoming a
+    different shelf."""
+    return uuid.uuid4().hex[:16]
 
 
 def db() -> sqlite3.Connection:

@@ -112,7 +112,7 @@ REFERENCE_OK = "zone.reference_ok"
 
 
 def build_reference_payload(camera_name: str, zone_name: str, suspect: bool,
-                            ratio: float, enrolled_edge: float) -> dict:
+                            ratio: float, enrolled_edge: float, zone_row=None) -> dict:
     """This zone is probably not watching anything, and here is the arithmetic.
 
     Sent when a zone has repeatedly looked FULLER than every view it was enrolled
@@ -128,6 +128,7 @@ def build_reference_payload(camera_name: str, zone_name: str, suspect: bool,
         "store": store_id(),
         "camera": camera_name,
         "zone": zone_name,
+        **(zone_identity(zone_row) if zone_row is not None else {}),
         "from_state": "",
         "to_state": "re-enrol this zone" if suspect else "reference ok",
         "detail": (
@@ -144,7 +145,8 @@ def build_reference_payload(camera_name: str, zone_name: str, suspect: bool,
 
 
 def build_quality_payload(camera_name: str, zone_name: str | None, ok: bool,
-                          reason: str, detail: str, metrics: dict | None) -> dict:
+                          reason: str, detail: str, metrics: dict | None,
+                          zone_row=None) -> dict:
     """A frame we refused to read, or the recovery from one.
 
     `to_state` carries the reason rather than a shelf state, because that is what a
@@ -158,6 +160,7 @@ def build_quality_payload(camera_name: str, zone_name: str | None, ok: bool,
         "store": store_id(),
         "camera": camera_name,
         "zone": zone_name or "",
+        **(zone_identity(zone_row) if zone_row is not None else {}),
         "from_state": "",
         "to_state": reason or "ok",
         "detail": detail,
@@ -249,6 +252,7 @@ def build_payload(zone_row, camera_row, to_state: str, from_state: str,
         "store": store_id(),
         "camera": camera_row["name"],
         "zone": zone_row["name"],
+        **zone_identity(zone_row),
         "from_state": from_state,
         "to_state": to_state,
         "confidence": conf,
@@ -270,6 +274,34 @@ def _row_get(row, name: str, default=None):
     except (IndexError, KeyError, TypeError):
         return default
     return default if v is None else v
+
+
+def zone_identity(zone_row) -> dict:
+    """Who this shelf is, in terms that survive being renamed.
+
+    Every event used to travel keyed on `zone: <name>` and nothing else. Rename a zone
+    — which, before P0-6, you could only do by deleting and redrawing it — and CloudBSS
+    saw a brand-new shelf, with every past event stranded under a name nothing pointed
+    at any more.
+
+    `zone_uid` is the join key. `aisle`/`shelf`/`face` are for humans: "Aisle 3, bay 2,
+    left face" is a place someone can walk to, which is what an alert has to be. `skus`
+    is the map CloudBSS's own ingest controller says it is waiting for before shelf
+    events can be joined to stock.
+    """
+    skus = _row_get(zone_row, "skus", "[]")
+    try:
+        skus = json.loads(skus) if isinstance(skus, str) else list(skus or [])
+    except ValueError:
+        skus = []
+    return {
+        "zone_uid": _row_get(zone_row, "zone_uid", "") or "",
+        "aisle": _row_get(zone_row, "aisle", "") or "",
+        "shelf": _row_get(zone_row, "shelf", "") or "",
+        "face": _row_get(zone_row, "face", "") or "",
+        "skus": skus,
+        "sku": skus[0] if skus else "",     # the one an alert names
+    }
 
 
 def _human(seconds: float | None) -> str:

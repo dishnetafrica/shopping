@@ -137,7 +137,10 @@ def _quality_transition(table: str, row, ok: bool, verdict, cam_name: str,
         return                      # first good frame is not news
     events.send(events.build_quality_payload(
         cam_name, zone_name, ok, verdict.reason,
-        verdict.detail or "the picture can be read again", verdict.metrics))
+        verdict.detail or "the picture can be read again", verdict.metrics,
+        # A zone-level quality event is about a specific shelf, so it carries that
+        # shelf's identity. A camera-level one has no zone, and must not invent one.
+        zone_row=row if table == "zones" else None))
     log.info("quality %s/%s: %s -> %s (%s)", cam_name, zone_name or "-", was, now,
              verdict.reason or "ok")
 
