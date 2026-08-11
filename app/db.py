@@ -27,7 +27,15 @@ CREATE TABLE IF NOT EXISTS cameras (
   interval_s INTEGER DEFAULT 600,
   enabled INTEGER DEFAULT 1,
   last_ok_ts REAL,
-  last_error TEXT DEFAULT ''
+  last_error TEXT DEFAULT '',
+  consecutive_failures INTEGER DEFAULT 0,   -- P0-3: drives backoff and camera.offline
+  next_attempt_ts REAL,                     -- P0-3: when this camera may be tried again
+  health_state TEXT DEFAULT 'unknown',      -- unknown | online | offline
+  quality_state TEXT DEFAULT 'unknown',     -- unknown | ok | bad  (edge-triggered events)
+  quality_reason TEXT DEFAULT '',
+  quality_detail TEXT DEFAULT '',
+  quality_metrics TEXT DEFAULT '',          -- JSON, for the dashboard and for tuning
+  baseline_png BLOB                         -- enrolment view: movement + lighting reference
 );
 CREATE TABLE IF NOT EXISTS snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +56,10 @@ CREATE TABLE IF NOT EXISTS zones (
   pending_state TEXT DEFAULT '',
   pending_count INTEGER DEFAULT 0,
   last_fill REAL,
-  last_eval_ts REAL
+  last_eval_ts REAL,
+  quality_state TEXT DEFAULT 'unknown',     -- P0-3: obstruction is per zone, not per frame
+  quality_reason TEXT DEFAULT '',
+  quality_detail TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,11 +86,39 @@ def connect() -> sqlite3.Connection:
 _con = None
 
 
+# Columns added after v1.1 shipped. CREATE TABLE IF NOT EXISTS does nothing to a table
+# that already exists, so a box in the field would keep the old schema and every P0-3
+# write would fail. Each is added if missing; SQLite ALTER TABLE ADD COLUMN is cheap and
+# non-destructive, and doing it here means there is no migration step for an installer
+# to forget.
+_ADDED_COLUMNS = [
+    ("cameras", "consecutive_failures", "INTEGER DEFAULT 0"),
+    ("cameras", "next_attempt_ts", "REAL"),
+    ("cameras", "health_state", "TEXT DEFAULT 'unknown'"),
+    ("cameras", "quality_state", "TEXT DEFAULT 'unknown'"),
+    ("cameras", "quality_reason", "TEXT DEFAULT ''"),
+    ("cameras", "quality_detail", "TEXT DEFAULT ''"),
+    ("cameras", "quality_metrics", "TEXT DEFAULT ''"),
+    ("cameras", "baseline_png", "BLOB"),
+    ("zones", "quality_state", "TEXT DEFAULT 'unknown'"),
+    ("zones", "quality_reason", "TEXT DEFAULT ''"),
+    ("zones", "quality_detail", "TEXT DEFAULT ''"),
+]
+
+
+def _ensure_columns(con: sqlite3.Connection) -> None:
+    for table, col, decl in _ADDED_COLUMNS:
+        have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+        if col not in have:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
 def db() -> sqlite3.Connection:
     global _con
     if _con is None:
         _con = connect()
         _con.executescript(SCHEMA)
+        _ensure_columns(_con)
         _con.commit()
     return _con
 
@@ -114,6 +153,7 @@ def row_to_dict(row: sqlite3.Row, secret: str | None = None) -> dict:
     if "polygon" in d and isinstance(d["polygon"], str):
         d["polygon"] = json.loads(d["polygon"])
     d.pop("ref_descriptor", None)
+    d.pop("baseline_png", None)
     d.pop("password", None)
     d.pop("username", None)
     return redact.scrub_row(d, secret)

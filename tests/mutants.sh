@@ -38,7 +38,7 @@ PY
 }
 
 echo
-echo "  P0-1 delivery + P0-2 security mutants"
+echo "  P0-1 delivery + P0-2 security + P0-3 quality mutants"
 echo "  $(printf '─%.0s' {1..58})"
 
 # ── the original bug, put back exactly as it shipped ──────────────────────────────
@@ -244,6 +244,123 @@ mutate ".env is left world-readable" install.sh \
 mutate "visionctl calls the API unauthenticated" install.sh \
   '  status)  docker compose ps; echo; curl -sf -u "$AU:$AP" localhost:8080/api/health' \
   '  status)  docker compose ps; echo; curl -sf localhost:8080/api/health'
+
+# ══ P0-3 · the quality gate ═══════════════════════════════════════════════════════
+mutate "the gate is removed — bad frames get classified again" app/scheduler.py \
+  '    if not frame_q.ok:
+        log.info("skipping %s: %s", cam_row["name"], frame_q.detail)
+        return' \
+  '    if False:
+        return'
+
+mutate "the zone obstruction check is skipped" app/scheduler.py \
+  '            if not zone_q.ok:
+                log.info("skipping zone %s: %s", z["name"], zone_q.detail)
+                continue' \
+  '            if False:
+                continue'
+
+mutate "an undecodable frame goes back to silence" app/scheduler.py \
+  '        bad = quality.Verdict(False, "black", "the camera sent something that is not a picture", {})' \
+  '        return
+        bad = quality.Verdict(False, "black", "x", {})'
+
+mutate "lighting is measured by brightness again (fooled by stock)" app/quality.py \
+  '    return float(np.median(cur_gray[m].astype(np.float32) / base_gray[m].astype(np.float32)))' \
+  '    return float(np.mean(cur_gray) / max(np.mean(base_gray), 1e-6))'
+
+mutate "the lighting check is dropped" app/quality.py \
+  '        if abs(gain - 1.0) > LIGHT_CHANGE:' \
+  '        if False:'
+
+mutate "the movement check is dropped" app/quality.py \
+  '            if shift > MOVE_PX:' \
+  '            if False:'
+
+mutate "the blur check is dropped" app/quality.py \
+  '        if ratio < BLUR_RATIO_BELOW:' \
+  '        if False:'
+
+mutate "the black-frame backstop is dropped" app/quality.py \
+  '    if m["std"] < FLAT_BELOW:' \
+  '    if False:'
+
+mutate "the flat threshold rises and refuses an empty gondola" app/quality.py \
+  'FLAT_BELOW = float(os.environ.get("Q_FLAT_BELOW", "8"))' \
+  'FLAT_BELOW = float(os.environ.get("Q_FLAT_BELOW", "40"))'
+
+mutate "the lighting threshold tightens and refuses an empty gondola" app/quality.py \
+  'LIGHT_CHANGE = float(os.environ.get("Q_LIGHT_CHANGE", "0.18"))' \
+  'LIGHT_CHANGE = float(os.environ.get("Q_LIGHT_CHANGE", "0.005"))'
+
+mutate "obstruction fires on a plain empty shelf" app/quality.py \
+  'NOVEL_ABOVE = float(os.environ.get("Q_NOVEL_ABOVE", "0.05"))' \
+  'NOVEL_ABOVE = float(os.environ.get("Q_NOVEL_ABOVE", "0.001"))'
+
+mutate "obstruction stops firing at all" app/quality.py \
+  '    if blob > NOVEL_ABOVE:' \
+  '    if False:'
+
+mutate "the masked-out border counts as novel colour" app/quality.py \
+  '    area = float(inside.sum())' \
+  '    area = float(inside.size)'
+
+mutate "obstruction decides on scattered novelty (inverts on a busy shelf)" app/quality.py \
+  '    if blob > NOVEL_ABOVE:' \
+  '    if scattered > NOVEL_ABOVE:'
+
+mutate "the connected-component opening is dropped (JPEG fringes count)" app/quality.py \
+  '    opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))' \
+  '    opened = mask'
+
+mutate "the largest blob becomes the total novel area" app/quality.py \
+  '    blob = float(stats[1:, cv2.CC_STAT_AREA].max()) / area if count > 1 else 0.0' \
+  '    blob = float(stats[1:, cv2.CC_STAT_AREA].sum()) / area if count > 1 else 0.0'
+
+mutate "a bad frame resets a confirmation in progress" app/scheduler.py \
+  '        log.info("skipping %s: %s", cam_row["name"], frame_q.detail)
+        return' \
+  '        con2 = db.db()
+        con2.execute("UPDATE zones SET pending_count=0 WHERE camera_id=?", (cam_row["id"],))
+        con2.commit()
+        return'
+
+mutate "image.bad is emitted on every frame, not on change" app/scheduler.py \
+  '    if was == now:
+        return' \
+  '    if False:
+        return'
+
+# ── camera health ─────────────────────────────────────────────────────────────────
+mutate "a dead camera never reports offline" app/scheduler.py \
+  '    if fails >= OFFLINE_AFTER and (row["health_state"] or "unknown") != "offline":' \
+  '    if False:'
+
+mutate "offline is announced on every failed attempt" app/scheduler.py \
+  '    if fails >= OFFLINE_AFTER and (row["health_state"] or "unknown") != "offline":' \
+  '    if fails >= OFFLINE_AFTER:'
+
+mutate "recovery is never announced" app/scheduler.py \
+  '    if (row["health_state"] or "unknown") == "offline":' \
+  '    if False:'
+
+mutate "the backoff is removed (dead camera hammered every loop)" app/scheduler.py \
+  '    delay = min(60 * (2 ** min(fails - 1, 6)), BACKOFF_CAP_S)' \
+  '    delay = 0'
+
+mutate "the loop ignores next_attempt_ts" app/scheduler.py \
+  '    nxt = row["next_attempt_ts"]
+    if nxt:' \
+  '    nxt = None
+    if nxt:'
+
+mutate "enrolment stops capturing the baseline view" app/main.py \
+  '    baseline = quality.baseline_signature(img)' \
+  '    baseline = b""'
+
+mutate "the baseline blob is served over the API" app/db.py \
+  '    d.pop("baseline_png", None)' \
+  '    pass'
 
 echo
 echo "  $killed killed, $survived survived"

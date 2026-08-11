@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
-from . import auth, db, detector, events, redact, scheduler
+from . import auth, db, detector, events, quality, redact, scheduler
 from .cal import CameraConfig, available_drivers, discover, get_driver
 
 logging.basicConfig(level=logging.INFO,
@@ -264,11 +264,22 @@ def enroll_zone(zone_id: int):
         desc = detector.describe(img, json.loads(z["polygon"]))
     except ValueError as e:
         raise HTTPException(400, str(e))
+    # P0-3: enrolling a zone also fixes the camera's reference VIEW — the picture that
+    # later frames are compared against for movement and for lighting. Without it the
+    # gate has nothing to measure "since when" against, and a camera nudged by a cleaner
+    # goes on reporting STOCKED for ever against a reference describing another shelf.
+    baseline = quality.baseline_signature(img)
     with db.tx() as con:
         con.execute("UPDATE zones SET ref_descriptor=?, state='stocked', "
-                    "pending_state='', pending_count=0 WHERE id=?",
+                    "pending_state='', pending_count=0, quality_state='unknown', "
+                    "quality_reason='', quality_detail='' WHERE id=?",
                     (desc.to_json(), zone_id))
-    return {"ok": True, "edge_density": desc.edge_density}
+        con.execute("UPDATE cameras SET baseline_png=?, quality_state='unknown', "
+                    "quality_reason='', quality_detail='' WHERE id=?",
+                    (baseline, z["camera_id"]))
+    return {"ok": True, "edge_density": desc.edge_density,
+            "baseline_captured": bool(baseline),
+            "frame": quality.frame_metrics(img)}
 
 
 @app.delete("/api/zones/{zone_id}")
@@ -302,6 +313,17 @@ def api_selftest():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "ts": time.time(),
-            "cameras": len(db.list_cameras()),
-            "zones": db.db().execute("SELECT COUNT(*) c FROM zones").fetchone()["c"]}
+    con = db.db()
+    return {
+        "ok": True, "ts": time.time(),
+        "cameras": len(db.list_cameras()),
+        "zones": con.execute("SELECT COUNT(*) c FROM zones").fetchone()["c"],
+        # What a person actually wants to know before trusting a quiet dashboard:
+        # how much of this box is currently blind.
+        "cameras_offline": con.execute(
+            "SELECT COUNT(*) c FROM cameras WHERE health_state='offline'").fetchone()["c"],
+        "cameras_bad_image": con.execute(
+            "SELECT COUNT(*) c FROM cameras WHERE quality_state='bad'").fetchone()["c"],
+        "zones_obstructed": con.execute(
+            "SELECT COUNT(*) c FROM zones WHERE quality_state='bad'").fetchone()["c"],
+    }

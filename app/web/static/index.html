@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CloudBSS Vision — M1</title>
+<style>
+  :root{--void:#0B0B0D;--panel:#141417;--line:#26262B;--paper:#EFEDE6;--mute:#8E8E95;--red:#C8102E;--redh:#E42237;
+        --ok:#3CB454;--low:#EBA01E;--empty:#E42237;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--void);color:var(--paper);font:14px/1.5 system-ui,sans-serif;padding:18px}
+  h1{font-size:18px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
+  h1 b{color:var(--redh)}
+  .sub{color:var(--mute);font-size:12px;margin-bottom:16px}
+  h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:22px 0 10px}
+  .wrap{max-width:1200px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);padding:12px;border-radius:4px}
+  .card img{width:100%;display:block;border:1px solid var(--line);background:#000;cursor:crosshair}
+  .cam-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .cam-h b{font-size:14px}
+  .cam-h span{font-size:11px;color:var(--mute)}
+  .err{color:var(--redh);font-size:11px;margin-top:6px}
+  .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  button{background:#1C1C20;border:1px solid var(--line);color:var(--paper);padding:6px 10px;font-size:12px;
+         border-radius:3px;cursor:pointer}
+  button:hover{border-color:var(--redh)}
+  button.primary{background:var(--red);border-color:var(--red);color:#fff}
+  input,select{background:#101013;border:1px solid var(--line);color:var(--paper);padding:6px 8px;font-size:12.5px;border-radius:3px}
+  form.add{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;align-items:end}
+  label{font-size:10.5px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:3px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--mute);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em}
+  .st{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;text-transform:uppercase}
+  .st.stocked{background:rgba(60,180,84,.15);color:var(--ok)}
+  .st.low{background:rgba(235,160,30,.15);color:var(--low)}
+  .st.empty{background:rgba(228,34,55,.18);color:var(--empty)}
+  .st.unknown{background:#222;color:var(--mute)}
+  .zone-draw{outline:2px solid var(--redh)}
+  .hintline{font-size:11.5px;color:var(--mute);margin-top:6px}
+  .toast{position:fixed;bottom:16px;right:16px;background:var(--panel);border:1px solid var(--redh);
+         padding:10px 14px;font-size:12.5px;border-radius:4px;display:none;max-width:320px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CloudBSS <b>Vision</b> — Milestone 1</h1>
+  <div class="sub">Snapshot-first shelf monitoring · zone editor · empty / low / stocked · <span id="health">…</span></div>
+
+  <h2>Add camera</h2>
+  <div class="card">
+    <form class="add" id="addForm" onsubmit="return addCam(event)">
+      <div><label>Name</label><input id="f_name" required placeholder="Aisle 3 — Sugar"></div>
+      <div><label>Driver</label><select id="f_driver"></select></div>
+      <div><label>Host / IP</label><input id="f_host" placeholder="192.168.1.108"></div>
+      <div><label>Port</label><input id="f_port" value="80" type="number"></div>
+      <div><label>User</label><input id="f_user" placeholder="admin"></div>
+      <div><label>Password</label><input id="f_pass" type="password"></div>
+      <div><label>NVR channel</label><input id="f_ch" value="1" type="number"></div>
+      <div><label>RTSP URL (rtsp driver)</label><input id="f_rtsp" placeholder="rtsp://…"></div>
+      <div><label>Interval s</label><input id="f_int" value="600" type="number"></div>
+      <div><button class="primary">Add camera</button></div>
+    </form>
+    <div class="btns"><button onclick="discoverLan()">Discover ONVIF devices on LAN</button><span id="disc" class="hintline"></span></div>
+  </div>
+
+  <h2>Cameras</h2>
+  <div class="grid" id="cams"></div>
+
+  <h2>Zones</h2>
+  <div class="card" style="overflow-x:auto"><table id="zonesT">
+    <thead><tr><th>Zone</th><th>Camera</th><th>State</th><th>Fill</th><th>Thresholds</th><th></th></tr></thead>
+    <tbody></tbody></table>
+    <div class="hintline">To create a zone: click <b>Draw zone</b> on a camera, click ≥3 points on the image, then <b>Finish zone</b>. Enroll it while the shelf is <b>fully stocked</b>.</div>
+  </div>
+
+  <h2>Events</h2>
+  <div class="card" style="overflow-x:auto"><table id="evT">
+    <thead><tr><th>Time</th><th>Camera</th><th>Zone</th><th>Change</th><th>Fill</th></tr></thead>
+    <tbody></tbody></table></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let drawing = null; // {camId, points:[]}
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';
+  clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3500);}
+async function j(url,opt){const r=await fetch(url,opt);if(!r.ok){let d='';try{d=(await r.json()).detail}catch(e){}
+  throw new Error(d||r.status)}return r.json();}
+
+async function loadDrivers(){const d=await j('/api/drivers');
+  document.getElementById('f_driver').innerHTML=d.map(x=>`<option>${x}</option>`).join('');}
+
+async function addCam(e){e.preventDefault();
+  try{await j('/api/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    name:f_name.value,driver:f_driver.value,host:f_host.value,port:+f_port.value||80,
+    username:f_user.value,password:f_pass.value,channel:+f_ch.value||1,
+    rtsp_url:f_rtsp.value,interval_s:+f_int.value||600,enabled:true})});
+    toast('Camera added');refresh();}catch(err){toast('Add failed: '+err.message)}return false;}
+
+async function discoverLan(){disc.textContent='scanning…';
+  try{const d=await j('/api/discover');
+    disc.textContent=d.length?('found: '+d.map(x=>x.host).join(', ')):'no ONVIF replies (check VLAN / NVR subnet)';}
+  catch(e){disc.textContent='scan failed'}}
+
+async function refresh(){
+  try{const h=await j('/api/health');
+    document.getElementById('health').textContent=`${h.cameras} cameras · ${h.zones} zones`;}catch(e){}
+  const cams=await j('/api/cameras');
+  const box=document.getElementById('cams');box.innerHTML='';
+  for(const c of cams){
+    const div=document.createElement('div');div.className='card';
+    const ts=c.last_snapshot_ts?new Date(c.last_snapshot_ts*1000).toLocaleTimeString():'no snapshot yet';
+    div.innerHTML=`<div class="cam-h"><b>${c.name}</b><span>${c.driver} · ${ts}</span></div>
+      <img id="img${c.id}" src="${c.last_snapshot_id?`/api/cameras/${c.id}/latest.jpg?t=${Date.now()}`:''}"
+           alt="" onclick="imgClick(event,${c.id})">
+      ${c.last_error?`<div class="err">${c.last_error}</div>`:''}
+      ${c.quality_state==='bad'?`<div class="err">Not reading this camera — ${c.quality_reason}: ${c.quality_detail}</div>`:''}
+      ${c.health_state==='offline'?`<div class="err">Camera offline (${c.consecutive_failures} failed attempts)</div>`:''}
+      <div class="btns">
+        <button onclick="cap(${c.id})">Capture now</button>
+        <button onclick="test(${c.id})">Test connection</button>
+        <button onclick="startDraw(${c.id})">Draw zone</button>
+        <button onclick="finishDraw(${c.id})">Finish zone</button>
+        <button onclick="delCam(${c.id})" style="margin-left:auto">✕</button>
+      </div>`;
+    box.appendChild(div);
+    if(drawing&&drawing.camId===c.id)document.getElementById('img'+c.id).classList.add('zone-draw');
+  }
+  const zs=await j('/api/zones');const camName={};cams.forEach(c=>camName[c.id]=c.name);
+  document.querySelector('#zonesT tbody').innerHTML=zs.map(z=>`<tr>
+    <td>${z.name}</td><td>${camName[z.camera_id]||z.camera_id}</td>
+    <td><span class="st ${z.state}">${z.state}</span>${z.quality_state==='bad'?` <span class="st low" title="${z.quality_detail||''}">${z.quality_reason}</span>`:''}</td>
+    <td>${z.last_fill==null?'—':z.last_fill.toFixed(2)}</td>
+    <td>&lt;${z.empty_below} empty · &lt;${z.low_below} low</td>
+    <td><button onclick="enroll(${z.id})">Enroll stocked</button>
+        <button onclick="delZone(${z.id})">✕</button></td></tr>`).join('');
+  const evs=await j('/api/events');
+  document.querySelector('#evT tbody').innerHTML=evs.map(e=>`<tr>
+    <td>${new Date(e.ts*1000).toLocaleString()}</td><td>${e.camera_name}</td><td>${e.zone_name}</td>
+    <td><span class="st ${e.from_state}">${e.from_state}</span> → <span class="st ${e.to_state}">${e.to_state}</span></td>
+    <td>${e.fill==null?'—':e.fill.toFixed(2)}</td></tr>`).join('');
+}
+
+async function cap(id){try{await j(`/api/cameras/${id}/capture`,{method:'POST'});refresh();}
+  catch(e){toast('Capture failed: '+e.message);refresh();}}
+async function test(id){try{const r=await j(`/api/cameras/${id}/test`,{method:'POST'});
+  toast((r.ok?'OK: ':'FAIL: ')+r.detail);}catch(e){toast('Test failed: '+e.message)}}
+async function delCam(id){if(!confirm('Delete camera and its zones?'))return;
+  await j('/api/cameras/'+id,{method:'DELETE'});refresh();}
+async function delZone(id){await j('/api/zones/'+id,{method:'DELETE'});refresh();}
+async function enroll(id){try{await j(`/api/zones/${id}/enroll`,{method:'POST'});
+  toast('Reference enrolled — zone is live');refresh();}catch(e){toast('Enroll failed: '+e.message)}}
+
+function startDraw(camId){drawing={camId,points:[]};refresh();
+  toast('Click ≥3 points on the image, then Finish zone');}
+function imgClick(ev,camId){
+  if(!drawing||drawing.camId!==camId)return;
+  const img=ev.target,r=img.getBoundingClientRect();
+  const x=Math.round((ev.clientX-r.left)*img.naturalWidth/r.width);
+  const y=Math.round((ev.clientY-r.top)*img.naturalHeight/r.height);
+  drawing.points.push([x,y]);toast(`point ${drawing.points.length}: ${x},${y}`);}
+async function finishDraw(camId){
+  if(!drawing||drawing.camId!==camId||drawing.points.length<3){toast('Need ≥3 points');return;}
+  const name=prompt('Zone name (e.g. Sugar shelf, level 2):');if(!name){drawing=null;refresh();return;}
+  try{await j('/api/zones',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({camera_id:camId,name,polygon:drawing.points})});
+    toast('Zone saved — now Enroll while fully stocked');}catch(e){toast('Save failed: '+e.message)}
+  drawing=null;refresh();}
+
+loadDrivers();refresh();setInterval(refresh,10000);
+</script>
+</body>
+</html>

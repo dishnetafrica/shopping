@@ -23,7 +23,7 @@ import subprocess
 
 import pytest
 
-from app import db, detector, events, scheduler
+from app import db, detector, events, quality, scheduler
 from tests.cloudbss_stub import (StubCloudBSS, cloudbss_src, validation_rules,
                                  vision_events_columns)
 
@@ -428,10 +428,17 @@ def test_fresh_install_delivers_its_first_real_event(clean_env, fresh_box):
     """The whole point of P0-1, from an empty data directory.
 
     A box out of the factory: no database, no cameras. Add a camera and a zone, enrol
-    the zone on a stocked shelf, then show it an empty one twice (the hysteresis needs
-    two confirmations). A row must appear in the vision_events replica.
+    the zone on a stocked shelf, then show it the same aisle with that row emptied,
+    twice (the hysteresis needs two confirmations). A row must appear in the
+    vision_events replica.
+
+    The frames come from tests/frames.py — a gondola with three rows, boards, rails and
+    a floor. They used to be a 240x320 image that was ENTIRELY one shelf, and once P0-3
+    added the quality gate that fixture was correctly refused: a frame with nothing in
+    it but a flat empty panel is genuinely indistinguishable from a dead channel. The
+    fixture was wrong, not the gate.
     """
-    import numpy as np
+    from tests.frames import ZONE, FULL, MIDDLE_EMPTY, aisle
 
     rules = validation_rules(SRC)
     with StubCloudBSS(token="tok-live").with_contract(rules) as cloud:
@@ -442,41 +449,35 @@ def test_fresh_install_delivers_its_first_real_event(clean_env, fresh_box):
 
         assert db.list_cameras() == [], "the box should start with nothing"
 
-        # a stocked shelf and the same shelf emptied
-        def shelf(n):
-            img = np.full((240, 320, 3), 70, np.uint8)
-            for i in range(n):
-                x = i * 50 + 6
-                img[60:220, x:x + 40] = (200, 76, 60)
-                img[100:116, x + 6:x + 34] = (240, 240, 240)
-            return img
-
-        poly = [[4, 4], [316, 4], [316, 236], [4, 236]]
+        stocked = aisle(FULL, seed=1)
         with db.tx() as con:
             cam = con.execute(
                 "INSERT INTO cameras (name, driver, interval_s) VALUES ('Aisle 3','demo',600)"
             ).lastrowid
-            ref = detector.describe(shelf(6), poly)
+            ref = detector.describe(stocked, ZONE)
             con.execute(
                 "INSERT INTO zones (camera_id,name,polygon,ref_descriptor,state) "
                 "VALUES (?,?,?,?,'stocked')",
-                (cam, "Sugar level 2", json.dumps(poly), ref.to_json()))
+                (cam, "Sugar level 2", json.dumps(ZONE), ref.to_json()))
+            con.execute("UPDATE cameras SET baseline_png=? WHERE id=?",
+                        (quality.baseline_signature(stocked), cam))
 
         cam_row = db.db().execute("SELECT * FROM cameras WHERE id=?", (cam,)).fetchone()
         import cv2
-        empty_jpeg = cv2.imencode(".jpg", shelf(0))[1].tobytes()
+        empty_jpeg = cv2.imencode(".jpg", aisle(MIDDLE_EMPTY, seed=3))[1].tobytes()
 
         scheduler.evaluate_zones(cam_row, None, empty_jpeg)      # 1st: pending
         assert cloud.requests == [], "one frame must not raise an alert"
+        cam_row = db.db().execute("SELECT * FROM cameras WHERE id=?", (cam,)).fetchone()
         scheduler.evaluate_zones(cam_row, None, empty_jpeg)      # 2nd: confirmed
 
-        assert len(cloud.requests) == 1, "a confirmed empty shelf was not delivered"
-        rows = cloud.rows()
-        assert len(rows) == 1
-        assert rows[0]["event"] == "shelf.out_of_stock"
-        assert rows[0]["store"] == "family-shoppers-01"
-        assert rows[0]["zone"] == "Sugar level 2"
-        assert rows[0]["to_state"] == "empty"
+        shelf_events = [r for r in cloud.rows() if str(r["event"]).startswith("shelf.")]
+        assert len(shelf_events) == 1, (
+            f"a confirmed empty shelf was not delivered; got {[dict(r) for r in cloud.rows()]}")
+        assert shelf_events[0]["event"] == "shelf.out_of_stock"
+        assert shelf_events[0]["store"] == "family-shoppers-01"
+        assert shelf_events[0]["zone"] == "Sugar level 2"
+        assert shelf_events[0]["to_state"] == "empty"
         assert cloud.rejections == []
 
 

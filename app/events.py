@@ -98,6 +98,70 @@ def config_problems() -> tuple[list[str], list[str]]:
 EVENT_NAMES = {"empty": "shelf.out_of_stock", "low": "shelf.low_stock",
                "stocked": "shelf.restocked", "unknown": "shelf.unknown"}
 
+# P0-3. The vocabulary the audit found missing: the box could see nothing, or see
+# rubbish, and say nothing at all about either. Both are EDGE-TRIGGERED — a dirty lens
+# at a ten-minute cadence would otherwise post 144 identical events a day.
+IMAGE_BAD = "image.bad"
+IMAGE_OK = "image.ok"
+CAMERA_OFFLINE = "camera.offline"
+CAMERA_ONLINE = "camera.online"
+
+
+def build_quality_payload(camera_name: str, zone_name: str | None, ok: bool,
+                          reason: str, detail: str, metrics: dict | None) -> dict:
+    """A frame we refused to read, or the recovery from one.
+
+    `to_state` carries the reason rather than a shelf state, because that is what a
+    person needs: "image.bad / blurred" is actionable — someone wipes a lens — whereas
+    a bare "bad" is not. `fill` and `confidence` are deliberately absent: this event is
+    the system saying it does NOT know, and putting a number on that would be the same
+    dishonesty as the fabricated confidence the audit found.
+    """
+    return {
+        "event": IMAGE_OK if ok else IMAGE_BAD,
+        "store": store_id(),
+        "camera": camera_name,
+        "zone": zone_name or "",
+        "from_state": "",
+        "to_state": reason or "ok",
+        "detail": detail,
+        "metrics": metrics or {},
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+
+
+def build_camera_payload(camera_name: str, online: bool, detail: str,
+                         failures: int = 0) -> dict:
+    return {
+        "event": CAMERA_ONLINE if online else CAMERA_OFFLINE,
+        "store": store_id(),
+        "camera": camera_name,
+        "zone": "",
+        "from_state": "offline" if online else "online",
+        "to_state": "online" if online else "offline",
+        "detail": detail,
+        "failures": failures,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+
+
+def send(payload: dict) -> bool:
+    """Deliver a payload that has no row in the local events table.
+
+    Health and quality events are about the box, not about a shelf, so they are not
+    stored as zone transitions. They still go through post_payload — the one place
+    anything crosses the wire — so they carry the same token and the same timeout, and
+    a self-test proving delivery proves these too.
+    """
+    if not webhook_url():
+        log.info("event %s (%s) [no webhook configured]", payload.get("event"), payload.get("camera"))
+        return False
+    ok, detail = post_payload(payload)
+    if not ok:
+        log.warning("could not deliver %s for %s: %s", payload.get("event"),
+                    payload.get("camera"), detail)
+    return ok
+
 
 def build_payload(zone_row, camera_row, to_state: str, from_state: str,
                   fill: float, thumb_jpeg: bytes | None) -> dict:
