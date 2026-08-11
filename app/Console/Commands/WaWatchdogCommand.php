@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Services\WhatsApp\EvolutionAdmin;
 use App\Services\WhatsApp\EvolutionGateway;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -20,11 +21,30 @@ use Illuminate\Support\Facades\Log;
  *
  * State is stored on the tenant so the panel and /papi can read it without extra queries:
  *   wa_status ('open'|'connecting'|'down'), wa_down_since, wa_last_ok, wa_reconnect_tries, wa_alerted_at
+ *   wa_delivery ('ok'|'failing'), wa_delivery_since, wa_delivery_alerted_at
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * 11 Aug 2026 — DELIVERY WATCHDOG.
+ *
+ * This command asked one question — "is the connection open?" — and Evolution answered "open"
+ * every five minutes for twenty-four days while every single outbound message was rejected by
+ * WhatsApp with error 463. The shop's bot wrote perfect replies to 24 days of customers and not
+ * one of them was delivered. Nobody found out until somebody happened to notice.
+ *
+ * "Connected" and "able to deliver" are different facts and only the second one matters. The
+ * webhook has been stamping wa_send_ok_at on every delivery receipt and wa_send_err_at on every
+ * rejection the whole time. Nothing ever read them. Now something does.
+ *
+ * The discriminator that makes this safe is deliberate: alarm only when there are RECENT ERRORS
+ * *and* no recent success. A quiet shop with no traffic has a stale wa_send_ok_at and nothing
+ * wrong with it; alarming on staleness alone would cry wolf every Sunday and get the watchdog
+ * muted, and a muted watchdog is worse than none.
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
  */
 class WaWatchdogCommand extends Command
 {
     protected $signature = 'wa:watchdog';
-    protected $description = 'Detect dropped WhatsApp connections, attempt reconnect, and alert owners.';
+    protected $description = 'Detect dropped WhatsApp connections and undeliverable numbers, attempt reconnect, and alert owners.';
 
     /** Minutes a number must stay down before we alarm (rides out brief blips / Evolution restarts). */
     private const GRACE_MIN = 12;
@@ -32,6 +52,13 @@ class WaWatchdogCommand extends Command
     private const REALERT_HOURS = 6;
     /** Don't nudge a reconnect more than once per this many minutes. */
     private const RECONNECT_EVERY_MIN = 10;
+
+    /** A delivery rejection this recent means we are actively trying and actively failing. */
+    private const DELIVERY_ERR_WINDOW_MIN = 90;
+    /** No successful delivery for this long, while errors keep arriving, is a dead number. */
+    private const DELIVERY_STALE_HOURS = 6;
+    /** Re-alert at most this often while delivery is still broken (hours). */
+    private const DELIVERY_REALERT_HOURS = 12;
 
     public function handle(EvolutionAdmin $evo): int
     {
@@ -43,6 +70,7 @@ class WaWatchdogCommand extends Command
         $now      = now();
         $checked  = 0;
         $down     = 0;
+        $undeliv  = 0;
         $liveInst = 0;
 
         foreach (Tenant::all() as $t) {
@@ -67,6 +95,9 @@ class WaWatchdogCommand extends Command
 
             if ($state === 'open') {
                 $this->onHealthy($t, $now);
+                // A number can be perfectly connected and still deliver nothing. Only worth asking
+                // when the link is up: if it's down, that is already the headline.
+                if ($this->deliveryCheck($t, $now)) $undeliv++;
                 continue;
             }
             if ($state === 'connecting') {
@@ -99,8 +130,102 @@ class WaWatchdogCommand extends Command
         }
         if ($extra) $this->info("wa:watchdog also checked {$extra} extra numbers, {$extraDown} down.");
 
-        $this->info("wa:watchdog checked {$checked} instances, {$down} down.");
+        $this->info("wa:watchdog checked {$checked} instances, {$down} down, {$undeliv} connected-but-undeliverable.");
         return self::SUCCESS;
+    }
+
+    /**
+     * Connected, but is anything actually arriving?
+     *
+     * Reads the two stamps the webhook has always written:
+     *   wa_send_ok_at  — a DELIVERY_ACK / READ came back
+     *   wa_send_err_at — WhatsApp rejected a send (status ERROR)
+     *
+     * Returns true when this tenant is currently undeliverable.
+     */
+    private function deliveryCheck(Tenant $t, Carbon $now): bool
+    {
+        $errAt = $this->stamp($t->setting('wa_send_err_at'));
+        $okAt  = $this->stamp($t->setting('wa_send_ok_at'));
+
+        // No rejection ever, or none for a while: either healthy or simply quiet. A shop with no
+        // traffic must never be alarmed at — that is how a watchdog gets muted.
+        if (! $errAt || $errAt->diffInMinutes($now) > self::DELIVERY_ERR_WINDOW_MIN) {
+            return $this->deliveryHealthy($t, $now);
+        }
+        // The most recent thing that happened was a success — a single rejection is normal
+        // (blocked contact, number not on WhatsApp) and must not raise an alarm.
+        if ($okAt && $okAt->greaterThan($errAt)) {
+            return $this->deliveryHealthy($t, $now);
+        }
+        // Rejections are arriving, but something got through recently enough that the number
+        // is clearly still working.
+        if ($okAt && $okAt->diffInHours($now) < self::DELIVERY_STALE_HOURS) {
+            return $this->deliveryHealthy($t, $now);
+        }
+
+        // Errors now, nothing delivered for hours. The number is up and mute.
+        $since = $t->setting('wa_delivery_since') ?: ($okAt ? $okAt->toIso8601String() : $now->toIso8601String());
+        $t->putSetting('wa_delivery', 'failing');
+        $t->putSetting('wa_delivery_since', $since);
+
+        $mutedFor = $okAt ? $okAt->diffForHumans($now, ['syntax' => Carbon::DIFF_ABSOLUTE]) : 'as long as we have records';
+        Log::warning('wa.delivery_failing', [
+            'tenant' => $t->id, 'last_ok' => $okAt?->toIso8601String(), 'last_err' => $errAt->toIso8601String(),
+        ]);
+
+        $lastAlert = $this->stamp($t->setting('wa_delivery_alerted_at'));
+        if ($lastAlert && $lastAlert->diffInHours($now) < self::DELIVERY_REALERT_HOURS) return true;
+        if (! $this->insideBusinessHours($t, $now)) return true;   // detected now, told at a sane hour
+
+        $t->putSetting('wa_delivery_alerted_at', $now->toIso8601String());
+
+        // NOTE: deliberately NOT NotifyOwner. That sends through the shop's own number, which is
+        // precisely the one that cannot deliver — the alert would be swallowed by the fault it is
+        // reporting. Same reasoning as WhatsappConnectionAlert's separate alert instance.
+        $this->platformPush($t,
+            "⚠️ {$t->name}: your WhatsApp is CONNECTED but messages are not reaching customers.\n\n"
+            . "Nothing has been delivered for {$mutedFor}. The bot is still replying — those replies "
+            . "are being rejected by WhatsApp.\n\nThis needs the operator; reconnecting will not fix it.");
+
+        if (function_exists('Sentry\\captureMessage')) {
+            try { \Sentry\captureMessage("WhatsApp delivering nothing for tenant {$t->id} (last ok {$mutedFor} ago)"); }
+            catch (\Throwable $e) {}
+        }
+
+        return true;
+    }
+
+    /** Clear the failing state, and say so once if it had been failing. */
+    private function deliveryHealthy(Tenant $t, Carbon $now): bool
+    {
+        if ((string) $t->setting('wa_delivery', 'ok') === 'failing') {
+            $t->putSetting('wa_delivery_alerted_at', null);
+            $t->putSetting('wa_delivery_since', null);
+            // Delivery works again, so the shop's own number can carry the good news.
+            try {
+                \App\Jobs\NotifyOwner::dispatch($t->id,
+                    "✅ Your WhatsApp is delivering to customers again.");
+            } catch (\Throwable $e) { /* best-effort */ }
+            Log::info('wa.delivery_recovered', ['tenant' => $t->id]);
+        }
+        $t->putSetting('wa_delivery', 'ok');
+        return false;
+    }
+
+    /** Tenant-local business hours, so a 3am detection becomes a 7am message. */
+    private function insideBusinessHours(Tenant $t, Carbon $now): bool
+    {
+        $offset = (int) $t->setting('tz_offset', 3);            // EAT by default
+        $hour   = ((int) $now->copy()->utc()->format('G') + $offset + 24) % 24;
+        return $hour >= 7 && $hour < 21;
+    }
+
+    private function stamp($value): ?Carbon
+    {
+        $value = trim((string) $value);
+        if ($value === '') return null;
+        try { return Carbon::parse($value); } catch (\Throwable $e) { return null; }
     }
 
     private function onHealthy(Tenant $t, \Illuminate\Support\Carbon $now): void
@@ -156,7 +281,9 @@ class WaWatchdogCommand extends Command
 
         // The in-panel banner is already armed (wa_status=down → window.WA_STATUS). Optionally also
         // push to the owner's personal number from a platform ops instance, if one is configured.
-        $this->platformPush($t);
+        $this->platformPush($t,
+            "⚠️ {$t->name}: your shop's WhatsApp has disconnected and is not taking orders. "
+            . "Open your panel → Setup to reconnect (scan the QR).");
 
         Log::warning('wa.down_alert', ['tenant' => $t->id, 'down_min' => $downMin, 'state' => $state]);
         if (function_exists('Sentry\\captureMessage')) {
@@ -164,28 +291,38 @@ class WaWatchdogCommand extends Command
         }
     }
 
-    /** Best-effort push to the owner's own number via a platform ops instance (if configured). */
-    private function platformPush(Tenant $t): void
+    /**
+     * Best-effort push to the owner's own number via a platform ops instance (if configured).
+     * Takes the message, because the two things it reports — a dead link and a mute number —
+     * need very different words and lead to very different actions.
+     */
+    private function platformPush(Tenant $t, string $message): void
     {
         $opsInstance = (string) env('PLATFORM_WA_INSTANCE', '');
-        if ($opsInstance === '') return;
+        if ($opsInstance === '') {
+            Log::warning('wa.no_ops_instance', ['tenant' => $t->id]);
+            return;
+        }
 
         $owner = \App\Models\User::withoutGlobalScopes()
             ->where('tenant_id', $t->id)
             ->orderByRaw("CASE WHEN role = 'owner' THEN 0 ELSE 1 END")
             ->first();
-        $phone = $owner?->phone ?: (string) $t->whatsapp_number;
-        if (! $phone) return;
 
-        try {
-            app(EvolutionGateway::class)->sendText(
-                $opsInstance,
-                preg_replace('/\D/', '', $phone),
-                "⚠️ {$t->name}: your shop's WhatsApp has disconnected and is not taking orders. "
-                . "Open your panel → Setup to reconnect (scan the QR)."
-            );
-        } catch (\Throwable $e) {
-            Log::warning('wa.platform_push_failed', ['tenant' => $t->id, 'err' => $e->getMessage()]);
+        $recipients = array_filter([
+            $owner?->phone ?: (string) $t->whatsapp_number,
+            (string) config('whatsapp.operator_alert_phone', ''),
+        ]);
+        $recipients = array_values(array_unique(array_map(fn ($p) => preg_replace('/\D/', '', (string) $p), $recipients)));
+        if (! $recipients) return;
+
+        foreach ($recipients as $to) {
+            if ($to === '') continue;
+            try {
+                app(EvolutionGateway::class)->sendText($opsInstance, $to, $message);
+            } catch (\Throwable $e) {
+                Log::warning('wa.platform_push_failed', ['tenant' => $t->id, 'to' => $to, 'err' => $e->getMessage()]);
+            }
         }
     }
 
