@@ -100,8 +100,17 @@ class VisionIngestTest extends TestCase
             ->postJson('/api/vision/events', $this->gatewayPayload())->assertOk();
 
         $ev = VisionEvent::withoutGlobalScopes()->latest('id')->first();
-        $this->assertSame('2026-08-11 06:20:00', (string) $ev->occurred_at->utc()->format('Y-m-d H:i:s'),
-            'the +0300 offset was not honoured — an event was filed at the wrong time');
+
+        // occurred_at has NO cast on the model, so this is a naive string written by
+        // date() in the app's timezone. Compare INSTANTS, not formatted text — asserting
+        // a literal "06:20:00" would pass or fail depending on APP_TIMEZONE, which is a
+        // test that breaks when someone deploys to a different region.
+        $stored = \Illuminate\Support\Carbon::parse((string) $ev->occurred_at, config('app.timezone'));
+        $this->assertSame(
+            strtotime('2026-08-11T09:20:00+0300'),
+            $stored->getTimestamp(),
+            'the +0300 offset was not honoured — the event was filed at the wrong moment'
+        );
     }
 
     public function test_no_token_is_rejected(): void

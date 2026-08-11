@@ -305,6 +305,72 @@ def test_a_401_does_not_mark_the_event_delivered(clean_env, fresh_box):
 
 # ══ 4. the CloudBSS contract, and end to end ══════════════════════════════════════
 
+def test_selftest_delivers_without_any_camera(clean_env, fresh_box):
+    """The check for a box that has no camera, no zone and no shelf — most boxes, on day one."""
+    with StubCloudBSS(token="tok-abc") as cloud:
+        clean_env.setenv("STORE_ID", "juba-main-01")
+        clean_env.setenv("EVENT_WEBHOOK_URL", cloud.url)
+        clean_env.setenv("VISION_TOKEN", "tok-abc")
+
+        res = events.selftest()
+
+        assert res["ok"] is True, res
+        assert res["store"] == "juba-main-01"
+        assert len(cloud.requests) == 1
+        body = cloud.requests[0]["body"]
+        assert body["event"] == "shelf.selftest", "the test event must be identifiable in the table"
+        assert body["store"] == "juba-main-01"
+        assert cloud.requests[0]["token"] == "tok-abc"
+        assert db.db().execute("SELECT COUNT(*) c FROM events").fetchone()["c"] == 0, (
+            "the self-test must not litter the local events table")
+
+
+def test_selftest_reports_a_rejected_token_in_plain_words(clean_env, fresh_box):
+    """A wrong token is invisible until something is refused. Say which failure it is."""
+    with StubCloudBSS(token="the-right-one") as cloud:
+        clean_env.setenv("STORE_ID", "juba-main-01")
+        clean_env.setenv("EVENT_WEBHOOK_URL", cloud.url)
+        clean_env.setenv("VISION_TOKEN", "the-wrong-one")
+
+        res = events.selftest()
+
+        assert res["ok"] is False
+        assert "401" in res["detail"]
+        assert "token" in res["detail"].lower(), (
+            "a 401 must name the token as the thing to fix, not just echo a status code")
+
+
+def test_selftest_says_so_when_there_is_no_webhook(clean_env, fresh_box):
+    clean_env.setenv("STORE_ID", "juba-main-01")
+    res = events.selftest()
+    assert res["ok"] is False and "EVENT_WEBHOOK_URL" in res["detail"]
+
+
+def test_selftest_uses_the_same_path_as_a_real_event(clean_env, fresh_box):
+    """If the self-test and real delivery drift apart, the self-test stops being evidence."""
+    import inspect
+    src = inspect.getsource(events)
+    assert src.count("requests.post(") == 1, (
+        "there must be exactly one place an event crosses the wire; the self-test and "
+        "deliver() must both go through post_payload()")
+    assert "ok, detail = post_payload(payload)" in inspect.getsource(events.deliver)
+    assert "ok, detail = post_payload(payload)" in inspect.getsource(events.selftest)
+
+
+def test_installer_proves_the_uplink_before_finishing(gateway_root):
+    sh = open(os.path.join(gateway_root, "install.sh"), encoding="utf-8").read()
+    assert "selftest)" in sh, "visionctl has no selftest verb for a return visit"
+    assert "Delivering one test event" in sh, "install.sh never proves CloudBSS accepts anything"
+    tail = sh.split("Delivering one test event", 1)[1]
+    # Pin the actual call, not merely the word: /api/selftest also appears in the
+    # visionctl verb further down, so a looser check passes with the call removed.
+    assert "curl -sf -X POST localhost:8080/api/selftest" in tail, (
+        "the install does not actually call the self-test endpoint")
+    assert "exit 1" in tail, (
+        "an install whose test event is refused must fail — a box that cannot report "
+        "is the exact thing this milestone exists to make impossible")
+
+
 SRC = cloudbss_src()
 needs_cloud = pytest.mark.skipif(SRC is None, reason="CloudBSS source not available (set CLOUDBSS_SRC)")
 

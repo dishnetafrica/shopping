@@ -103,18 +103,46 @@ docker compose up -d --build
 
 cat > /usr/local/bin/visionctl << 'EOF'
 #!/usr/bin/env bash
-# visionctl — status | logs | restart | update | stop
+# visionctl — status | selftest | logs | restart | update | stop
 cd /opt/cloudbss-vision || exit 1
 case "${1:-status}" in
   status)  docker compose ps; echo; curl -sf localhost:8080/api/health && echo || echo "API not responding";;
+  selftest) curl -sf -X POST localhost:8080/api/selftest && echo || echo "gateway not responding";;
   logs)    docker compose logs -f --tail=100;;
   restart) docker compose restart;;
   stop)    docker compose down;;
   update)  docker compose up -d --build;;
-  *) echo "usage: visionctl {status|logs|restart|update|stop}";;
+  *) echo "usage: visionctl {status|selftest|logs|restart|update|stop}";;
 esac
 EOF
 chmod +x /usr/local/bin/visionctl
+
+# ── prove the uplink before anyone leaves ─────────────────────────────────────────
+# Config verification above proves the values reached the container. This proves
+# CloudBSS actually ACCEPTS them — a wrong token looks identical until an event is
+# refused. Skippable for a deliberately offline install.
+if [ -n "$EVENT_WEBHOOK_URL" ] && [ "${SKIP_SELFTEST:-0}" != "1" ]; then
+  echo "-- Waiting for the gateway to come up…"
+  ok=0
+  for _ in $(seq 1 30); do
+    curl -sf localhost:8080/api/health >/dev/null 2>&1 && { ok=1; break; }
+    sleep 2
+  done
+  if [ "$ok" != 1 ]; then
+    echo "!! The gateway did not come up. It may be refusing to start — run: visionctl logs" >&2
+    exit 1
+  fi
+  echo "-- Delivering one test event to CloudBSS…"
+  RESULT="$(curl -sf -X POST localhost:8080/api/selftest || true)"
+  case "$RESULT" in
+    *'"ok":true'*) echo "-- Delivered. Look for event 'shelf.selftest' in CloudBSS vision_events." ;;
+    *) echo "!! The test event was NOT accepted by CloudBSS:" >&2
+       echo "   $RESULT" >&2
+       echo "   The box is installed but cannot report. Fix the token or URL in $DEST/.env," >&2
+       echo "   then: visionctl restart && visionctl selftest" >&2
+       exit 1 ;;
+  esac
+fi
 
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo

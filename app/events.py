@@ -115,19 +115,70 @@ def build_payload(zone_row, camera_row, to_state: str, from_state: str,
     }
 
 
+def post_payload(payload: dict) -> tuple[bool, str]:
+    """The one place an event crosses the wire. Returns (delivered, detail).
+
+    Extracted so the self-test below can prove the REAL delivery path — same URL, same
+    token header, same timeout — without inventing a fake zone and a fake event row to
+    carry it. If this and the self-test drift apart, the self-test stops being evidence.
+    """
+    try:
+        headers = {"X-Vision-Token": token()} if token() else {}
+        r = requests.post(webhook_url(), json=payload, timeout=TIMEOUT, headers=headers)
+        r.raise_for_status()
+        return True, f"HTTP {r.status_code}"
+    except requests.RequestException as e:
+        detail = str(e)
+        resp = getattr(e, "response", None)
+        if resp is not None:
+            body = (resp.text or "")[:200]
+            detail = f"HTTP {resp.status_code}: {body}"
+            if resp.status_code == 401:
+                detail += "  → CloudBSS rejected the token. Check VISION_TOKEN here matches "\
+                          "VISION_WEBHOOK_TOKEN there, or claim this box."
+        return False, detail
+
+
+def selftest() -> dict:
+    """Deliver one clearly-marked event and say plainly whether it arrived.
+
+    This exists because a box can be installed, configured and running with every light
+    green while delivering nothing — which is exactly what happened. It needs no camera,
+    no zone and no shelf, so it is the one check that can be run the moment a box is
+    plugged in, before anyone has hung a lens.
+
+    It writes a real row in CloudBSS. That is the point: something you can go and look at.
+    """
+    if not webhook_url():
+        return {"ok": False, "detail": "no EVENT_WEBHOOK_URL configured — nothing to test"}
+    payload = {
+        "event": "shelf.selftest",
+        "store": store_id(),
+        "camera": "selftest",
+        "zone": "selftest",
+        "from_state": "unknown",
+        "to_state": "unknown",
+        "confidence": None,
+        "fill": None,
+        "thumbnail": None,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+    ok, detail = post_payload(payload)
+    log.info("selftest: %s (%s)", "DELIVERED" if ok else "FAILED", detail)
+    return {"ok": ok, "detail": detail, "store": store_id(), "url": webhook_url()}
+
+
 def deliver(event_id: int, payload: dict) -> None:
     if not webhook_url():
         log.info("event %s (%s/%s -> %s) [no webhook configured]",
                  event_id, payload["camera"], payload["zone"], payload["to_state"])
         return
-    try:
-        headers = {"X-Vision-Token": token()} if token() else {}
-        r = requests.post(webhook_url(), json=payload, timeout=TIMEOUT, headers=headers)
-        r.raise_for_status()
+    ok, detail = post_payload(payload)
+    if ok:
         with db.tx() as con:
             con.execute("UPDATE events SET delivered=1 WHERE id=?", (event_id,))
-    except requests.RequestException as e:
-        log.warning("webhook delivery failed for event %s: %s (will retry)", event_id, e)
+    else:
+        log.warning("webhook delivery failed for event %s: %s (will retry)", event_id, detail)
 
 
 def retry_undelivered(limit: int = 20) -> None:

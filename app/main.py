@@ -260,6 +260,17 @@ def api_events(limit: int = 50):
     return [dict(r) for r in rows]
 
 
+@app.post("/api/selftest")
+def api_selftest():
+    """Prove the uplink without a camera, a zone or a shelf.
+
+    `visionctl selftest` calls this. It delivers one clearly-marked event through the
+    real path and reports whether CloudBSS took it — the check to run the minute a box
+    is plugged in, and before anyone leaves the shop.
+    """
+    return events.selftest()
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True, "ts": time.time(),

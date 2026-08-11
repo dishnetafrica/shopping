@@ -142,6 +142,31 @@ mutate "an install with no store id proceeds anyway" install.sh \
   'if [ -z "$STORE_ID" ]; then' \
   'if false; then'
 
+# ── the self-test (the only check a box with no camera can run) ───────────────────
+mutate "the self-test always claims success" app/events.py \
+  '    ok, detail = post_payload(payload)
+    log.info("selftest:' \
+  '    ok, detail = True, "faked"
+    log.info("selftest:'
+
+mutate "the self-test bypasses the real delivery path" app/events.py \
+  '    ok, detail = post_payload(payload)
+    log.info("selftest:' \
+  '    ok, detail = (requests.post(webhook_url(), json=payload, timeout=TIMEOUT).ok, "direct")
+    log.info("selftest:'
+
+mutate "a rejected token stops being explained" app/events.py \
+  '            if resp.status_code == 401:' \
+  '            if False:'
+
+mutate "the self-test event loses its identifiable name" app/events.py \
+  '        "event": "shelf.selftest",' \
+  '        "event": "shelf.out_of_stock",'
+
+mutate "install.sh stops proving the uplink" install.sh \
+  '  RESULT="$(curl -sf -X POST localhost:8080/api/selftest || true)"' \
+  '  RESULT=SKIPPED'
+
 echo
 echo "  $killed killed, $survived survived"
 echo
