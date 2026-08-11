@@ -142,6 +142,55 @@ def _quality_transition(table: str, row, ok: bool, verdict, cam_name: str,
              verdict.reason or "ok")
 
 
+def _col(row, name: str, default=None):
+    """Read a column that may not exist on a box mid-upgrade.
+
+    sqlite3.Row raises IndexError for an unknown key rather than returning None, so a
+    plain row[name] here would crash every evaluation on any box whose migration has
+    not run yet — turning an additive feature into an outage.
+    """
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return default
+
+
+def _assess_zone_multi(crop_hsv, refs):
+    """Obstructed only if the view is novel against EVERY enrolled reference.
+
+    Judging against one arbitrary reference would undo the point of having several: a
+    zone enrolled morning and evening would be called "obstructed" every time the light
+    matched the other view. A shopper is novel against all of them; a lighting change
+    is explained by one.
+    """
+    verdict = None
+    for r in refs:
+        v = quality.assess_zone(crop_hsv, r.hist, detector.HIST_BINS)
+        if v.ok:
+            return v
+        verdict = verdict or v
+    return verdict
+
+
+def _reference_check(z, cur_desc, refs, cam_name: str) -> None:
+    """Is this zone's enrolled reference still believable?"""
+    ratio = detector.suspect_ratio(cur_desc, refs)
+    count, flagged, changed = detector.step_suspect(
+        int(_col(z, "ref_suspect_count", 0) or 0),
+        bool(_col(z, "ref_suspect", 0) or 0),
+        ratio)
+    with db.tx() as con:
+        con.execute("UPDATE zones SET ref_suspect=?, ref_suspect_count=? WHERE id=?",
+                    (int(flagged), count, z["id"]))
+    if not changed:
+        return
+    enrolled = refs[0].edge_density if refs else 0.0
+    payload = events.build_reference_payload(cam_name, z["name"], flagged, ratio, enrolled)
+    events.send(payload)
+    log.warning("REFERENCE %s %s/%s ratio %.2f",
+                "SUSPECT" if flagged else "OK", cam_name, z["name"], ratio)
+
+
 def evaluate_zones(cam_row, snap_id: int, jpeg: bytes) -> None:
     zones = db.db().execute(
         "SELECT * FROM zones WHERE camera_id=? AND ref_descriptor IS NOT NULL",
@@ -170,18 +219,37 @@ def evaluate_zones(cam_row, snap_id: int, jpeg: bytes) -> None:
         try:
             polygon = json.loads(z["polygon"])
             cur_desc = detector.describe(img, polygon)
-            ref = detector.ZoneDescriptor.from_json(z["ref_descriptor"])
+            refs = detector.references_from_json(
+                z["ref_descriptor"], _col(z, "ref_descriptors"))
+            if not refs:
+                log.warning("zone %s has no usable reference", z["id"])
+                continue
+            # P0-4: BEFORE the obstruction gate, deliberately.
+            #
+            # A zone enrolled on a half-empty shelf sees the missing facings return as
+            # colours its reference never contained, and the obstruction check calls
+            # that "something is in front of this shelf" — then skips the zone. So the
+            # bad reference hid behind a permanent, confidently wrong obstruction alert
+            # that sends staff to inspect a shelf where nothing is wrong.
+            #
+            # Running the check first is safe because the two conditions push the ratio
+            # in OPPOSITE directions. Measured against a correct reference: dark coat
+            # 0.81, red jacket 0.77, wide dark object 0.34, brightest narrow object
+            # 1.145 — an obstruction is a flat thing that destroys texture. A reference
+            # captured under-stocked reads 1.42 at 4 of 6 facings and 1.79 at 3. No
+            # obstruction reaches the threshold; that is physics, not luck.
+            _reference_check(z, cur_desc, refs, cam_row["name"])
 
             # Obstruction is per zone: a shopper stands in front of ONE shelf, not the
             # aisle. Checked before the fill score is trusted, never after.
             crop_hsv = cv2.cvtColor(detector._crop_zone(img, polygon), cv2.COLOR_BGR2HSV)
-            zone_q = quality.assess_zone(crop_hsv, ref.hist, detector.HIST_BINS)
+            zone_q = _assess_zone_multi(crop_hsv, refs)
             _quality_transition("zones", z, zone_q.ok, zone_q, cam_row["name"], z["name"])
             if not zone_q.ok:
                 log.info("skipping zone %s: %s", z["name"], zone_q.detail)
                 continue
 
-            fill = detector.fill_score(cur_desc, ref)
+            fill = detector.fill_score_multi(cur_desc, refs)
         except Exception as e:  # bad polygon / view shifted — surface, don't crash
             log.warning("zone %s eval failed: %s", z["id"], e)
             continue

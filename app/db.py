@@ -103,6 +103,14 @@ _ADDED_COLUMNS = [
     ("zones", "quality_state", "TEXT DEFAULT 'unknown'"),
     ("zones", "quality_reason", "TEXT DEFAULT ''"),
     ("zones", "quality_detail", "TEXT DEFAULT ''"),
+    # P0-4. ref_descriptors holds the JSON ARRAY of enrolled views; ref_descriptor
+    # (the original single column) stays populated with the newest one so anything
+    # still reading it — including a box mid-upgrade — keeps working unchanged.
+    ("zones", "ref_descriptors", "TEXT"),
+    ("zones", "ref_suspect", "INTEGER DEFAULT 0"),
+    ("zones", "ref_suspect_count", "INTEGER DEFAULT 0"),
+    ("zones", "enrolled_edge", "REAL"),
+    ("zones", "enrolled_ts", "REAL"),
 ]
 
 

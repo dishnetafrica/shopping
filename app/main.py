@@ -238,10 +238,55 @@ def zones(camera_id: int | None = None):
     return [db.row_to_dict(r) for r in db.db().execute(q + " ORDER BY id", args)]
 
 
+# P0-4. The runbook says "shelf faces only, 3–8 per camera" and nothing enforced it,
+# so a zone could cover half an aisle and the detector would average four shelves into
+# one number that never moves. These bounds are what is actually measurable from the
+# geometry, and they are honest about their limits: they catch a zone drawn round a
+# whole gondola or a sliver too small to score, and they cannot tell one shelf face
+# from two stacked ones. That distinction needs the operator's eyes.
+ZONE_MAX_FRAME_FRACTION = 0.35
+ZONE_MIN_FRAME_FRACTION = 0.004
+
+# Enough for morning / midday / evening / night on a store that runs long hours.
+# Unbounded would let a nightly re-enrol script grow the row without limit and slow
+# every evaluation, since each frame is scored against every reference.
+MAX_REFERENCES = 6
+
+
+def _zcol(row, name: str, default=None):
+    """sqlite3.Row raises on an unknown key, so a box mid-upgrade needs this."""
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return default
+
+
+def _check_zone_geometry(camera_id: int, polygon: list) -> None:
+    snap = db.latest_snapshot(camera_id)
+    if not snap:
+        return                          # nothing to measure against yet; not a reason to block
+    img = cv2.imread(snap["path"])
+    if img is None:
+        return
+    frame_area = float(img.shape[0] * img.shape[1])
+    area = abs(cv2.contourArea(np.array(polygon, dtype=np.int32)))
+    frac = area / frame_area if frame_area else 0.0
+    if frac > ZONE_MAX_FRAME_FRACTION:
+        raise HTTPException(400, (
+            f"this zone covers {frac:.0%} of the camera's view — that is a gondola, not a "
+            f"shelf face. Several shelves averaged into one score never moves: draw one "
+            f"zone per shelf face."))
+    if frac < ZONE_MIN_FRAME_FRACTION:
+        raise HTTPException(400, (
+            f"this zone covers {frac:.2%} of the view — too few pixels to score reliably. "
+            f"Zoom the camera or draw a larger zone."))
+
+
 @app.post("/api/zones")
 def add_zone(z: ZoneIn):
     if len(z.polygon) < 3:
         raise HTTPException(400, "polygon needs at least 3 points")
+    _check_zone_geometry(z.camera_id, z.polygon)
     with db.tx() as con:
         cur = con.execute(
             "INSERT INTO zones (camera_id,name,polygon,empty_below,low_below) "
@@ -251,8 +296,30 @@ def add_zone(z: ZoneIn):
 
 
 @app.post("/api/zones/{zone_id}/enroll")
-def enroll_zone(zone_id: int):
-    """Capture the current view as this zone's FULLY STOCKED reference."""
+def enroll_zone(zone_id: int, replace: bool = False, force: bool = False):
+    """Capture the current view as this zone's FULLY STOCKED reference.
+
+    P0-4 changes two things about what that sentence means.
+
+    **It can refuse.** A frame too dark, too blurred or too washed out to SCORE is
+    certainly too poor to become the definition of "full" for the life of the zone.
+    The gate that guards scoring now guards enrolment, which is where a bad frame does
+    permanent rather than momentary damage. `force=true` overrides it for an operator
+    who knows the aisle is genuinely dim and wants that to be the reference.
+
+    **It appends.** Store lighting changes through the day, and a single reference makes
+    that read as stock movement. Enrol the same zone morning and evening and each frame
+    is scored against whichever view it resembles most. `replace=true` discards the
+    older ones — for when the shelf has been re-planogrammed and the old views are
+    describing a different product.
+
+    What it deliberately does NOT do is judge whether the shelf is full. That question
+    has no answer from one frame with nothing to compare against, which is precisely
+    what enrolment is creating — measured on the fixtures, lighting moves every
+    single-frame stock proxy further than stock does. A reference taken on a
+    half-empty shelf is caught later instead, in operation, by the suspect-ratio check
+    in the scheduler.
+    """
     z = db.db().execute("SELECT * FROM zones WHERE id=?", (zone_id,)).fetchone()
     if not z:
         raise HTTPException(404, "no such zone")
@@ -260,6 +327,23 @@ def enroll_zone(zone_id: int):
     if not snap:
         raise HTTPException(409, "no snapshot for this camera yet — capture first")
     img = cv2.imread(snap["path"])
+    if img is None:
+        raise HTTPException(409, "the stored snapshot is not a readable image")
+
+    # No baseline is passed: enrolment IS the baseline, so movement and lighting-drift
+    # checks have nothing to compare against and would be meaningless here. The
+    # absolute backstops — black, dark, blown out, blurred — are what apply.
+    verdict = quality.assess_frame(img, None)
+    if not verdict.ok and not force:
+        raise HTTPException(409, {
+            "error": "frame not good enough to enrol",
+            "reason": verdict.reason,
+            "detail": verdict.detail,
+            "hint": "fix the view and capture again, or repeat with ?force=true to "
+                    "enrol anyway and accept this as the definition of a full shelf",
+            "metrics": verdict.metrics,
+        })
+
     try:
         desc = detector.describe(img, json.loads(z["polygon"]))
     except ValueError as e:
@@ -268,16 +352,30 @@ def enroll_zone(zone_id: int):
     # later frames are compared against for movement and for lighting. Without it the
     # gate has nothing to measure "since when" against, and a camera nudged by a cleaner
     # goes on reporting STOCKED for ever against a reference describing another shelf.
+    existing = [] if replace else detector.references_from_json(
+        z["ref_descriptor"], _zcol(z, "ref_descriptors"))
+    refs = existing + [desc]
+    refs = refs[-MAX_REFERENCES:]
+    refs_json = json.dumps([{"edge_density": r.edge_density, "hist": r.hist} for r in refs])
+
     baseline = quality.baseline_signature(img)
     with db.tx() as con:
-        con.execute("UPDATE zones SET ref_descriptor=?, state='stocked', "
+        # ref_descriptor keeps the newest view so a box whose migration has not run,
+        # and anything else still reading the single column, behaves exactly as before.
+        # ref_suspect is cleared: re-enrolling is the operator answering the complaint,
+        # and leaving the flag set would keep alarming about a reference they replaced.
+        con.execute("UPDATE zones SET ref_descriptor=?, ref_descriptors=?, state='stocked', "
                     "pending_state='', pending_count=0, quality_state='unknown', "
-                    "quality_reason='', quality_detail='' WHERE id=?",
-                    (desc.to_json(), zone_id))
+                    "quality_reason='', quality_detail='', ref_suspect=0, "
+                    "ref_suspect_count=0, enrolled_edge=?, enrolled_ts=? WHERE id=?",
+                    (desc.to_json(), refs_json, desc.edge_density, time.time(), zone_id))
         con.execute("UPDATE cameras SET baseline_png=?, quality_state='unknown', "
                     "quality_reason='', quality_detail='' WHERE id=?",
                     (baseline, z["camera_id"]))
     return {"ok": True, "edge_density": desc.edge_density,
+            "references": len(refs),
+            "replaced": bool(replace),
+            "forced": bool(force and not verdict.ok),
             "baseline_captured": bool(baseline),
             "frame": quality.frame_metrics(img)}
 

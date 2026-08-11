@@ -105,6 +105,40 @@ IMAGE_BAD = "image.bad"
 IMAGE_OK = "image.ok"
 CAMERA_OFFLINE = "camera.offline"
 CAMERA_ONLINE = "camera.online"
+REFERENCE_SUSPECT = "zone.reference_suspect"
+REFERENCE_OK = "zone.reference_ok"
+
+
+def build_reference_payload(camera_name: str, zone_name: str, suspect: bool,
+                            ratio: float, enrolled_edge: float) -> dict:
+    """This zone is probably not watching anything, and here is the arithmetic.
+
+    Sent when a zone has repeatedly looked FULLER than every view it was enrolled
+    against — the signature of a reference captured while the shelf was not full.
+    Such a zone reports STOCKED permanently and would otherwise never be questioned.
+
+    `to_state` says what to do rather than what was measured, because the person
+    reading it on WhatsApp needs an instruction, not a statistic. The numbers ride
+    along underneath for anyone who wants to check the claim.
+    """
+    return {
+        "event": REFERENCE_OK if not suspect else REFERENCE_SUSPECT,
+        "store": store_id(),
+        "camera": camera_name,
+        "zone": zone_name,
+        "from_state": "",
+        "to_state": "re-enrol this zone" if suspect else "reference ok",
+        "detail": (
+            f"this shelf has looked {ratio:.2f}x fuller than its enrolled reference "
+            f"on several checks in a row — the reference was probably captured while "
+            f"the shelf was not full, so this zone cannot report it empty"
+            if suspect else
+            "this zone no longer looks fuller than its reference"
+        ),
+        "ratio": round(float(ratio), 3),
+        "enrolled_edge_density": round(float(enrolled_edge), 5),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
 
 
 def build_quality_payload(camera_name: str, zone_name: str | None, ok: bool,

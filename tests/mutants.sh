@@ -28,7 +28,7 @@ PY
     echo "  ⚠ stale mutant (pattern not found): $name"
     survived=$((survived+1)); rm -rf "$tmp"; return
   fi
-  if (cd "$tmp" && python3 -m pytest tests/ -q -p no:warnings >/dev/null 2>&1); then
+  if (cd "$tmp" && python3 -m pytest ${MUT_TESTS:-tests/} -q -p no:warnings >/dev/null 2>&1); then
     echo "  ✗ SURVIVED: $name"
     survived=$((survived+1))
   else
@@ -361,6 +361,84 @@ mutate "enrolment stops capturing the baseline view" app/main.py \
 mutate "the baseline blob is served over the API" app/db.py \
   '    d.pop("baseline_png", None)' \
   '    pass'
+
+# ── P0-4 mutants ──────────────────────────────────────────────────────────────────
+# The failure this work exists for is SILENT. Every mutant below restores a version of
+# that silence, and each one must be caught, or the alarm is decoration.
+
+mutate "the suspect threshold is raised past every real error" app/detector.py \
+  'SUSPECT_ABOVE = float(os.environ.get("D_SUSPECT_ABOVE", "1.25"))' \
+  'SUSPECT_ABOVE = float(os.environ.get("D_SUSPECT_ABOVE", "9.99"))'
+
+mutate "the suspect threshold is dropped into the lighting band" app/detector.py \
+  'SUSPECT_ABOVE = float(os.environ.get("D_SUSPECT_ABOVE", "1.25"))' \
+  'SUSPECT_ABOVE = float(os.environ.get("D_SUSPECT_ABOVE", "1.05"))'
+
+mutate "one bad frame raises the alarm (hysteresis removed)" app/detector.py \
+  'SUSPECT_CONFIRMATIONS = int(os.environ.get("D_SUSPECT_CONFIRMATIONS", "3"))' \
+  'SUSPECT_CONFIRMATIONS = int(os.environ.get("D_SUSPECT_CONFIRMATIONS", "1"))'
+
+mutate "a normal frame no longer resets the run" app/detector.py \
+  '    else:
+        count = 0' \
+  '    else:
+        pass'
+
+mutate "the standing alarm re-fires every capture" app/detector.py \
+  '    if should and not flagged:' \
+  '    if should:'
+
+mutate "the alarm never clears after re-enrolment" app/detector.py \
+  '    if flagged and count == 0:' \
+  '    if False:'
+
+mutate "suspect_ratio takes the max, so one bad reference accuses the zone" app/detector.py \
+  '    return min(edge_ratio_raw(current, r) for r in references)' \
+  '    return max(edge_ratio_raw(current, r) for r in references)'
+
+mutate "multi-reference averages instead of taking the best match" app/detector.py \
+  '    return max(fill_score(current, r) for r in references)' \
+  '    return sum(fill_score(current, r) for r in references) / len(references)'
+
+mutate "the reference array is ignored (single reference only)" app/detector.py \
+  '    if many:' \
+  '    if False:'
+
+mutate "a corrupt reference array blinds the zone instead of falling back" app/detector.py \
+  '            out = []          # corrupt array: fall back rather than blind the zone' \
+  '            raise'
+
+mutate "enrolment accepts a frame it would refuse to score" app/main.py \
+  '    if not verdict.ok and not force:' \
+  '    if False:'
+
+mutate "enrolment always replaces, losing the other lighting references" app/main.py \
+  '    existing = [] if replace else detector.references_from_json(' \
+  '    existing = [] if True else detector.references_from_json('
+
+mutate "the reference cap is removed" app/main.py \
+  '    refs = refs[-MAX_REFERENCES:]' \
+  '    refs = refs'
+
+mutate "re-enrolling no longer clears the suspect flag" app/main.py \
+  'ref_suspect=0, ' \
+  ''
+
+mutate "a zone may cover the whole gondola" app/main.py \
+  '    if frac > ZONE_MAX_FRAME_FRACTION:' \
+  '    if False:'
+
+mutate "a sliver zone is accepted" app/main.py \
+  '    if frac < ZONE_MIN_FRAME_FRACTION:' \
+  '    if False:'
+
+mutate "the scheduler stops checking the reference at all" app/scheduler.py \
+  '            _reference_check(z, cur_desc, refs, cam_row["name"])' \
+  '            pass'
+
+mutate "the scheduler scores against one reference again" app/scheduler.py \
+  '            fill = detector.fill_score_multi(cur_desc, refs)' \
+  '            fill = detector.fill_score(cur_desc, refs[0])'
 
 echo
 echo "  $killed killed, $survived survived"
