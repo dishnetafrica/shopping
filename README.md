@@ -1,47 +1,78 @@
-# CloudBSS updates — deploy guide (for your developer)
+# wa:test — can a shop actually deliver to this number?
 
-Add these files into the GitHub repo, then **Rebuild** in EasyPanel and run the post-deploy commands
-at the bottom.
+One file, `app/Console/Commands/WaTestCommand.php`. Your Dockerfile already does `COPY app/`,
+so it ships with a normal rebuild. **No migration, no schedule change, no config change.**
 
-## ⚠️ Read first — your live code is AHEAD of this copy in one place
-We confirmed (from the live Settings screen) that your production **Settings** file has tabs this copy
-doesn't (Notifications, Storefront, Delivery, Payments). So the Settings file has been **left out of this
-zip on purpose** — overwriting it would delete those tabs.
+Upload it to `app/Console/Commands/` in your repo, commit, press **Deploy** in EasyPanel.
 
-Because of that, when you add these files in GitHub, **review the diff** before committing. Almost all of
-this session's changes have already deployed cleanly (Buy product, Books, delivery fix, etc.), so only the
-Settings file was actually diverged — but a quick diff review is the safe habit.
-
-## What's in this zip (all verified to compile)
-**New files (safe to add):**
-- `resources/panel/situation-report.html` — the visual "Books" report page
-- `app/Console/Commands/StockWatchCommand.php` — stock parity watchdog (`stock:watch`)
-- `app/Support/Base64Upload.php` — file-attachment helper for tasks
-- `database/migrations/2026_07_28_000001_*`, `..._000002_*` — task ref-no + customer link
-
-**Edited files (review diff, then overwrite):**
-- **Quotation PDF fix (new this round):** `app/Capability/Object/QuotationCapability.php` — the Documents-tab link now opens the PDF via `/papi/quotation-pdf` instead of the broken storage URL.
-- Bot: `app/Services/Bot/AiBrain.php` (big-order handling + Juba-store delivery language)
-- Bot image-burst guard: `app/Jobs/ProcessIncomingMessage.php` — when a customer sends many photos at once, the bot answers the first, sends ONE "which items?" nudge on the second, then stays quiet (instead of replying to every photo). Tunable via the `image_burst_reply` setting.
-- Supplier "Buy product": `app/Capability/Object/SupplierCapability.php`, `app/Http/Controllers/Panel/OrderCostController.php`
-- Date pickers: `CampaignListCapability`, `CashbookCapability`, `ScheduledOrdersCapability`, `WorkOrderCapability`, `WorkOrderListCapability`, `LeadListCapability`, `DemandPlanListCapability`
-- Finance fixes: `MoneyTimingCapability` (cash tile all-currencies), `PayablesCalculator`, `SupplierController`, `SupplierListCapability`
-- Books menu: `resources/views/shell.blade.php`, `PanelApiController.php`
-- Tasks: `TasksCapability`, `CustomerCapability`, `TaskEngine`, `OrderTask`, `TaskApiController`, `CashbookDigestCommand`, `TaskDigestCommand`, `TaskReminderCommand`
-- `CoreCapabilityProvider.php`, `bootstrap/app.php`, `routes/web.php`
-
-## NOT in this zip (do by hand)
-**Bot "Item suggestions" on/off toggle** — needs 2 small edits to your *current* Settings files (not the
-stale ones), so it's excluded. Meanwhile, turn suggestions off with this URL while logged in as owner:
-`mycloudbss.com/papi/bot-toggle?key=combo_recommendations&on=0`  (…&on=1 to re-enable).
-Ask for the paste-in snippet when you want the in-app switch.
-
-## Post-deploy commands
+```bash
+php artisan wa:test 211927797217                 # from tenant 17 (default)
+php artisan wa:test 211927797217 --tenant=7      # from one specific shop
+php artisan wa:test 211927797217 --all           # from every shop with an instance, compared
+php artisan wa:test 211927797217 --all --dry     # readiness table only, sends NOTHING
 ```
-php artisan migrate            # applies the two task migrations
-php artisan config:clear && php artisan route:clear && php artisan view:clear
-php artisan queue:restart
+
+Exit code **0** = at least one warm test went through without a rejection. **1** = it didn't.
+
+---
+
+## The thing this tool exists to stop you doing
+
+You want to compare Family Shoppers against a shop that works. That's the right instinct, but
+done naively it produces a confident wrong answer, because **error 463 has two unrelated causes**:
+
+- **Cold reach-out** — the shop is messaging someone who has never messaged it. WhatsApp refuses
+  this as anti-spam. Completely normal. Says nothing about the shop's health.
+- **Warm refusal** — the shop is replying to an existing conversation and is *still* refused.
+  This is the broken case. It means the session has lost its privacy tokens.
+
+Family Shoppers is failing **warm**. If you test another shop against 211927797217 and that shop
+has never messaged the number, it will fail **cold** — and you'd conclude "both are broken, so
+it's Evolution", which is the opposite of the truth.
+
+So every row is labelled `WARM` or `cold`, based on whether that tenant has any prior contact
+with the number in `bot_events` or `messages`. The final verdict is computed from warm tests only,
+and cold results are explicitly excluded. If every test came out cold, the command tells you it
+cannot answer the question rather than guessing.
+
+---
+
+## Reading the output
+
+The readiness table comes first, and it's worth reading before the sends:
+
 ```
-Notes: `stock:watch` stays dormant until the stock ledger is enabled (see the runbook in
-`_deploy-notes/`). Nothing here changes money or deletes data. The per-feature notes from this session
-are collected in `_deploy-notes/` for reference.
+  id   shop                   instance         evolution   temp   prior contact
+  ---------------------------------------------------------------------------
+  17   Family Shoppers        shopbot_t17      open        WARM   1,204 events
+  7    Patronics Services     shopbot_t7       open        cold   never — cold reach-out
+  12   Krishna Wellness       shopbot_t12      NOT IN EVOLUTION
+```
+
+`NOT IN EVOLUTION` means the tenant row points at an instance Evolution has never heard of.
+That is a real and silent failure mode — tenant 17 had a stale `shopbot_t17_3` channel row
+exactly like that, and nothing anywhere reported it.
+
+Then per send:
+
+- **accepted by gateway: yes** — the gateway took the message. This is *not* delivery. Evolution
+  returned 201 for every one of the 142 messages it refused on 11 August.
+- **REFUSED** — a `send_failed` row landed for this number while we watched. Definitive.
+- **no refusal in Ns** — nothing came back. Encouraging, not proof. The receipt path can be down
+  and look identical to success, which is why the command tells you to check the handset rather
+  than declaring victory.
+
+`NO_REFUSAL` is deliberately never printed as "delivered". Absence of a rejection is weaker
+evidence than presence of one.
+
+---
+
+## Safety
+
+- `--dry` sends nothing and just prints the readiness table. Use it first.
+- Each run sends **one** message per tenant. Under a reach-out timelock, every token-less send
+  adds to the rate limit — so don't sit in a loop running this. A few times a day is fine;
+  every two minutes is actively harmful.
+- It uses `WhatsAppManager::forTenant()`, so it exercises your real send path — including the
+  Cloud API driver if a tenant is already switched over. It is not a parallel implementation
+  that could pass while the real one fails.
