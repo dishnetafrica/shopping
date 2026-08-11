@@ -26,7 +26,14 @@ use Illuminate\Support\Facades\Http;
  *   - COLD: the shop is messaging someone who has never messaged it. This is normal
  *     anti-spam behaviour and says nothing about the shop's health.
  *   - WARM: the shop is replying to an existing conversation and is STILL refused. That
- *     is the pathological case — it means the session has lost its privacy tokens.
+ *     is the pathological case.
+ *
+ * On the warm case, note carefully: the timelock is held against the NUMBER, not the session.
+ * Proven on 2026-08-11 — `shopbot_t20` was created that same day, held no token history at all,
+ * and delivered to 211927797217 at 14:08, minutes after `shopbot_t17` was refused for the very
+ * same destination. Recreating an instance therefore cannot clear the lock; it is how the lock
+ * is earned, because a fresh session's first sends carry no tokens and each one adds to the
+ * rate limit.
  *
  * Comparing a warm failure against a cold failure and concluding "both broken" is wrong,
  * and comparing a healthy shop's COLD failure against a sick shop's WARM failure and
@@ -271,8 +278,15 @@ class WaTestCommand extends Command
             $ids = implode(', ', array_column($warmRefused, 'tenant'));
             $this->error("  Tenant(s) {$ids} were REFUSED on a WARM contact.");
             $this->line('  That is the pathological case: replying to an existing conversation and still');
-            $this->line('  being refused means the session has lost its privacy tokens. Do NOT delete and');
-            $this->line('  recreate the instance — that is what causes this, and it resets the clock.');
+            $this->line('  being refused. The reach-out timelock is held against the NUMBER, not the session.');
+            $this->line('');
+            $this->line('  So DO NOT delete and recreate the instance. A fresh session cannot clear a lock');
+            $this->line('  held against the phone number, and the token-less sends a fresh session makes are');
+            $this->line('  what earn the lock in the first place — recreating is how shops get here.');
+            $this->line('');
+            $this->line('  Pause outbound instead (bot_mode=off plus followups_auto_send, sales_followup_enabled,');
+            $this->line('  task_reminders and digest_enabled — those four ignore bot_mode) and let it decay.');
+            $this->line('  Staff can keep answering from the handset; that session delivers normally.');
         }
 
         if ($cold) {
