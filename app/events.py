@@ -8,13 +8,15 @@ so a dead uplink never loses an alert.
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import logging
 import os
 import time
 
 import requests
 
-from . import db
+from . import db, detector
 
 log = logging.getLogger("events")
 
@@ -197,20 +199,91 @@ def send(payload: dict) -> bool:
     return ok
 
 
+STILL_OUT = "shelf.still_out_of_stock"
+
+
+def event_uid(zone_id: int, ts: float, to_state: str) -> str:
+    """A stable id for one state change, so CloudBSS can deduplicate.
+
+    Deterministic rather than random: derived from what the event IS, so a retry, a
+    replayed row, or a restored database all produce the same id. A delivery that
+    actually landed but whose local `delivered` flag was lost would otherwise be
+    counted twice, and double-alerting a shop about the same empty shelf is how an
+    operator learns to ignore the alerts.
+    """
+    raw = f"{store_id()}|{zone_id}|{ts:.3f}|{to_state}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _iso(ts: float | None) -> str:
+    """The event's OWN time, not the time we happen to be formatting it.
+
+    retry_undelivered used to call time.strftime() at retry, so an event delayed by an
+    hour of failed webhooks arrived claiming to have just happened. The shop would have
+    been told a shelf emptied at 4pm when it emptied at 3.
+    """
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(ts or time.time()))
+
+
 def build_payload(zone_row, camera_row, to_state: str, from_state: str,
-                  fill: float, thumb_jpeg: bytes | None) -> dict:
+                  fill: float, thumb_jpeg: bytes | None, ts: float | None = None,
+                  duration_s: float | None = None, escalation: bool = False) -> dict:
+    """One shelf state change, with a clock attached.
+
+    P0-5 adds four things the audit found missing: a stable `uid`, the event's real
+    timestamp, how long the PREVIOUS state had lasted, and a confidence that means
+    something. `duration_s` is the age of the state being left behind — "this shelf had
+    been stocked for six hours and has just gone empty" — which is what tells a
+    restocker whether this is a fast mover or a forgotten corner.
+    """
+    ts = time.time() if ts is None else ts
+    suspect = bool(_row_get(zone_row, "ref_suspect", 0))
+    conf = detector.confidence(
+        fill, to_state,
+        _row_get(zone_row, "empty_below", 0.35) or 0.35,
+        _row_get(zone_row, "low_below", 0.65) or 0.65,
+        ref_suspect=suspect)
     return {
-        "event": EVENT_NAMES.get(to_state, "shelf.state_changed"),
+        "event": STILL_OUT if escalation else EVENT_NAMES.get(to_state, "shelf.state_changed"),
+        "uid": event_uid(zone_row["id"], ts, ("still:" if escalation else "") + to_state),
         "store": store_id(),
         "camera": camera_row["name"],
         "zone": zone_row["name"],
         "from_state": from_state,
         "to_state": to_state,
-        "confidence": fill if to_state == "stocked" else round(1.0 - fill, 4),
+        "confidence": conf,
+        "confidence_basis": "margin from threshold; not a calibrated probability",
+        "reference_suspect": suspect,
         "fill": fill,
+        "empty_below": _row_get(zone_row, "empty_below", 0.35),
+        "low_below": _row_get(zone_row, "low_below", 0.65),
+        "duration_s": None if duration_s is None else round(float(duration_s), 1),
+        "duration_human": _human(duration_s),
         "thumbnail": base64.b64encode(thumb_jpeg).decode() if thumb_jpeg else None,
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "timestamp": _iso(ts),
     }
+
+
+def _row_get(row, name: str, default=None):
+    try:
+        v = row[name]
+    except (IndexError, KeyError, TypeError):
+        return default
+    return default if v is None else v
+
+
+def _human(seconds: float | None) -> str:
+    """Plain words, because the person reading this is holding a phone in an aisle."""
+    if seconds is None:
+        return ""
+    s = int(seconds)
+    if s < 90:
+        return f"{s} seconds"
+    if s < 5400:
+        return f"{round(s / 60)} minutes"
+    if s < 172800:
+        return f"{round(s / 3600)} hours"
+    return f"{round(s / 86400)} days"
 
 
 def post_payload(payload: dict) -> tuple[bool, str]:
@@ -280,19 +353,45 @@ def deliver(event_id: int, payload: dict) -> None:
 
 
 def retry_undelivered(limit: int = 20) -> None:
+    """Re-send exactly what was built, not a reconstruction of it.
+
+    This function used to rebuild the payload from columns, and got it wrong twice: it
+    sent `confidence = fill` where the first attempt had sent `1 - fill`, and it stamped
+    the payload with time.strftime() at RETRY time, so an event delayed by an hour of
+    failed webhooks arrived claiming to have just happened. Same event, two different
+    stories, depending on whether the network was up.
+
+    The payload as sent is now stored on the row, so a retry is a re-send rather than a
+    re-derivation. Only the thumbnail is absent — it is deliberately not stored, because
+    base64 images would bloat the database for a field nothing downstream requires.
+    """
     if not webhook_url():
         return
     rows = db.db().execute(
-        "SELECT e.id, e.to_state, e.from_state, e.fill, z.name AS zone_name, "
-        "c.name AS cam_name FROM events e "
+        "SELECT e.id, e.ts, e.to_state, e.from_state, e.fill, e.payload, e.zone_id, "
+        "z.name AS zone_name, c.name AS cam_name FROM events e "
         "JOIN zones z ON z.id=e.zone_id JOIN cameras c ON c.id=z.camera_id "
         "WHERE e.delivered=0 ORDER BY e.ts LIMIT ?", (limit,)).fetchall()
     for r in rows:
+        stored = _row_get(r, "payload")
+        if stored:
+            try:
+                payload = json.loads(stored)
+                payload["thumbnail"] = None
+                deliver(r["id"], payload)
+                continue
+            except ValueError:
+                log.warning("event %s has an unreadable stored payload; rebuilding", r["id"])
+        # Pre-P0-5 rows, or a corrupt one. Rebuilt with the SAME formulas as
+        # build_payload rather than the old divergent ones, and stamped with the
+        # event's own ts so a late delivery still tells the truth about when.
         payload = {
             "event": EVENT_NAMES.get(r["to_state"], "shelf.state_changed"),
+            "uid": event_uid(r["zone_id"], r["ts"], r["to_state"]),
             "store": store_id(), "camera": r["cam_name"], "zone": r["zone_name"],
             "from_state": r["from_state"], "to_state": r["to_state"],
-            "confidence": r["fill"], "fill": r["fill"], "thumbnail": None,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "confidence": None, "confidence_basis": "unknown (pre-P0-5 event)",
+            "fill": r["fill"], "duration_s": None, "duration_human": "",
+            "thumbnail": None, "timestamp": _iso(r["ts"]),
         }
         deliver(r["id"], payload)

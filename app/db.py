@@ -111,6 +111,20 @@ _ADDED_COLUMNS = [
     ("zones", "ref_suspect_count", "INTEGER DEFAULT 0"),
     ("zones", "enrolled_edge", "REAL"),
     ("zones", "enrolled_ts", "REAL"),
+    # P0-5, the temporal layer. Without state_since an event can say a shelf is empty
+    # but not for how long, so a shopper's momentary gap and a shelf empty since
+    # Tuesday arrive looking identical — and that difference is most of what makes an
+    # alert worth sending.
+    ("zones", "state_since", "REAL"),
+    ("zones", "escalated_at", "REAL"),
+    ("events", "uid", "TEXT"),
+    ("events", "duration_s", "REAL"),
+    ("events", "confidence", "REAL"),
+    # The payload AS SENT. retry_undelivered used to rebuild it from columns with a
+    # different confidence formula and a fresh timestamp, so a retried event carried a
+    # different number and claimed to have happened at retry time. Storing what was
+    # built removes the whole class of drift: the retry re-sends it verbatim.
+    ("events", "payload", "TEXT"),
 ]
 
 
@@ -191,6 +205,27 @@ def prune_snapshots(camera_id: int, keep: int = 500) -> None:
             os.unlink(r["path"])
         except OSError:
             pass
+
+
+def record_payload(event_id: int, payload: dict) -> None:
+    """Store the payload AS BUILT, minus the thumbnail.
+
+    So a retry re-sends it rather than re-deriving it. The old retry path rebuilt the
+    payload from columns with a different confidence formula and a fresh timestamp,
+    which meant the same event told two different stories depending on whether the
+    network happened to be up. The thumbnail is dropped because base64 images would
+    bloat the database for a field the retry does not send anyway.
+    """
+    slim = {k: v for k, v in payload.items() if k != "thumbnail"}
+    try:
+        with tx() as con:
+            con.execute("UPDATE events SET payload=?, uid=?, duration_s=?, confidence=? "
+                        "WHERE id=?",
+                        (json.dumps(slim), slim.get("uid"), slim.get("duration_s"),
+                         slim.get("confidence"), event_id))
+    except sqlite3.Error:
+        # Recording the payload must never lose the event itself.
+        pass
 
 
 def insert_event(zone_id: int, from_state: str, to_state: str, fill: float,

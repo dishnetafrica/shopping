@@ -54,6 +54,17 @@ CONFIRMATIONS = 2       # consecutive evaluations required to switch state
 SUSPECT_ABOVE = float(os.environ.get("D_SUSPECT_ABOVE", "1.25"))
 SUSPECT_CONFIRMATIONS = int(os.environ.get("D_SUSPECT_CONFIRMATIONS", "3"))
 
+# P0-5. A zone under suspicion may not be watching anything at all, so no reading from
+# it deserves to travel with a confident-looking number attached, however wide its
+# margin. Low rather than zero: the reading is doubtful, not known to be wrong.
+SUSPECT_CONFIDENCE_CAP = 0.25
+
+# How long a shelf may sit empty before the box says so again. The first event answers
+# "is this shelf empty"; nothing answered "is anyone dealing with it", which is the
+# question a shop actually has. 30 minutes is a restock round in a small supermarket.
+ESCALATE_AFTER_S = float(os.environ.get("D_ESCALATE_AFTER_S", "1800"))
+ESCALATE_STATES = ("empty",)
+
 
 @dataclass
 class ZoneDescriptor:
@@ -190,6 +201,49 @@ def step_suspect(count: int, flagged: bool, ratio: float) -> tuple[int, bool, bo
     if flagged and count == 0:
         return 0, False, True          # re-enrolled, or the shelf settled back
     return count, flagged, False
+
+
+def confidence(fill: float, state: str, empty_below: float, low_below: float,
+               ref_suspect: bool = False) -> float:
+    """How far this reading sits from the decision that would have gone the other way.
+
+    The audit found the old value was `fill` for stocked and `1 - fill` otherwise, which
+    is not confidence at all — it is magnitude wearing confidence's clothes. It reported
+    an out-of-focus full shelf as EMPTY at **0.987**, because the blur drove fill to
+    0.013 and `1 - 0.013` looks like near-certainty. The number was highest exactly when
+    the system was most wrong.
+
+    What is honestly computable here is MARGIN: distance from the threshold that decided
+    the state, scaled by how much room that state has. A fill of 0.02 against an
+    empty_below of 0.35 is a call nothing would overturn; 0.34 is a coin toss, and must
+    say so.
+
+    This is a documented heuristic, not a probability. It is monotone in fill and
+    correct at the boundaries — 0 at the threshold, 1 at the extreme — which is all it
+    claims. Calibrating it against labelled outcomes is P0-8's job, and until that
+    exists nobody should read this as "97% likely to be true".
+
+    A zone whose reference is suspect is capped hard: whatever the arithmetic says, a
+    zone that may not be watching anything cannot be confident about what it sees.
+    """
+    fill = max(0.0, min(1.0, float(fill)))
+    if state == "empty":
+        span = max(empty_below, EDGE_EPS)
+        margin = (empty_below - fill) / span
+    elif state == "stocked":
+        span = max(1.0 - low_below, EDGE_EPS)
+        margin = (fill - low_below) / span
+    elif state == "low":
+        # Two-sided: a LOW reading is only trustworthy in the middle of its band.
+        half = max((low_below - empty_below) / 2.0, EDGE_EPS)
+        centre = (low_below + empty_below) / 2.0
+        margin = 1.0 - abs(fill - centre) / half
+    else:
+        return 0.0
+    margin = max(0.0, min(1.0, margin))
+    if ref_suspect:
+        margin = min(margin, SUSPECT_CONFIDENCE_CAP)
+    return round(margin, 4)
 
 
 def classify(fill: float, empty_below: float, low_below: float) -> str:

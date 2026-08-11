@@ -172,6 +172,38 @@ def _assess_zone_multi(crop_hsv, refs):
     return verdict
 
 
+def _escalate_if_stale(z, cam_row, state: str, fill: float, since: float, now: float,
+                       snap_id, img) -> None:
+    """Say it again when a shelf has been empty long enough that nobody acted.
+
+    The first event answers "is this shelf empty". Nothing answered "is anyone dealing
+    with it", which is the question a shop actually has — and the reason a single alert
+    at 7am is worth so much less than a second one at 7.30 saying it is still out.
+
+    Fires ONCE per occurrence, not on a timer. `escalated_at` is cleared whenever the
+    state changes, so restocking the shelf arms it again for next time. A repeating
+    alarm would be muted within a week, and a muted alarm is worth nothing.
+    """
+    if state not in detector.ESCALATE_STATES:
+        return
+    if _col(z, "escalated_at"):
+        return
+    age = now - since
+    if age < detector.ESCALATE_AFTER_S:
+        return
+
+    ev_id = db.insert_event(z["id"], state, state, fill, snap_id)
+    payload = events.build_payload(
+        z, cam_row, state, state, fill,
+        thumb_jpeg=_thumb(img, json.loads(z["polygon"])),
+        ts=now, duration_s=age, escalation=True)
+    db.record_payload(ev_id, payload)
+    with db.tx() as con:
+        con.execute("UPDATE zones SET escalated_at=? WHERE id=?", (now, z["id"]))
+    events.deliver(ev_id, payload)
+    log.warning("STILL OUT %s/%s after %.0fs", cam_row["name"], z["name"], age)
+
+
 def _reference_check(z, cur_desc, refs, cam_name: str) -> None:
     """Is this zone's enrolled reference still believable?"""
     ratio = detector.suspect_ratio(cur_desc, refs)
@@ -256,18 +288,39 @@ def evaluate_zones(cam_row, snap_id: int, jpeg: bytes) -> None:
         observed = detector.classify(fill, z["empty_below"], z["low_below"])
         new_state, pend, pend_n, changed = detector.step_state(
             z["state"], z["pending_state"], z["pending_count"], observed)
+        now = time.time()
+        since = _col(z, "state_since") or now
+        # The age of the state being LEFT. "Stocked for six hours, now empty" is what
+        # tells a restocker whether this is a fast mover or a forgotten corner; the
+        # event used to carry no clock at all.
+        held_for = now - since if changed else None
+
         with db.tx() as con:
-            con.execute(
-                "UPDATE zones SET state=?, pending_state=?, pending_count=?, "
-                "last_fill=?, last_eval_ts=? WHERE id=?",
-                (new_state, pend, pend_n, fill, time.time(), z["id"]))
+            if changed:
+                con.execute(
+                    "UPDATE zones SET state=?, pending_state=?, pending_count=?, "
+                    "last_fill=?, last_eval_ts=?, state_since=?, escalated_at=NULL "
+                    "WHERE id=?",
+                    (new_state, pend, pend_n, fill, now, now, z["id"]))
+            else:
+                con.execute(
+                    "UPDATE zones SET state=?, pending_state=?, pending_count=?, "
+                    "last_fill=?, last_eval_ts=? WHERE id=?",
+                    (new_state, pend, pend_n, fill, now, z["id"]))
+
         if changed and new_state != "unknown" and z["state"] != "unknown":
             ev_id = db.insert_event(z["id"], z["state"], new_state, fill, snap_id)
-            payload = events.build_payload(z, cam_row, new_state, z["state"], fill,
-                                           thumb_jpeg=_thumb(img, json.loads(z["polygon"])))
+            payload = events.build_payload(
+                z, cam_row, new_state, z["state"], fill,
+                thumb_jpeg=_thumb(img, json.loads(z["polygon"])),
+                ts=now, duration_s=held_for)
+            db.record_payload(ev_id, payload)
             events.deliver(ev_id, payload)
-            log.info("EVENT %s/%s: %s -> %s (fill %.2f)",
-                     cam_row["name"], z["name"], z["state"], new_state, fill)
+            log.info("EVENT %s/%s: %s -> %s (fill %.2f, held %.0fs)",
+                     cam_row["name"], z["name"], z["state"], new_state, fill,
+                     held_for or 0)
+        elif not changed:
+            _escalate_if_stale(z, cam_row, new_state, fill, since, now, snap_id, img)
 
 
 def _thumb(img, polygon, max_w: int = 320) -> bytes:

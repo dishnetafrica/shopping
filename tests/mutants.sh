@@ -440,6 +440,110 @@ mutate "the scheduler scores against one reference again" app/scheduler.py \
   '            fill = detector.fill_score_multi(cur_desc, refs)' \
   '            fill = detector.fill_score(cur_desc, refs[0])'
 
+# ── P0-5 mutants ──────────────────────────────────────────────────────────────────
+# The audit's complaint was timeless, falsely-certain events. Each mutant restores one
+# of those properties.
+
+mutate "confidence goes back to 1 - fill (the audit's 0.987)" app/detector.py \
+  '    if state == "empty":
+        span = max(empty_below, EDGE_EPS)
+        margin = (empty_below - fill) / span' \
+  '    if state == "empty":
+        margin = 1.0 - fill'
+
+mutate "a marginal call reports full confidence" app/detector.py \
+  '    margin = max(0.0, min(1.0, margin))' \
+  '    margin = 1.0'
+
+mutate "a suspect reference no longer caps confidence" app/detector.py \
+  '    if ref_suspect:
+        margin = min(margin, SUSPECT_CONFIDENCE_CAP)' \
+  '    if False:
+        margin = min(margin, SUSPECT_CONFIDENCE_CAP)'
+
+mutate "LOW claims certainty at the edge of its band" app/detector.py \
+  '        margin = 1.0 - abs(fill - centre) / half' \
+  '        margin = 1.0'
+
+mutate "the uid stops depending on the store" app/events.py \
+  '    raw = f"{store_id()}|{zone_id}|{ts:.3f}|{to_state}"' \
+  '    raw = f"{zone_id}|{ts:.3f}|{to_state}"'
+
+mutate "the uid stops depending on the state" app/events.py \
+  '    raw = f"{store_id()}|{zone_id}|{ts:.3f}|{to_state}"' \
+  '    raw = f"{store_id()}|{zone_id}|{ts:.3f}"'
+
+mutate "the uid becomes random (retries look like new events)" app/events.py \
+  '    return hashlib.sha256(raw.encode()).hexdigest()[:32]' \
+  '    import uuid; return uuid.uuid4().hex'
+
+mutate "the payload is stamped with now() instead of the event time" app/events.py \
+  '    return time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(ts or time.time()))' \
+  '    return time.strftime("%Y-%m-%dT%H:%M:%S%z")'
+
+mutate "retry rebuilds instead of re-sending what was stored" app/events.py \
+  '        stored = _row_get(r, "payload")' \
+  '        stored = None'
+
+mutate "retry re-stamps a rebuilt event with the current time" app/events.py \
+  '            "thumbnail": None, "timestamp": _iso(r["ts"]),' \
+  '            "thumbnail": None, "timestamp": _iso(None),'
+
+mutate "a pre-P0-5 event invents a confidence" app/events.py \
+  '            "confidence": None, "confidence_basis": "unknown (pre-P0-5 event)",' \
+  '            "confidence": r["fill"], "confidence_basis": "unknown (pre-P0-5 event)",'
+
+mutate "the duration stops travelling" app/events.py \
+  '        "duration_s": None if duration_s is None else round(float(duration_s), 1),' \
+  '        "duration_s": None,'
+
+mutate "the thresholds stop travelling (confidence unfalsifiable)" app/events.py \
+  '        "empty_below": _row_get(zone_row, "empty_below", 0.35),' \
+  '        "empty_below": None,'
+
+mutate "a suspect reference is not flagged in the payload" app/events.py \
+  '    suspect = bool(_row_get(zone_row, "ref_suspect", 0))' \
+  '    suspect = False'
+
+mutate "the payload is never stored, so retry cannot re-send it" app/scheduler.py \
+  '            db.record_payload(ev_id, payload)
+            events.deliver(ev_id, payload)' \
+  '            events.deliver(ev_id, payload)'
+
+mutate "state_since is never recorded" app/scheduler.py \
+  '                    "last_fill=?, last_eval_ts=?, state_since=?, escalated_at=NULL "' \
+  '                    "last_fill=?, last_eval_ts=?, state_since=state_since, escalated_at=NULL "'
+
+mutate "the duration is measured from now (always zero)" app/scheduler.py \
+  '        held_for = now - since if changed else None' \
+  '        held_for = 0.0 if changed else None'
+
+mutate "escalation never happens" app/scheduler.py \
+  '            _escalate_if_stale(z, cam_row, new_state, fill, since, now, snap_id, img)' \
+  '            pass'
+
+mutate "escalation fires on every capture" app/scheduler.py \
+  '    if _col(z, "escalated_at"):
+        return' \
+  '    if False:
+        return'
+
+mutate "escalation ignores how long the shelf has been empty" app/scheduler.py \
+  '    if age < detector.ESCALATE_AFTER_S:
+        return' \
+  '    if False:
+        return'
+
+mutate "a stocked shelf can be escalated" app/scheduler.py \
+  '    if state not in detector.ESCALATE_STATES:
+        return' \
+  '    if False:
+        return'
+
+mutate "restocking no longer re-arms the escalation" app/scheduler.py \
+  'escalated_at=NULL ' \
+  ''
+
 echo
 echo "  $killed killed, $survived survived"
 echo
