@@ -1,98 +1,62 @@
-# WhatsApp watchdog + verify — deploy
+# CloudBSS — WhatsApp watchdog, verifier, and the order-ack fix
 
-Two files, both under `app/Console/Commands/`. Your Dockerfile already does `COPY app/`, so they ship with a normal rebuild. **No migration, no schedule change, no config change.**
+Three files. Your Dockerfile does `COPY app/` and `COPY database/`, so all three ship with a normal rebuild.
+
+```
+app/Console/Commands/WaWatchdogCommand.php   ← REPLACES the existing file
+app/Console/Commands/WaVerifyCommand.php     ← new
+database/migrations/2026_08_11_000001_fix_order_notification_sends_recipient_fk.php   ← new
+```
+
+Upload keeping the paths, commit, press **Deploy**. The migration runs automatically (your entrypoint does `php artisan migrate --force`).
 
 ---
 
-## Upload
-
-Unzip. You get:
-
-```
-app/Console/Commands/WaWatchdogCommand.php     ← REPLACES the existing file
-app/Console/Commands/WaVerifyCommand.php       ← new
-```
-
-On GitHub, upload both into `app/Console/Commands/` in your repo, keeping the paths. GitHub will show one file as *modified* and one as *added* — that's correct. Commit, then press **Deploy** in EasyPanel.
-
-*(A file at the repo root would NOT have worked — your Dockerfile copies specific directories, not everything. That's why the verifier is an artisan command rather than a loose script.)*
-
----
-
-## After the rebuild, run this
+## 1 & 2 — the watchdog and the verifier
 
 ```bash
-php artisan wa:verify
+php artisan wa:verify                        # is this shop delivering right now?
+php artisan wa:verify --send=2119xxxxxxxx    # LIVE test, waits for WhatsApp's receipt
+php artisan wa:watchdog                      # runs every 5 min anyway
 ```
 
-Today it will print every block green and the last one red:
+Exit code 0 = delivering, 1 = not. Neither fixes the outage; they make the next one visible in six hours instead of twenty-four days.
 
-```
-  DELIVERY  ← the one that matters
-  ✗ last delivered             2026-07-18 21:02 (3 weeks ago)
-  · last rejected              2026-08-11 09:00 (20 minutes ago)
-  ✗ rejections (24h)           15
-  ✗ VERDICT                    NOT DELIVERING — the bot is answering into a void
-
-  NOT WORKING — the shop cannot answer its customers.
-```
-
-**That contrast is the point.** Configuration fine, Evolution reachable, instance "open", webhooks arriving, worker healthy, AI replying — and nothing getting through. That exact combination is what hid this for 24 days.
-
-When it's fixed, `last delivered` reads a few minutes ago and the footer says **WORKING**.
+The watchdog now also alarms when **rejections are arriving AND nothing has delivered for 6 hours**. The AND matters — a quiet shop has a stale timestamp and nothing wrong with it. Alerts go via `PLATFORM_WA_INSTANCE`, never the shop's own number, because that is the one that cannot deliver. **If that env var is unset the alert cannot be sent** — it logs `wa.no_ops_instance` and gives up.
 
 ---
 
-## The commands
+## 3 — the order-acknowledgement fix (separate bug, found today)
+
+`order_notification_sends.recipient_id` was a strict foreign key into `order_notification_recipients`. But two callers pass **0** as a sentinel meaning "this went to the customer, not to a staff member":
+
+- `NotifyCustomerOrderReceived` — the "we've received your order" WhatsApp
+- `CreditReminderCommand` — the reminders that chase money owed
+
+`order_notification_recipients.id` is a bigserial starting at 1, so **no row can ever have id 0**. Every claim violated the constraint and threw. `insertOrIgnore` does not help: on Postgres it is `ON CONFLICT DO NOTHING`, which swallows unique conflicts, not foreign-key violations.
+
+**Neither feature has ever worked.** Not intermittently — structurally impossible since June. Ten failures are still in `failed_jobs` from July; the rest aged out.
+
+Confirm it on your own data before and after:
 
 ```bash
-php artisan wa:verify                        # read-only. Safe any time, run it whenever you wonder.
-php artisan wa:verify --tenant=17            # a specific shop (17 is the default)
-php artisan wa:verify --send=211922281312    # LIVE: really sends, then waits for WhatsApp's receipt
-php artisan wa:verify --quiet                # no output, exit code only
-
-php artisan wa:watchdog                      # the watchdog, by hand (it also runs every 5 min)
+php artisan tinker --execute="
+  echo DB::table('order_notification_sends')->selectRaw('event_type, count(*) n')
+        ->groupBy('event_type')->get()->toJson(JSON_PRETTY_PRINT).\"\n\";
+  echo 'customer-sentinel rows: '.DB::table('order_notification_sends')->where('recipient_id',0)->count().\"\n\";
+"
 ```
 
-Exit code **0 = delivering, 1 = not**, so `wa:verify --quiet` works as a cron or uptime check.
+Before the fix that count is **0** and no `web_customer_ack` or `credit_reminder_*` rows exist at all. After the fix, place a website order and it becomes 1.
 
-### `--send` is the definitive test
+The migration drops the constraint, because the column is not a pure foreign key — it holds "a recipient id, OR 0 meaning the customer", which a FK cannot express. Idempotency is untouched: the unique index on `(order_id, recipient_id, event_type)` still does the deduplication.
 
-It separates two things that look identical from outside:
+**Rejected alternative:** inserting a fake recipient row with id 0. It would satisfy the constraint, but that row needs a `tenant_id` and the FK carries `cascadeOnDelete` — so deleting whichever tenant happened to own the fake row would cascade away every customer acknowledgement ever recorded, for every shop. A landmine in exchange for tidiness.
 
-1. **Evolution accepted it** — HTTP 201. That only means Evolution *took* the message. It returns 201 today, while completely broken.
-2. **WhatsApp's receipt came back.** The command then watches for up to 45 seconds and reports `DELIVERED` or `REJECTED`.
-
-Send to a number that has messaged the shop before — error 463 is specifically about replying to contacts, so a cold number can fail for unrelated reasons and muddy the answer.
-
-**This is the cleanest way to judge the Evolution image upgrade:**
-
-```bash
-php artisan wa:verify --send=211922281312     # before — expect REJECTED
-#   change the image tag in EasyPanel, redeploy, wait for Connected
-php artisan wa:verify --send=211922281312     # after
-```
-
-`DELIVERED` = the newer Baileys carries the 463 fix and you have service back. `REJECTED` = roll the tag back and put everything into the Cloud API migration.
+**Deliberate side effect:** deleting a staff recipient no longer erases the record that they were notified. The send ledger is history; that it outlives the person is correct.
 
 ---
 
-## What the watchdog change does
+## Priority
 
-`wa:watchdog` already ran every five minutes. It asked Evolution one question — *"is the connection open?"* — and got "open" every five minutes for 24 days while every message was refused. **Connected and able-to-deliver are different facts, and only the second one matters.**
-
-It now also compares the two stamps your webhook has always written (`wa_send_ok_at`, `wa_send_err_at`) and alarms when **rejections are arriving now AND nothing has been delivered for 6 hours**.
-
-That AND is deliberate. A quiet shop has a stale `wa_send_ok_at` and nothing wrong with it — alarming on staleness alone would fire every Sunday, the owner would mute it, and a muted watchdog is worse than none.
-
-**One thing to check:** the alert goes out via `PLATFORM_WA_INSTANCE`, deliberately **not** through the shop's own number — that's the number that can't deliver, so the alert would be swallowed by the fault it's reporting. If that env var isn't set, the alert can't be sent; it logs `wa.no_ops_instance` and gives up. Point it at a number that isn't a shop's.
-
-Detection runs around the clock; the message waits for 7am–9pm in the shop's timezone, so a 3am fault becomes a 7am phone call. Recovery is announced once, through the shop's own number, since by then it works again.
-
-New settings the panel can read for a banner, alongside the existing `wa_status`: `wa_delivery` (`ok`/`failing`), `wa_delivery_since`, `wa_delivery_alerted_at`.
-
----
-
-## Honest note
-
-Neither of these fixes anything. The bot still cannot deliver. What they do is make the *next* outage visible in six hours instead of twenty-four days, and give you a one-line way to check the answer at any moment — including whether the Evolution upgrade worked.
+The outage is still the headline. This migration does not affect it — it is safe to ship in the same deploy, and it will not change delivery one way or the other. Do the Evolution image upgrade regardless.
