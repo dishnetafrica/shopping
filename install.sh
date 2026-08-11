@@ -24,6 +24,7 @@ prev () { [ -f "$DEST/.env" ] && sed -n "s/^$1=//p" "$DEST/.env" | head -1 || tr
 PREV_STORE="$(prev STORE_ID)"
 PREV_HOOK="$(prev EVENT_WEBHOOK_URL)"
 PREV_TOKEN="$(prev VISION_TOKEN)"
+PREV_ADMIN="$(prev ADMIN_PASSWORD)"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "-- Installing Docker (docker.io + compose plugin)…"
@@ -52,6 +53,22 @@ if [ -t 0 ]; then
   fi
 fi
 
+# ── the dashboard password ────────────────────────────────────────────────────────
+# Kept across re-installs so a return visit does not silently lock the owner out. A
+# fresh box gets a generated one: nobody types a strong password into a shop laptop,
+# and the alternative shipped state was no password at all.
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-$PREV_ADMIN}"
+NEW_ADMIN_PW=0
+if [ -z "$ADMIN_PASSWORD" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    ADMIN_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)"
+  else
+    ADMIN_PASSWORD="$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | cut -c1-20)"
+  fi
+  NEW_ADMIN_PW=1
+fi
+
 if [ -z "$STORE_ID" ]; then
   echo "!! No store id. Re-run interactively, or: sudo STORE_ID=… EVENT_WEBHOOK_URL=… bash install.sh" >&2
   exit 1
@@ -71,7 +88,14 @@ EVENT_WEBHOOK_URL=$EVENT_WEBHOOK_URL
 VISION_TOKEN=$VISION_TOKEN
 DEMO=0
 ALLOW_NO_WEBHOOK=0
+ADMIN_USER=$ADMIN_USER
+ADMIN_PASSWORD=$ADMIN_PASSWORD
+ALLOW_NO_AUTH=0
 EOF
+# .env holds the recorder token and the dashboard password. The data directory holds
+# the camera credentials and every snapshot of the shop floor.
+chmod 600 "$DEST/.env"
+chmod 700 "$DEST/data" 2>/dev/null || true
 
 # NOTE: docker-compose.yml carries `env_file: .env` and deliberately declares NO
 # `environment:` block. Compose gives `environment:` precedence over `env_file:` —
@@ -103,16 +127,21 @@ docker compose up -d --build
 
 cat > /usr/local/bin/visionctl << 'EOF'
 #!/usr/bin/env bash
-# visionctl — status | selftest | logs | restart | update | stop
+# visionctl — status | selftest | password | logs | restart | update | stop
 cd /opt/cloudbss-vision || exit 1
+# The API is authenticated. Read the credentials from .env (root-only) rather than
+# leaving an unauthenticated hole open so that this script keeps working.
+AU="$(sed -n 's/^ADMIN_USER=//p' .env | head -1)"; AU="${AU:-admin}"
+AP="$(sed -n 's/^ADMIN_PASSWORD=//p' .env | head -1)"
 case "${1:-status}" in
-  status)  docker compose ps; echo; curl -sf localhost:8080/api/health && echo || echo "API not responding";;
-  selftest) curl -sf -X POST localhost:8080/api/selftest && echo || echo "gateway not responding";;
+  status)  docker compose ps; echo; curl -sf -u "$AU:$AP" localhost:8080/api/health && echo || echo "API not responding";;
+  selftest) curl -sf -u "$AU:$AP" -X POST localhost:8080/api/selftest && echo || echo "gateway not responding";;
+  password) echo "user: $AU"; echo "pass: $AP";;
   logs)    docker compose logs -f --tail=100;;
   restart) docker compose restart;;
   stop)    docker compose down;;
   update)  docker compose up -d --build;;
-  *) echo "usage: visionctl {status|selftest|logs|restart|update|stop}";;
+  *) echo "usage: visionctl {status|selftest|password|logs|restart|update|stop}";;
 esac
 EOF
 chmod +x /usr/local/bin/visionctl
@@ -125,7 +154,7 @@ if [ -n "$EVENT_WEBHOOK_URL" ] && [ "${SKIP_SELFTEST:-0}" != "1" ]; then
   echo "-- Waiting for the gateway to come up…"
   ok=0
   for _ in $(seq 1 30); do
-    curl -sf localhost:8080/api/health >/dev/null 2>&1 && { ok=1; break; }
+    curl -sf -u "$ADMIN_USER:$ADMIN_PASSWORD" localhost:8080/api/health >/dev/null 2>&1 && { ok=1; break; }
     sleep 2
   done
   if [ "$ok" != 1 ]; then
@@ -133,7 +162,7 @@ if [ -n "$EVENT_WEBHOOK_URL" ] && [ "${SKIP_SELFTEST:-0}" != "1" ]; then
     exit 1
   fi
   echo "-- Delivering one test event to CloudBSS…"
-  RESULT="$(curl -sf -X POST localhost:8080/api/selftest || true)"
+  RESULT="$(curl -sf -u "$ADMIN_USER:$ADMIN_PASSWORD" -X POST localhost:8080/api/selftest || true)"
   case "$RESULT" in
     *'"ok":true'*) echo "-- Delivered. Look for event 'shelf.selftest' in CloudBSS vision_events." ;;
     *) echo "!! The test event was NOT accepted by CloudBSS:" >&2
@@ -148,6 +177,13 @@ IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo
 echo "== Done =="
 echo "Dashboard:  http://${IP:-<this-pc>}:8080"
+echo "Login:      $ADMIN_USER / $ADMIN_PASSWORD"
+if [ "$NEW_ADMIN_PW" = 1 ]; then
+  echo "            ^ generated for this box. Write it down now — the dashboard, the"
+  echo "              snapshots and the recorder credentials are behind it."
+else
+  echo "            (unchanged from the previous install; visionctl password reprints it)"
+fi
 echo "Health:     visionctl status     Logs: visionctl logs"
 echo "Next: open the dashboard -> Discover ONVIF devices -> add your NVR channels."
 echo

@@ -364,8 +364,13 @@ def test_installer_proves_the_uplink_before_finishing(gateway_root):
     tail = sh.split("Delivering one test event", 1)[1]
     # Pin the actual call, not merely the word: /api/selftest also appears in the
     # visionctl verb further down, so a looser check passes with the call removed.
-    assert "curl -sf -X POST localhost:8080/api/selftest" in tail, (
-        "the install does not actually call the self-test endpoint")
+    call = [ln for ln in tail.splitlines() if "/api/selftest" in ln]
+    assert call, "the install does not actually call the self-test endpoint"
+    assert "-X POST localhost:8080/api/selftest" in call[0], call[0]
+    # P0-2: the endpoint is authenticated now, so the install must present credentials
+    # or its own proof-of-delivery step would fail on a correctly secured box.
+    assert '-u "$ADMIN_USER:$ADMIN_PASSWORD"' in call[0], (
+        "the install calls the self-test without credentials — it would 401 on every box")
     assert "exit 1" in tail, (
         "an install whose test event is refused must fail — a box that cannot report "
         "is the exact thing this milestone exists to make impossible")

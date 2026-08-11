@@ -8,19 +8,43 @@ import time
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
-from . import db, detector, events, scheduler
+from . import auth, db, detector, events, redact, scheduler
 from .cal import CameraConfig, available_drivers, discover, get_driver
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-app = FastAPI(title="CloudBSS Vision M1")
+# Authentication is declared HERE, on the application, not on each route. Every route
+# that exists — and every route anyone adds later — is covered without being remembered.
+# tests/test_security.py walks the live route table and fails if one answers unguarded.
+#
+# The interactive docs are off: an appliance has no use for Swagger, and /openapi.json
+# hands an attacker the entire API surface for free.
+app = FastAPI(title="CloudBSS Vision M1",
+              dependencies=[Depends(auth.require_auth)],
+              docs_url=None, redoc_url=None, openapi_url=None)
 STATIC = os.path.join(os.path.dirname(__file__), "web", "static")
 _stop = None
+
+
+def check_security_config() -> None:
+    """Refuse to put an open box on a shop's network.
+
+    Same reasoning as the delivery check: the dangerous state is not a box that stops,
+    it is a box that runs while quietly offering the recorder password to the WiFi.
+    """
+    fatal, warnings = auth.config_problems()
+    for w in warnings:
+        logging.warning("SECURITY: %s", w)
+    if fatal:
+        for f in fatal:
+            logging.error("SECURITY: %s", f)
+        raise RuntimeError("refusing to start — the gateway would be unprotected: "
+                           + " | ".join(fatal))
 
 
 def check_delivery_config() -> None:
@@ -48,6 +72,7 @@ def check_delivery_config() -> None:
 @app.on_event("startup")
 def _startup():
     global _stop
+    check_security_config()
     check_delivery_config()
     db.db()
     if os.environ.get("DEMO", "0") == "1" and not db.list_cameras():
@@ -113,7 +138,7 @@ def api_discover():
 def cameras():
     out = []
     for r in db.list_cameras():
-        d = db.row_to_dict(r)
+        d = db.row_to_dict(r, secret=r["password"])
         snap = db.latest_snapshot(r["id"])
         d["last_snapshot_id"] = snap["id"] if snap else None
         d["last_snapshot_ts"] = snap["ts"] if snap else None
@@ -140,7 +165,9 @@ def test_camera(cam_id: int):
     if not row:
         raise HTTPException(404, "no such camera")
     cap = get_driver(row["driver"]).probe(scheduler.cam_config(row))
-    return cap.__dict__
+    # probe() builds rtsp://user:pass@host/... for display. Handing that back was a
+    # direct disclosure of the recorder's admin password to any caller.
+    return redact.scrub_row(dict(cap.__dict__), row["password"])
 
 
 @app.post("/api/cameras/{cam_id}/capture")
@@ -152,7 +179,9 @@ def capture_now(cam_id: int):
     if snap_id is None:
         err = db.db().execute("SELECT last_error FROM cameras WHERE id=?",
                               (cam_id,)).fetchone()["last_error"]
-        raise HTTPException(502, f"capture failed: {err}")
+        # Already scrubbed on the way in; scrubbed again on the way out, because a
+        # single missed call site here hands out the recorder password.
+        raise HTTPException(502, f"capture failed: {redact.scrub_secret(err, row['password'])}")
     return {"snapshot_id": snap_id}
 
 

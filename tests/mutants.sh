@@ -38,7 +38,7 @@ PY
 }
 
 echo
-echo "  P0-1 · delivery mutants"
+echo "  P0-1 delivery + P0-2 security mutants"
 echo "  $(printf '─%.0s' {1..58})"
 
 # ── the original bug, put back exactly as it shipped ──────────────────────────────
@@ -164,8 +164,86 @@ mutate "the self-test event loses its identifiable name" app/events.py \
   '        "event": "shelf.out_of_stock",'
 
 mutate "install.sh stops proving the uplink" install.sh \
-  '  RESULT="$(curl -sf -X POST localhost:8080/api/selftest || true)"' \
+  '  RESULT="$(curl -sf -u "$ADMIN_USER:$ADMIN_PASSWORD" -X POST localhost:8080/api/selftest || true)"' \
   '  RESULT=SKIPPED'
+
+# ══ P0-2 · security ═══════════════════════════════════════════════════════════════
+mutate "authentication is removed from the application" app/main.py \
+  '              dependencies=[Depends(auth.require_auth)],' \
+  ''
+
+mutate "the guard waves everyone through" app/auth.py \
+  '    if auth_disabled():
+        return "anonymous"' \
+  '    return "anonymous"
+    if auth_disabled():
+        return "anonymous"'
+
+mutate "a missing password means no password is required" app/auth.py \
+  '        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "gateway not configured")' \
+  '        return "anonymous"'
+
+mutate "the password is compared with ==" app/auth.py \
+  '    pw_ok = secrets.compare_digest(creds.password or "", expected_pw)' \
+  '    pw_ok = (creds.password or "") == expected_pw'
+
+mutate "startup stops refusing an unprotected box" app/auth.py \
+  '    pw = admin_password()
+    if not pw:' \
+  '    pw = admin_password()
+    if False:'
+
+mutate "DEMO=1 quietly disables authentication" app/auth.py \
+  '    if auth_disabled():
+        warn.append(' \
+  '    if auth_disabled() or os.environ.get("DEMO") == "1":
+        warn.append('
+
+mutate "the docs and the API map are published again" app/main.py \
+  '              docs_url=None, redoc_url=None, openapi_url=None)' \
+  '              )'
+
+# ── credential redaction ──────────────────────────────────────────────────────────
+mutate "the probe hands back the credentialed RTSP URI again" app/main.py \
+  '    return redact.scrub_row(dict(cap.__dict__), row["password"])' \
+  '    return cap.__dict__'
+
+mutate "the camera list stops scrubbing" app/db.py \
+  '    return redact.scrub_row(d, secret)' \
+  '    return d'
+
+mutate "the camera list returns the username again" app/db.py \
+  '    d.pop("username", None)' \
+  '    pass'
+
+mutate "ffmpeg errors are stored unscrubbed" app/scheduler.py \
+  '        msg = redact.scrub_secret(str(e), cam.password)[:300]' \
+  '        msg = str(e)[:300]'
+
+mutate "the URL credential pattern stops matching" app/redact.py \
+  "_URL_CREDS = re.compile(r\"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)(?P<user>[^/@\\s]*?):(?P<pw>[^@\\s]*)@\")" \
+  '_URL_CREDS = re.compile(r"(?!x)x")'
+
+mutate "a password outside a URL stops being masked" app/redact.py \
+  '        out = out.replace(secret, MASK)' \
+  '        pass'
+
+# ── the box on the shop floor ─────────────────────────────────────────────────────
+mutate "install.sh stops generating a password" install.sh \
+  '  NEW_ADMIN_PW=1' \
+  '  ADMIN_PASSWORD=""; NEW_ADMIN_PW=1'
+
+mutate "a re-install locks the owner out" install.sh \
+  'PREV_ADMIN="$(prev ADMIN_PASSWORD)"' \
+  'PREV_ADMIN=""'
+
+mutate ".env is left world-readable" install.sh \
+  'chmod 600 "$DEST/.env"' \
+  'true'
+
+mutate "visionctl calls the API unauthenticated" install.sh \
+  '  status)  docker compose ps; echo; curl -sf -u "$AU:$AP" localhost:8080/api/health' \
+  '  status)  docker compose ps; echo; curl -sf localhost:8080/api/health'
 
 echo
 echo "  $killed killed, $survived survived"
