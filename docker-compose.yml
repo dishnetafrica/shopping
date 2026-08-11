@@ -1,27 +1,25 @@
-# One-click full stack. On EasyPanel you can instead deploy just the `app`
-# service and point DB_HOST/REDIS_HOST at EasyPanel's managed Postgres/Redis.
 services:
-  app:
+  vision:
     build: .
+    container_name: cloudbss-vision-m1
     restart: unless-stopped
-    ports: ["8080:80"]
+    network_mode: host          # required for ONVIF WS-Discovery multicast + camera LAN
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Configuration comes from .env and NOWHERE ELSE.
+    #
+    # Do NOT add an `environment:` block here for STORE_ID, EVENT_WEBHOOK_URL,
+    # VISION_TOKEN or DEMO. Compose gives `environment:` precedence over `env_file:`
+    # — explicitly including EMPTY values — so the block that used to live here
+    # silently discarded the webhook URL and store id that install.sh had just
+    # asked the installer for. Every box shipped with it reported store
+    # "family-shoppers-01" and delivered no events at all, while the dashboard,
+    # the detector and the local event log all looked perfectly healthy.
+    #
+    # tests/test_delivery.py::test_compose_declares_no_environment_overrides
+    # fails the build if anyone reintroduces one.
+    # ─────────────────────────────────────────────────────────────────────────────
     env_file: .env
-    depends_on: [pgsql, redis]
 
-  pgsql:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_DATABASE:-shopbot}
-      POSTGRES_USER: ${DB_USERNAME:-shopbot}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
-    volumes: ["pgdata:/var/lib/postgresql/data"]
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes: ["redisdata:/data"]
-
-volumes:
-  pgdata:
-  redisdata:
+    volumes:
+      - ./data:/data
