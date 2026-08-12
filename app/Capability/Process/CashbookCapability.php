@@ -351,7 +351,7 @@ final class CashbookCapability implements ProcessCapability
 
         $goOrders = ['key' => 'go_orders', 'label' => 'Customer paid', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrders', 'actor' => 'human'];
         // Customer paid — inline receipt against an open order; the remaining balance is shown right here.
-        $orderLabels = []; $orderMap = []; $recvAgg = [];
+        $orderLabels = []; $orderMap = []; $recvAgg = []; $custOrderLabel = [];
         // This query had NO status filter, so Cancelled and Rejected orders were counted as money
         // customers owe — 32% of the receivables figure on the first tenant it was measured against,
         // feeding straight into the Working capital headline. A cancelled order is not a debt.
@@ -366,8 +366,37 @@ final class CashbookCapability implements ProcessCapability
             $label = str_replace('|', ' ', $ono . ' · ' . $cust . ' · owes ' . Money::fmt($bal, $ocur));
             $orderMap[$label] = (int) $o->id;                       // full lookup (resolves any prefill)
             if (count($orderLabels) < 60) { $orderLabels[] = $label; } // but only show the 60 most recent
-            $rk = mb_strtolower($cust) . '|' . $ocur;
-            if (! isset($recvAgg[$rk])) { $recvAgg[$rk] = ['customer' => $cust, 'currency' => $ocur, 'owed' => 0.0, 'order' => $label]; }
+            $ck = mb_strtolower($cust);
+            if (! isset($custOrderLabel[$ck])) { $custOrderLabel[$ck] = $label; }   // for the receivables row button
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // RECEIVABLES COME FROM INVOICES, NOT ORDERS.
+        //
+        // Payments attach to an INVOICE. `orders.amount_paid` is never updated from them, so an
+        // order that was invoiced and then paid sits at zero for ever and reads as outstanding.
+        // Measured on the first tenant this was checked against: 63 delivered orders showed
+        // USD 20,912 "unpaid" — every one of them at exactly 0.00 paid — while 62 of 85 payments
+        // were attached to invoices and settled. The money was collected; only the orders looked open.
+        //
+        // (Related, still unfixed elsewhere: where `orders.amount_paid` IS written it is stored in
+        // UGX while `total` is in USD — exactly ×3,655 every time — so `whereColumn('amount_paid',
+        // '<', 'total')` compares two different currencies. Another reason not to price debt off it.)
+        //
+        // This is the same source /papi/finance-overview uses, so Finance and the Cashbook can no
+        // longer disagree about what customers owe.
+        // ---------------------------------------------------------------------------------------
+        $recvAgg = [];
+        foreach (\App\Models\Invoice::where('tenant_id', $t)->where('status', '!=', 'void')->get(['id', 'invoice_no', 'customer_name', 'currency', 'balance']) as $inv) {
+            $bal = round((float) $inv->balance, 2);
+            if ($bal <= 0.005) { continue; }
+            $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($inv, $ctx->tenant);
+            $cust = trim(str_replace('|', ' ', (string) ($inv->customer_name ?: 'Customer')));
+            $rk = mb_strtolower($cust) . '|' . $icur;
+            if (! isset($recvAgg[$rk])) {
+                $recvAgg[$rk] = ['customer' => $cust, 'currency' => $icur, 'owed' => 0.0,
+                    'order' => $custOrderLabel[mb_strtolower($cust)] ?? ''];
+            }
             $recvAgg[$rk]['owed'] += $bal;
         }
         $customerPaid = count($orderLabels) ? [
@@ -387,17 +416,26 @@ final class CashbookCapability implements ProcessCapability
 
         // --- "Customers who owe you" (receivables) — the mirror of the payables tab ---
         $recvRows = [];
-        if (count($orderLabels)) {
+        // Gate on $recvAgg (invoices), not $orderLabels (orders) — a tenant can have an unpaid
+        // invoice with no open order behind it, and the whole card used to vanish in that case.
+        if (count($recvAgg)) {
             $recvList = array_values($recvAgg);
             usort($recvList, fn ($a, $b) => $b['owed'] <=> $a['owed']);
             foreach ($recvList as $rv) {
                 if ($rv['owed'] <= 0.005) { continue; }
-                $recAct = array_merge($customerPaid, ['key' => 'ev_customer_paid', 'label' => 'Payment from ' . $rv['customer'],
-                    'prefill' => array_merge($customerPaid['prefill'] ?? [], ['order' => $rv['order']])]);
+                // The payment button needs an ORDER (that is what /papi/record-payment resolves).
+                // If this customer has no open order to point at, show the debt without the button
+                // rather than prefilling somebody else's order.
+                $btns = [];
+                if (($rv['order'] ?? '') !== '' && count($orderLabels)) {
+                    $recAct = array_merge($customerPaid, ['key' => 'ev_customer_paid', 'label' => 'Payment from ' . $rv['customer'],
+                        'prefill' => array_merge($customerPaid['prefill'] ?? [], ['order' => $rv['order']])]);
+                    $btns[] = ['icon' => 'dollar', 'title' => 'Record payment from ' . $rv['customer'], 'tone' => 'primary', 'action' => $recAct];
+                }
                 $recvRows[] = ['cells' => [
                     $rv['customer'],
                     ['value' => Money::fmt(round($rv['owed'], 2), $rv['currency']), 'tone' => 'danger'],
-                    ['buttons' => [['icon' => 'dollar', 'title' => 'Record payment from ' . $rv['customer'], 'tone' => 'primary', 'action' => $recAct]]],
+                    ['buttons' => $btns],
                 ], 'usd' => 0, 'link' => null];
             }
         }

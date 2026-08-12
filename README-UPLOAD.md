@@ -117,10 +117,37 @@ Now excludes `Cancelled` and `Rejected`. The bare `limit(200)` also became
 that many unpaid orders, with nothing on screen to say so. (104 today, so it was not yet
 biting.)
 
-**Still open, and not fixed here:** 63 orders marked **Delivered** carry $20,912 unpaid.
-Goods went out, so either that is real debt or the payments never attached — see the note
-below about the v4.53 payment-linking bug. Do not treat the corrected working-capital figure
-as clean until that is resolved.
+## 6 · Receivables now come from INVOICES, not orders  ← the big one
+
+**Payments attach to an invoice. `orders.amount_paid` is never updated from them.** So an
+order that was invoiced and then paid sits at zero for ever and reads as outstanding.
+
+Measured on tenant 17: **63 delivered orders showed $20,912 "unpaid" — every single one at
+exactly 0.00 paid** — while **62 of 85 payments were attached to invoices and settled**.
+The money was collected. Only the orders looked open.
+
+That is why the Cashbook said working capital $39,366 while `/papi/finance-overview` said
+receivables $184. Finance was right. The Cashbook was pricing debt off the wrong object.
+
+`$recvAgg` — which feeds both the **Working capital** headline and the **Customers who owe
+you** card — is now built from `Invoice::where('status','!=','void')` summing `balance`,
+converted with `SalesBaseCurrency::txnCurrency`. **That is exactly what finance-overview
+uses**, so the two screens can no longer disagree.
+
+Two knock-on details handled:
+
+- The card's per-row **Record payment** button needs an *order* (that is what
+  `/papi/record-payment` resolves). Where a customer has no open order, the row now shows
+  the debt **without** a button rather than prefilling somebody else's order.
+- The card was gated on `count($orderLabels)`; it is now gated on `count($recvAgg)`, so an
+  unpaid invoice with no open order behind it no longer makes the whole card vanish.
+
+**Related, deliberately NOT fixed here:** where `orders.amount_paid` *is* written, it is
+stored in **UGX while `total` is in USD** — exactly ×3,655 (the hardcoded `Fx::DEFAULTS`
+rate) on every row checked. `whereColumn('amount_paid','<','total')` therefore compares two
+currencies. Those orders read as hugely overpaid and drop out of the unpaid list by luck.
+Fixing that means touching whatever writes `amount_paid`, and it deserves its own change
+with its own testing.
 
 ## Honest limit
 
