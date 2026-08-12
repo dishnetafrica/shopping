@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
-from . import alerting, auth, db, detector, events, quality, redact, scheduler
+from . import alerting, auth, db, detector, evaluation, events, quality, redact, scheduler
 from .cal import CameraConfig, available_drivers, discover, get_driver
 
 logging.basicConfig(level=logging.INFO,
@@ -559,6 +559,88 @@ def labels(limit: int = 500, only_acked: bool = True):
         "false_positives": sum(1 for d in out if d["ack_verdict"] == "false"),
         "frames_missing": sum(1 for d in out if d["ack_verdict"] and not d["frame_available"]),
         "labels": out,
+    }
+
+
+class MissedIn(BaseModel):
+    by: str = ""
+    note: str = ""
+
+
+@app.post("/api/zones/{zone_uid}/missed")
+def report_missed(zone_uid: str, m: MissedIn):
+    """"This shelf was empty and you never told me."
+
+    The only source of false negatives this system can have. Acknowledgements answer
+    alerts we sent; nothing about them can reveal a shelf that sat empty while the box
+    stayed quiet, because nobody is asked about an alert that never arrived. Without
+    this, any recall figure would be invented — so the endpoint exists before anything
+    that would quote one.
+    """
+    z = db.db().execute("SELECT id FROM zones WHERE zone_uid=?", (zone_uid,)).fetchone()
+    if not z:
+        raise HTTPException(404, "no zone with that uid")
+    with db.tx() as con:
+        con.execute("INSERT INTO missed_reports (zone_uid, ts, reported_by, note) "
+                    "VALUES (?,?,?,?)",
+                    (zone_uid, time.time(), (m.by or "").strip()[:80],
+                     (m.note or "").strip()[:400]))
+    return {"ok": True, "zone_uid": zone_uid}
+
+
+@app.get("/api/evaluation")
+def evaluate(empty_below_from: float = 0.15, empty_below_to: float = 0.55,
+             steps: int = 9, limit: int = 2000):
+    """Precision, a threshold sweep and a calibration check — over the shop's own frames.
+
+    Re-reads every acknowledged event's stored frame and re-scores it. That is what
+    makes "what would empty_below = 0.30 have done?" answerable with real shelves
+    rather than with another synthetic aisle.
+
+    Reports `frames_missing` prominently. A sweep computed over the half of the labels
+    whose images survived, presented as though it covered all of them, is a lie of
+    omission — and the whole point of this milestone is to stop producing numbers that
+    read as more certain than they are.
+    """
+    rows = db.db().execute(
+        "SELECT e.uid, e.fill, e.alertable, e.confidence, e.ack_verdict, "
+        "       s.path AS frame, z.polygon, z.ref_descriptor, z.ref_descriptors, "
+        "       z.empty_below, z.low_below, z.zone_uid "
+        "  FROM events e "
+        "  JOIN zones z ON z.id = e.zone_id "
+        "  LEFT JOIN snapshots s ON s.id = e.snapshot_id "
+        " WHERE e.ack_verdict != '' ORDER BY e.ts DESC LIMIT ?",
+        (max(1, min(limit, 20000)),)).fetchall()
+
+    labels, scored, missing = [], [], 0
+    for r in rows:
+        labels.append({"alertable": bool(r["alertable"]), "ack_verdict": r["ack_verdict"]})
+        refs = detector.references_from_json(r["ref_descriptor"], r["ref_descriptors"])
+        got = None
+        if refs:
+            got = evaluation.rescore(r["frame"], json.loads(r["polygon"]), refs,
+                                     r["empty_below"], r["low_below"])
+        if got is None:
+            missing += 1
+            continue
+        scored.append({"uid": r["uid"], "zone_uid": r["zone_uid"],
+                       "verdict": r["ack_verdict"], **got})
+
+    lo, hi = float(empty_below_from), float(empty_below_to)
+    n = max(2, min(int(steps), 40))
+    grid = [lo + (hi - lo) * i / (n - 1) for i in range(n)]
+
+    missed = db.db().execute("SELECT COUNT(*) AS n FROM missed_reports").fetchone()["n"]
+    return {
+        "labels_total": len(rows),
+        "frames_missing": missing,
+        "rescored": len(scored),
+        "missed_reports": missed,
+        "min_labels_to_quote_a_rate": evaluation.MIN_LABELS,
+        "precision": evaluation.precision(labels),
+        "threshold_sweep": evaluation.sweep(scored, grid,
+                                            rows[0]["low_below"] if rows else 0.65),
+        "confidence_calibration": evaluation.calibration(scored),
     }
 
 

@@ -72,6 +72,19 @@ CREATE TABLE IF NOT EXISTS events (
   delivered INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
+-- P0-8. The ONLY source of false negatives this system can ever have.
+-- Acknowledgements answer alerts we sent; nothing about them can reveal a shelf that
+-- sat empty while the box said nothing, because nobody is asked about an alert that
+-- never arrived. Recall is unmeasurable without this table, and a recall figure
+-- computed without it would be invented.
+CREATE TABLE IF NOT EXISTS missed_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  zone_uid TEXT NOT NULL,
+  ts REAL NOT NULL,
+  reported_by TEXT DEFAULT '',
+  note TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_missed_zone ON missed_reports(zone_uid, ts DESC);
 """
 
 

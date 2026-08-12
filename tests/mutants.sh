@@ -700,6 +700,101 @@ mutate "pruning protects every event frame, so nothing is ever pruned" app/db.py
   '     AND length(ack_verdict) > 0) "' \
   '     AND 1=1) "'
 
+# ── P0-8 mutants ──────────────────────────────────────────────────────────────────
+# An evaluation framework fails by being CONFIDENTLY WRONG rather than broken. Every
+# mutant below produces a number that still looks like a number.
+
+mutate "the normal approximation replaces Wilson (zero width at p=1)" app/evaluation.py \
+  '    centre = (p + z2 / (2 * n)) / denom' \
+  '    centre = p'
+
+mutate "the interval margin collapses" app/evaluation.py \
+  '    margin = (z / denom) * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n))' \
+  '    margin = z * math.sqrt(p * (1 - p) / n)'
+
+mutate "no data becomes a confident zero" app/evaluation.py \
+  '    if n <= 0:
+        return (0.0, 1.0)' \
+  '    if n <= 0:
+        return (0.0, 0.0)'
+
+mutate "the interval may report outside 0..1" app/evaluation.py \
+  '    return (max(0.0, centre - margin), min(1.0, centre + margin))' \
+  '    return (centre - margin, centre + margin)'
+
+mutate "a rate is quoted however few labels there are" app/evaluation.py \
+  '    if n < MIN_LABELS:
+        out["precision"] = None' \
+  '    if False:
+        out["precision"] = None'
+
+mutate "the minimum-label floor is removed" app/evaluation.py \
+  'MIN_LABELS = int(os.environ.get("E_MIN_LABELS", "20"))' \
+  'MIN_LABELS = int(os.environ.get("E_MIN_LABELS", "1"))'
+
+mutate "suppressed events are counted as alerts" app/evaluation.py \
+  '    alerted = [x for x in labels if x.get("alertable") and x.get("ack_verdict")]' \
+  '    alerted = [x for x in labels if x.get("ack_verdict")]'
+
+mutate "a recall figure is invented" app/evaluation.py \
+  '        "recall": None,' \
+  '        "recall": 1.0,'
+
+mutate "a missing frame is silently skipped instead of reported" app/evaluation.py \
+  '    img = cv2.imread(frame_path) if frame_path else None
+    if img is None:
+        return None' \
+  '    img = cv2.imread(frame_path) if frame_path else None
+    if img is None:
+        return {"fill": 0.0, "state": "empty", "confidence": 1.0}'
+
+mutate "an unreadable frame crashes the whole run" app/evaluation.py \
+  '    except (ValueError, cv2.error):
+        return None' \
+  '    except (ValueError,):
+        return None'
+
+mutate "the sweep inverts the threshold comparison" app/evaluation.py \
+  '            called_empty = s["fill"] < t' \
+  '            called_empty = s["fill"] > t'
+
+mutate "the sweep quotes a rate on thin evidence" app/evaluation.py \
+  '            "precision": None if n < MIN_LABELS else round(tp / n, 4),' \
+  '            "precision": round(tp / n, 4) if n else None,'
+
+mutate "the sweep stops counting what a threshold would miss" app/evaluation.py \
+  '            elif not called_empty and really_empty:
+                fn += 1' \
+  '            elif False:
+                fn += 1'
+
+mutate "calibration drops the most confident readings" app/evaluation.py \
+  '                       or (i == bins - 1 and s["confidence"] == 1.0))]' \
+  '                       )]'
+
+mutate "calibration bins overlap" app/evaluation.py \
+  '                  and (lo_edge <= s["confidence"] < hi_edge' \
+  '                  and (lo_edge <= s["confidence"] <= hi_edge'
+
+mutate "an empty calibration bin claims perfection" app/evaluation.py \
+  '            "observed_correct": None if n == 0 else round(correct / n, 4),' \
+  '            "observed_correct": 1.0 if n == 0 else round(correct / n, 4),'
+
+mutate "a thin calibration bin is presented as solid" app/evaluation.py \
+  '            "enough_data": n >= MIN_LABELS,' \
+  '            "enough_data": True,'
+
+mutate "the endpoint hides how many frames are gone" app/main.py \
+  '            missing += 1
+            continue' \
+  '            continue'
+
+mutate "a miss may be reported against any zone name" app/main.py \
+  '    z = db.db().execute("SELECT id FROM zones WHERE zone_uid=?", (zone_uid,)).fetchone()
+    if not z:
+        raise HTTPException(404, "no zone with that uid")' \
+  '    z = True'
+
 echo
 echo "  $killed killed, $survived survived"
 echo
