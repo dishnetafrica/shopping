@@ -360,9 +360,13 @@ final class CashbookCapability implements ProcessCapability
         }
         $customerPaid = count($orderLabels) ? [
             'key' => 'ev_customer_paid', 'label' => 'Customer paid', 'method' => 'POST', 'endpoint' => '/papi/record-payment', 'actor' => 'human', 'tone' => 'primary',
-            'schema' => ['order' => 'combo:' . implode('|', $orderLabels), 'amount' => 'money', 'note' => 'text'],
-            'labels' => ['order' => 'Which order (customer · balance owed)', 'amount' => 'Amount received', 'note' => 'Note (auto)'],
-            'prefill' => ['order' => $orderLabels[0]],
+            // `received_by` names whose cash this lands in. PanelApiController::recordPayment() has
+            // always accepted it (and `holder`) — this form simply never asked, so every payment taken
+            // from the Cashbook silently went into whoever was logged in. The customer screen asks;
+            // this now matches it.
+            'schema' => ['order' => 'combo:' . implode('|', $orderLabels), 'amount' => 'money', 'received_by' => $comboPeople, 'note' => 'text'],
+            'labels' => ['order' => 'Which order (customer · balance owed)', 'amount' => 'Amount received', 'received_by' => 'Received by (whose cash)', 'note' => 'Note (auto)'],
+            'prefill' => ['order' => $orderLabels[0], 'received_by' => $me],
             'body' => ['notify' => '0'],
             'autoNote' => ['template' => 'Customer payment', 'watch' => []],
             'valueMap' => ['field' => 'order', 'into' => 'order', 'map' => $orderMap, 'error' => 'Pick an order from the list'],

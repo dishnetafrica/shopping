@@ -1,12 +1,13 @@
-# v4.90 — Owner drawing + Borrowed a loan + Description column on cashbook exports
+# v4.90 — owner drawings, loans, cashbook descriptions, and customer advances
 
-**Three files. All changes are ADDITIONS or in-place column changes — nothing removed
-from the app, no migration, no composer change, no settings change.**
+**Four files. Every change is additive or an in-place field change — no migration, no
+composer change, no settings change, nothing removed.**
 
 ```
-app/Http/Controllers/Panel/TradeCashbookController.php   +20 lines (inside store())
-app/Capability/Process/CashbookCapability.php            +21 lines (2 actions, 2 tiles)
+app/Http/Controllers/Panel/TradeCashbookController.php   +20 lines  (drawing + loan stages)
+app/Capability/Process/CashbookCapability.php            +24 lines  (2 tiles, + received_by)
 app/Services/Finance/CashbookExport.php                  Description column, PDF + CSV
+app/Capability/Object/CustomerCapability.php             +6 lines   (Record payment always shown)
 ```
 
 Upload to GitHub, then deploy on EasyPanel.
@@ -15,101 +16,107 @@ Upload to GitHub, then deploy on EasyPanel.
 
 ## ⚠ READ THIS BEFORE UPLOADING
 
-These were built from the **v4.58** tree you sent. Your production is newer. If any of the
-three files has changed since 7 August, uploading my copy would **revert those changes** —
-which is how V3 got blanked on 31 July.
+Built from the **v4.58** tree you sent. Your production is newer. If any of these four files
+has changed since 7 August, uploading my copy would **revert those changes** — which is how
+V3 got blanked on 31 July.
 
-**Verify first — it takes two minutes.** Open each file on GitHub and confirm the anchor
-line is present:
+**Verify first.** Open each on GitHub and confirm the anchor line is there:
 
-**1. `app/Http/Controllers/Panel/TradeCashbookController.php`** (~line 209):
+**1. `TradeCashbookController.php`** (~209):
 ```php
         $payCats = ['supplier payment','supplier payment (on account)','on account','account payment'];
 ```
 
-**2. `app/Capability/Process/CashbookCapability.php`** (~line 385):
+**2. `CashbookCapability.php`** (~385):
 ```php
         $tiles[] = ['icon' => 'send', 'title' => 'Paid an expense / someone', 'sub' => 'Transport, salary, rent — to a person or shop', 'tone' => 'out', 'action' => $evExpense];
 ```
 
-**3. `app/Services/Finance/CashbookExport.php`** (~line 233 and ~line 481):
+**3. `CashbookExport.php`** (~233):
 ```php
             $line(['Date', 'Ref', 'Category', 'Held by', 'In', 'Out', 'Balance']);
 ```
+
+**4. `CustomerCapability.php`** (~142):
 ```php
-            <table><thead><tr><th>Date</th><th>Ref</th><th>Category</th><th>Held by</th><th class="r">In</th><th class="r">Out</th><th class="r">Balance</th></tr></thead>
+        $primary = $balance > 0 ? $payAction : $newQuote;
 ```
 
-If all are there, upload. If any file looks different, **stop and send me the current
-version** and I will re-cut against it.
+All present → upload. Any file different → **stop and send me the current version.**
 
 ---
 
 ## 1 · Owner drawing and Borrowed a loan
 
-`$expCats` in `CashbookCapability.php` already offered a **`Drawing`** category:
+`$expCats` already offered a **`Drawing`** category, but `store()` never mapped it to a
+stage, so it posted a plain `cash_out` — bucketed into `other_out` and **subtracted from
+operating profit**. Owner pay was booked as an expense: **$18,000/year** understated across
+three owners. The category existed; the mapping never did.
+
+Two new tiles in Record activity: **Owner drawing** (cash −, profit unchanged, equity −) and
+**Borrowed a loan** (booked as `funding`). Neither asks for a category — it rides in the body.
+
+- The drawing tile writes only the `order_costs` row, so **Partners capital accounts do not
+  move.** Use Finance → Partners → − Drawing when the capital account matters; the tile when
+  the **payer** matters.
+- The loan tile needs `books.loan_holders` to name the lender, or the money reads as equity
+  rather than debt.
+
+## 2 · Description column on cashbook exports
+
+A single-currency export showed `DATE · REF · CATEGORY · HELD BY · IN · OUT · BALANCE` — no
+description, so a row read "PUR-0043 · Purchase · 258,000 UGX" and you could not tell what
+was bought. "Held by" printed the same name on every row, because the export was already
+filtered to one person.
+
+The note was already loaded (line 103) and the **company** view already printed it; only the
+per-currency view didn't. Now **Description replaces Held by when scoped to one person**, and
+is *added* alongside it when exporting everybody — so the single-person column count and
+`colspan` are unchanged. **PDF and CSV** both.
+
+## 3 · Whose cash a customer payment lands in
+
+The Cashbook's **Customer paid** tile asked only order, amount and note. So a payment taken
+there silently landed in whoever was logged in — while the customer screen has asked
+"Received by (whose cash)" all along.
+
+`PanelApiController::recordPayment()` has always accepted `received_by` (and `holder`); the
+form never asked. It does now, prefilled to you.
+
+## 4 · Record payment is always reachable on a customer
 
 ```php
-$expCats = 'Transport|Salary|Rent|Utilities|Local purchase|Expense|Drawing|Other';
+$primary = $balance > 0 ? $payAction : $newQuote;
 ```
 
-But `store()` only mapped purchase and supplier-payment categories to a stage, so picking
-"Drawing" posted a plain `cash_out` — which `cashPnl` buckets into `other_out` and
-**subtracts from operating profit**. Owner pay was booked as an expense. At $500/month
-across three owners that is **$18,000 a year** of understated profit. The category existed;
-the mapping never did.
+A customer who owes **nothing** is exactly the one who pays in advance — and that was the one
+case where Record payment was demoted out of the header into the rail. It is now always in
+the header: leading when there is a balance, beside New quotation when there is not.
 
-You get two tiles in **Record activity**:
+**Advances need no special handling.** `CustomerCapability::recordPayment()` passes
+`invoice_no => null`, and per the v4.53 credit-on-account work a customer with nothing open
+is recorded as paying onto their account — held as `kind = 'advance'`, `applied = false`.
+Spend it later from the invoice's **Apply credit** action (oldest first, writes no cash row).
 
-- **Owner drawing** — cash −, profit **unchanged**, equity −.
-- **Borrowed a loan** — an owner lends money in; booked as `funding`.
-
-Neither asks for a category; it rides in the request body.
-
-**The drawing tile does not update the Partners screen** — it writes only the `order_costs`
-row, so Books and profit are right but partner capital accounts do not move. Use
-**Finance → Partners → − Drawing** when the capital account matters; use the tile when the
-**payer** matters (paying one owner out of another's float, which Partners cannot express).
-
-**The loan tile needs `books.loan_holders` to name the lender**, or the money reads as
-equity rather than debt. The row is identical either way.
-
-## 2 · Description column on the cashbook export
-
-A single-currency export (`Jayesh Bhai — UGX Cashbook`) showed
-`DATE · REF · CATEGORY · HELD BY · IN · OUT · BALANCE` — with **no description**, so a row
-read "PUR-0043 · Purchase · 258,000 UGX" and you could not tell what was bought. Meanwhile
-"Held by" printed *Jayesh Bhai* on every single row, because the export was already
-filtered to him.
-
-The note was already loaded (`'note' => (string) ($c->note ?: '')`, line 103) and the
-**company** view already printed it — only the per-currency view didn't.
-
-Now: **Description replaces Held by when the export is scoped to one person**, and is
-*added* alongside it when exporting everybody. Column count is unchanged in the
-single-person case, so the layout and the opening/closing `colspan` are untouched.
-
-Applies to both **PDF and CSV** (CSV is the Excel path). Notes wrap onto a second line
-rather than pushing the money columns off the page.
+Note the deliberate limit: **credit is held and spent in the currency it was received in.**
 
 ## Honest limit
 
-**I could not run your test suite.** Packagist is blocked from my environment — no
-`vendor/`, no PHPUnit, not one line executed. `php -l` passes on all three files and every
-diff was checked line by line. That is not the same as tested.
+**I could not run your test suite.** Packagist is blocked from my environment — no `vendor/`,
+no PHPUnit, not one line executed. `php -l` passes on all four files and every diff was
+checked line by line. That is not the same as tested.
 
 ## Test after deploying
 
-1. Record activity → **Owner drawing** → $1 → whoever's cash.
-2. Books: cash falls $1 and **operating profit does not move.** If profit moves, the
-   category did not match — check `$drawCats`.
-3. Record activity → **Borrowed a loan** → $1 under a name in `books.loan_holders`.
-4. Books: the loan panel rises $1, equity does not.
-5. Cash by person → tap ⤓ → **Jayesh Bhai — UGX cash book (PDF)**. Every row should now
-   carry its note, and "Held by" should be gone.
-6. Same as CSV, open in Excel — the Description column should be there too.
-7. Export the **all-people** book as well: "Held by" must still be present there.
+1. Record activity → **Owner drawing** → $1. Books: cash −$1, **operating profit unchanged.**
+2. Record activity → **Borrowed a loan** → $1 under a name in `books.loan_holders`. Loan
+   panel rises $1, equity does not.
+3. Cash by person → ⤓ → a person's cash book PDF: notes present, "Held by" gone.
+4. Export the **all-people** book: "Held by" must still be there.
+5. Record activity → **Customer paid**: a "Received by (whose cash)" picker appears.
+6. Open a customer with a **zero** balance: **Record payment** sits beside New quotation.
+7. Record an advance from them, then check Customers → their statement shows the credit.
 
 ## Rollback
 
-Re-upload the previous version of any file. No schema, no data, no settings were touched.
+Re-upload the previous version of any file. No schema, no data, no settings touched.

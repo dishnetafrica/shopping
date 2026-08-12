@@ -139,7 +139,13 @@ final class CustomerCapability implements ObjectCapability
             'prefill' => ['id' => (int) $c->id, 'title' => 'Collect from ' . ($c->name ?: 'customer'), 'currency' => $cur, 'priority' => 'Normal'],
         ];
 
+        // A customer who owes NOTHING is exactly the one who pays in advance — and that was the single
+        // case where "Record payment" got demoted out of the header into the rail, where nobody looks.
+        // It is now always in the header: it leads when there is a balance to settle, and sits beside
+        // New quotation when there is not. An advance from a settled customer is held as credit on
+        // account (PaymentService::record → resolveTarget), so this button is the entry point for it.
         $primary = $balance > 0 ? $payAction : $newQuote;
+        $secondary = $balance > 0 ? $newQuote : array_merge($payAction, ['tone' => 'default']);
 
         // --- answers grid ---
         $answers = [
@@ -446,7 +452,7 @@ final class CustomerCapability implements ObjectCapability
                 ['key' => 'financials', 'label' => 'Account statement'],
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($timelineEvents)],
             ])
-            ->actions([$primary, $newTask, ['key' => 'bos_timeline', 'label' => '🕑 Timeline', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/bos.timeline/' . $c->id, 'actor' => 'human', 'tone' => 'default']])
+            ->actions([$primary, $secondary, $newTask, ['key' => 'bos_timeline', 'label' => '🕑 Timeline', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/bos.timeline/' . $c->id, 'actor' => 'human', 'tone' => 'default']])
             ->more(array_values(array_filter([
                 $editAction,
                 (bool) $ctx->tenant->setting('relationship_memory', false) ? [
