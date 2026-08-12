@@ -230,7 +230,8 @@ def _iso(ts: float | None) -> str:
 
 def build_payload(zone_row, camera_row, to_state: str, from_state: str,
                   fill: float, thumb_jpeg: bytes | None, ts: float | None = None,
-                  duration_s: float | None = None, escalation: bool = False) -> dict:
+                  duration_s: float | None = None, escalation: bool = False,
+                  decision=None) -> dict:
     """One shelf state change, with a clock attached.
 
     P0-5 adds four things the audit found missing: a stable `uid`, the event's real
@@ -263,6 +264,11 @@ def build_payload(zone_row, camera_row, to_state: str, from_state: str,
         "low_below": _row_get(zone_row, "low_below", 0.65),
         "duration_s": None if duration_s is None else round(float(duration_s), 1),
         "duration_human": _human(duration_s),
+        # P0-7. CloudBSS had no way to tell an alert from a log line, so either every
+        # state change woke somebody or none did. The gateway now states its own
+        # judgement AND why — "why wasn't I warned?" has an answer months later.
+        **(decision.as_dict() if decision is not None
+           else {"alertable": False, "alert_reason": "undecided", "alert_detail": ""}),
         "thumbnail": base64.b64encode(thumb_jpeg).decode() if thumb_jpeg else None,
         "timestamp": _iso(ts),
     }

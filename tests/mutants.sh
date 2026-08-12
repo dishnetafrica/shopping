@@ -507,8 +507,8 @@ mutate "a suspect reference is not flagged in the payload" app/events.py \
 
 mutate "the payload is never stored, so retry cannot re-send it" app/scheduler.py \
   '            db.record_payload(ev_id, payload)
-            events.deliver(ev_id, payload)' \
-  '            events.deliver(ev_id, payload)'
+            db.record_decision(ev_id, decision)' \
+  '            db.record_decision(ev_id, decision)'
 
 mutate "state_since is never recorded" app/scheduler.py \
   '                    "last_fill=?, last_eval_ts=?, state_since=?, escalated_at=NULL "' \
@@ -613,6 +613,92 @@ mutate "skus are stored unclean (duplicates, blanks, whitespace)" app/main.py \
 mutate "the sku cap is removed" app/main.py \
   '    return out[:MAX_SKUS_PER_ZONE]' \
   '    return out'
+
+# ── P0-7 mutants ──────────────────────────────────────────────────────────────────
+# An alert loop fails in two silent ways: waking people for nothing until they mute it,
+# or quietly not waking them at all. And a label loop fails by losing the frame.
+
+mutate "everything becomes an alert" app/alerting.py \
+  '    if reference_suspect:' \
+  '    if False:'
+
+mutate "an unreadable zone still alerts" app/alerting.py \
+  '    if not zone_quality_ok:' \
+  '    if False:'
+
+mutate "a restock wakes somebody up" app/alerting.py \
+  '    if to_state not in ALERTABLE_STATES:' \
+  '    if False:'
+
+mutate "marginal readings alert" app/alerting.py \
+  '    if confidence is not None and confidence < MIN_CONFIDENCE:' \
+  '    if False:'
+
+mutate "the confidence floor is raised past everything" app/alerting.py \
+  'MIN_CONFIDENCE = float(os.environ.get("A_MIN_CONFIDENCE", "0.15"))' \
+  'MIN_CONFIDENCE = float(os.environ.get("A_MIN_CONFIDENCE", "0.99"))'
+
+mutate "a missing confidence blocks the alert" app/alerting.py \
+  '    if confidence is not None and confidence < MIN_CONFIDENCE:' \
+  '    if confidence is None or confidence < MIN_CONFIDENCE:'
+
+mutate "suspect reference is checked last instead of first" app/alerting.py \
+  '    if reference_suspect:
+        return Decision(False, "reference_suspect",' \
+  '    if reference_suspect and to_state == "never":
+        return Decision(False, "reference_suspect",'
+
+mutate "any text counts as a yes" app/alerting.py \
+  '    if s in ("true", "t", "yes", "y", "1", "correct", "confirmed", "real"):' \
+  '    if s:'
+
+mutate "an unusable verdict silently becomes false" app/alerting.py \
+  '    return ""' \
+  '    return "false"'
+
+mutate "the decision never reaches the payload" app/events.py \
+  '        **(decision.as_dict() if decision is not None' \
+  '        **({} if decision is not None'
+
+mutate "the decision is never stored on the row" app/scheduler.py \
+  '            db.record_decision(ev_id, decision)' \
+  '            pass'
+
+mutate "escalations ignore the alert decision" app/scheduler.py \
+  '        zone_quality_ok=(_col(z, "quality_state", "ok") != "bad"),
+        escalation=True)' \
+  '        zone_quality_ok=True,
+        escalation=True)'
+
+mutate "the ack endpoint accepts any verdict" app/main.py \
+  '    if not verdict:' \
+  '    if False:'
+
+mutate "acknowledging an unknown event silently succeeds" app/main.py \
+  '    if not row:
+        raise HTTPException(404, "no event with that uid")' \
+  '    if not row:
+        return {"ok": True}'
+
+mutate "a correction cannot overwrite the first answer" app/main.py \
+  '        con.execute("UPDATE events SET ack_verdict=?, ack_at=?, ack_by=?, ack_note=? "' \
+  '        con.execute("UPDATE events SET ack_verdict=COALESCE(NULLIF(ack_verdict,\"\"),?), ack_at=?, ack_by=?, ack_note=? "'
+
+mutate "the label export includes unacknowledged events by default" app/main.py \
+  '    if only_acked:' \
+  '    if False:'
+
+mutate "labels with a missing frame are reported as usable" app/main.py \
+  '        d["frame_available"] = bool(d.get("snapshot_path"))' \
+  '        d["frame_available"] = True'
+
+mutate "pruning deletes the frame behind a label" app/db.py \
+  '     AND length(ack_verdict) > 0) "' \
+  '     AND 1=0) "'
+
+mutate "pruning protects every event frame, so nothing is ever pruned" app/db.py \
+  '     AND length(ack_verdict) > 0) "' \
+  '     AND 1=1) "'
 
 echo
 echo "  $killed killed, $survived survived"

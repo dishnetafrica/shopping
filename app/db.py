@@ -138,6 +138,18 @@ _ADDED_COLUMNS = [
     # shelf events to stock "needs zone→SKU mapping"; this is that mapping, captured at
     # the moment someone is standing in front of the shelf drawing the zone.
     ("zones", "skus", "TEXT DEFAULT '[]'"),
+    # P0-7, the alert and acknowledgement loop. `alertable` records the gateway's own
+    # judgement about whether a person should have been told, and `alert_reason` why
+    # not — so "why wasn't I warned?" has an answer months later.
+    ("events", "alertable", "INTEGER DEFAULT 0"),
+    ("events", "alert_reason", "TEXT DEFAULT ''"),
+    # The acknowledgement IS the label. It is the only ground truth this project will
+    # ever have: every threshold so far was calibrated on synthetic fixtures, and P0-8
+    # cannot evaluate anything without real answers.
+    ("events", "ack_verdict", "TEXT DEFAULT ''"),
+    ("events", "ack_at", "REAL"),
+    ("events", "ack_by", "TEXT DEFAULT ''"),
+    ("events", "ack_note", "TEXT DEFAULT ''"),
 ]
 
 
@@ -230,8 +242,19 @@ def latest_snapshot(camera_id: int) -> sqlite3.Row | None:
 
 
 def prune_snapshots(camera_id: int, keep: int = 500) -> None:
+    """Drop old frames — but never one that a human has passed judgement on.
+
+    P0-7 makes acknowledged events the training set for P0-8, and a label whose image
+    has been deleted is not a label, it is a row of numbers nobody can check. At a
+    ten-minute cadence `keep=500` is about three and a half days, so without this every
+    label older than the working week would have quietly lost its picture. The frames
+    are the expensive part to collect and the only part that cannot be recomputed.
+    """
     rows = db().execute(
-        "SELECT id, path FROM snapshots WHERE camera_id=? ORDER BY ts DESC LIMIT -1 OFFSET ?",
+        "SELECT id, path FROM snapshots WHERE camera_id=? AND id NOT IN "
+        "  (SELECT snapshot_id FROM events WHERE snapshot_id IS NOT NULL "
+        "     AND length(ack_verdict) > 0) "
+        "ORDER BY ts DESC LIMIT -1 OFFSET ?",
         (camera_id, keep)).fetchall()
     if not rows:
         return
@@ -262,6 +285,16 @@ def record_payload(event_id: int, payload: dict) -> None:
                          slim.get("confidence"), event_id))
     except sqlite3.Error:
         # Recording the payload must never lose the event itself.
+        pass
+
+
+def record_decision(event_id: int, decision) -> None:
+    """Persist the alert judgement next to the event it is about."""
+    try:
+        with tx() as con:
+            con.execute("UPDATE events SET alertable=?, alert_reason=? WHERE id=?",
+                        (int(decision.alert), decision.reason, event_id))
+    except sqlite3.Error:
         pass
 
 

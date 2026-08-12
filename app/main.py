@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
-from . import auth, db, detector, events, quality, redact, scheduler
+from . import alerting, auth, db, detector, events, quality, redact, scheduler
 from .cal import CameraConfig, available_drivers, discover, get_driver
 
 logging.basicConfig(level=logging.INFO,
@@ -483,6 +483,83 @@ def delete_zone(zone_id: int):
     with db.tx() as con:
         con.execute("DELETE FROM zones WHERE id=?", (zone_id,))
     return {"ok": True}
+
+
+class AckIn(BaseModel):
+    verdict: str
+    by: str = ""
+    note: str = ""
+
+
+@app.post("/api/events/{uid}/ack")
+def acknowledge(uid: str, ack: AckIn):
+    """Record what a person said about an alert. This is the only ground truth we get.
+
+    Every threshold in this system was calibrated against synthetic aisles. The P0-5
+    confidence is explicitly an uncalibrated heuristic. P0-8 cannot build an evaluation
+    framework out of nothing, and no amount of further tuning against made-up shelves
+    substitutes for one shopkeeper saying "no, that one was full".
+
+    Keyed on the event `uid` rather than the row id because that is what CloudBSS holds
+    — it never sees our primary keys — and because the uid is stable across a retry.
+
+    Re-acknowledging is allowed and overwrites. People correct themselves, and a system
+    that refuses the correction keeps the wrong label for ever.
+    """
+    verdict = alerting.normalise_verdict(ack.verdict)
+    if not verdict:
+        raise HTTPException(422, {
+            "error": "unusable verdict",
+            "got": ack.verdict,
+            "hint": "true/yes/y/1/correct, or false/no/n/0/wrong",
+        })
+    row = db.db().execute("SELECT id FROM events WHERE uid=?", (uid,)).fetchone()
+    if not row:
+        raise HTTPException(404, "no event with that uid")
+    with db.tx() as con:
+        con.execute("UPDATE events SET ack_verdict=?, ack_at=?, ack_by=?, ack_note=? "
+                    "WHERE id=?",
+                    (verdict, time.time(), (ack.by or "").strip()[:80],
+                     (ack.note or "").strip()[:400], row["id"]))
+    return {"ok": True, "uid": uid, "verdict": verdict}
+
+
+@app.get("/api/labels")
+def labels(limit: int = 500, only_acked: bool = True):
+    """The labelled set, for P0-8 and for anyone comparing a new detector to this one.
+
+    Includes `snapshot_id` because a label without its frame cannot be re-scored, and
+    re-scoring is the whole point — prune_snapshots is careful never to delete a frame
+    an acknowledged event points at.
+    """
+    q = ("SELECT e.uid, e.ts, e.to_state, e.from_state, e.fill, e.confidence, "
+         "e.duration_s, e.alertable, e.alert_reason, e.ack_verdict, e.ack_at, e.ack_by, "
+         "e.ack_note, e.snapshot_id, s.path AS snapshot_path, "
+         "z.zone_uid, z.name AS zone_name, z.aisle, z.shelf, z.face, z.skus, "
+         "c.name AS camera_name "
+         "FROM events e JOIN zones z ON z.id=e.zone_id JOIN cameras c ON c.id=z.camera_id "
+         "LEFT JOIN snapshots s ON s.id=e.snapshot_id ")
+    if only_acked:
+        q += "WHERE e.ack_verdict != '' "
+    q += "ORDER BY e.ts DESC LIMIT ?"
+    out = []
+    for r in db.db().execute(q, (max(1, min(limit, 5000)),)):
+        d = dict(r)
+        try:
+            d["skus"] = json.loads(d.get("skus") or "[]")
+        except ValueError:
+            d["skus"] = []
+        d["frame_available"] = bool(d.get("snapshot_path"))
+        out.append(d)
+    acked = sum(1 for d in out if d["ack_verdict"])
+    return {
+        "count": len(out),
+        "acknowledged": acked,
+        "true_positives": sum(1 for d in out if d["ack_verdict"] == "true"),
+        "false_positives": sum(1 for d in out if d["ack_verdict"] == "false"),
+        "frames_missing": sum(1 for d in out if d["ack_verdict"] and not d["frame_available"]),
+        "labels": out,
+    }
 
 
 # ---------- events / dashboard ----------

@@ -16,7 +16,7 @@ import time
 import cv2
 import numpy as np
 
-from . import db, detector, events, quality, redact
+from . import alerting, db, detector, events, quality, redact
 from .cal import CameraConfig, CameraError, get_driver
 
 log = logging.getLogger("scheduler")
@@ -196,11 +196,19 @@ def _escalate_if_stale(z, cam_row, state: str, fill: float, since: float, now: f
         return
 
     ev_id = db.insert_event(z["id"], state, state, fill, snap_id)
+    decision = alerting.should_alert(
+        state,
+        detector.confidence(fill, state, z["empty_below"], z["low_below"],
+                            ref_suspect=bool(_col(z, "ref_suspect", 0))),
+        reference_suspect=bool(_col(z, "ref_suspect", 0)),
+        zone_quality_ok=(_col(z, "quality_state", "ok") != "bad"),
+        escalation=True)
     payload = events.build_payload(
         z, cam_row, state, state, fill,
         thumb_jpeg=_thumb(img, json.loads(z["polygon"])),
-        ts=now, duration_s=age, escalation=True)
+        ts=now, duration_s=age, escalation=True, decision=decision)
     db.record_payload(ev_id, payload)
+    db.record_decision(ev_id, decision)
     with db.tx() as con:
         con.execute("UPDATE zones SET escalated_at=? WHERE id=?", (now, z["id"]))
     events.deliver(ev_id, payload)
@@ -313,11 +321,18 @@ def evaluate_zones(cam_row, snap_id: int, jpeg: bytes) -> None:
 
         if changed and new_state != "unknown" and z["state"] != "unknown":
             ev_id = db.insert_event(z["id"], z["state"], new_state, fill, snap_id)
+            decision = alerting.should_alert(
+                new_state,
+                detector.confidence(fill, new_state, z["empty_below"], z["low_below"],
+                                    ref_suspect=bool(_col(z, "ref_suspect", 0))),
+                reference_suspect=bool(_col(z, "ref_suspect", 0)),
+                zone_quality_ok=(_col(z, "quality_state", "ok") != "bad"))
             payload = events.build_payload(
                 z, cam_row, new_state, z["state"], fill,
                 thumb_jpeg=_thumb(img, json.loads(z["polygon"])),
-                ts=now, duration_s=held_for)
+                ts=now, duration_s=held_for, decision=decision)
             db.record_payload(ev_id, payload)
+            db.record_decision(ev_id, decision)
             events.deliver(ev_id, payload)
             log.info("EVENT %s/%s: %s -> %s (fill %.2f, held %.0fs)",
                      cam_row["name"], z["name"], z["state"], new_state, fill,
