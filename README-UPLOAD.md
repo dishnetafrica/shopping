@@ -100,6 +100,28 @@ Spend it later from the invoice's **Apply credit** action (oldest first, writes 
 
 Note the deliberate limit: **credit is held and spent in the currency it was received in.**
 
+## 5 · Cancelled orders were counted as money customers owe
+
+```php
+Order::where('tenant_id', $t)->whereColumn('amount_paid', '<', 'total')->limit(200)
+```
+
+**No status filter.** `Order::STATUSES` includes `Cancelled` and `Rejected`, and both were
+counted as receivables — which feed the **Working capital** headline on the Cashbook.
+
+Measured on tenant 17: of $42,863 counted as owed, **$13,882 (32%) was Cancelled orders**
+across 23 of them. Working capital read $39,366 against $4,017 of actual cash.
+
+Now excludes `Cancelled` and `Rejected`. The bare `limit(200)` also became
+`MAX_OPEN_ORDERS = 2000` — at 200 the total silently stopped growing once a tenant passed
+that many unpaid orders, with nothing on screen to say so. (104 today, so it was not yet
+biting.)
+
+**Still open, and not fixed here:** 63 orders marked **Delivered** carry $20,912 unpaid.
+Goods went out, so either that is real debt or the payments never attached — see the note
+below about the v4.53 payment-linking bug. Do not treat the corrected working-capital figure
+as clean until that is resolved.
+
 ## Honest limit
 
 **I could not run your test suite.** Packagist is blocked from my environment — no `vendor/`,

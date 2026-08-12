@@ -26,6 +26,13 @@ use Illuminate\Support\Facades\DB;
 final class CashbookCapability implements ProcessCapability
 {
     private const MAX_ROWS = 200;
+
+    /** Order states that are NOT money owed — the sale is off, so the balance is not a receivable. */
+    private const NOT_RECEIVABLE = ['Cancelled', 'Rejected'];
+
+    /** Unpaid orders scanned for receivables. Was a bare 200, which silently truncated the total
+     *  once a tenant passed that many open orders — the figure just stopped growing, with no sign. */
+    private const MAX_OPEN_ORDERS = 2000;
     private const CURRENCIES = ['USD', 'UGX', 'SSP'];
     private const CATEGORIES = 'Customer payment|Funding|Local purchase|Transport|Salary|Rent|Utilities|Expense|Drawing|Other';
 
@@ -345,7 +352,12 @@ final class CashbookCapability implements ProcessCapability
         $goOrders = ['key' => 'go_orders', 'label' => 'Customer paid', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrders', 'actor' => 'human'];
         // Customer paid — inline receipt against an open order; the remaining balance is shown right here.
         $orderLabels = []; $orderMap = []; $recvAgg = [];
-        foreach (Order::where('tenant_id', $t)->whereColumn('amount_paid', '<', 'total')->orderByDesc('id')->limit(200)->get(['id', 'order_no', 'customer_name', 'total', 'amount_paid', 'sell_currency']) as $o) {
+        // This query had NO status filter, so Cancelled and Rejected orders were counted as money
+        // customers owe — 32% of the receivables figure on the first tenant it was measured against,
+        // feeding straight into the Working capital headline. A cancelled order is not a debt.
+        foreach (Order::where('tenant_id', $t)->whereColumn('amount_paid', '<', 'total')
+                     ->whereNotIn('status', self::NOT_RECEIVABLE)
+                     ->orderByDesc('id')->limit(self::MAX_OPEN_ORDERS)->get(['id', 'order_no', 'customer_name', 'total', 'amount_paid', 'sell_currency']) as $o) {
             $bal = round(max(0, (float) $o->total - (float) $o->amount_paid), 2);
             if ($bal <= 0.005) { continue; }
             $ocur = strtoupper(trim((string) ($o->sell_currency ?: ''))) ?: $ctx->nativeCurrency();
