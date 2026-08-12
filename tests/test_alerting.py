@@ -157,9 +157,18 @@ def _cam_with_zone(ref_img, **cols):
 
 
 def _capture(monkeypatch):
+    """Observe what the box QUEUED, not what it posted.
+
+    P0-10 removed HTTP from the capture thread: evaluate_zones records the payload and
+    the budgeted drain sends it a loop later. So intercepting events.deliver no longer
+    sees anything. Watching record_payload/send is stronger anyway — it asserts the
+    durable row, which is what actually reaches CloudBSS.
+    """
     sent = []
-    monkeypatch.setattr(scheduler.events, "deliver", lambda eid, p: sent.append(p))
-    monkeypatch.setattr(scheduler.events, "send", lambda p: True)
+    real = db.record_payload
+    monkeypatch.setattr(scheduler.db, "record_payload",
+                        lambda eid, p: (sent.append(p), real(eid, p))[1])
+    monkeypatch.setattr(scheduler.events, "send", lambda p: (sent.append(p), True)[1])
     return sent
 
 

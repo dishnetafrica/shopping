@@ -85,6 +85,21 @@ CREATE TABLE IF NOT EXISTS missed_reports (
   note TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_missed_zone ON missed_reports(zone_uid, ts DESC);
+-- P0-10. Payloads with no zone-transition row of their own: camera health, image
+-- quality, reference-suspect. They used to be POSTed synchronously from the capture
+-- thread, so a slow uplink blocked the cameras — the same starvation P0-3 fixed for
+-- dead cameras and P0-9 fixed for retries, in its third disguise. Now they queue here
+-- and the same budgeted drain sends them.
+CREATE TABLE IF NOT EXISTS outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts REAL NOT NULL,
+  payload TEXT NOT NULL,
+  delivered INTEGER DEFAULT 0,
+  attempts INTEGER DEFAULT 0,
+  next_retry_ts REAL,
+  quarantined INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox(delivered, quarantined, next_retry_ts);
 """
 
 
@@ -163,6 +178,14 @@ _ADDED_COLUMNS = [
     ("events", "ack_at", "REAL"),
     ("events", "ack_by", "TEXT DEFAULT ''"),
     ("events", "ack_note", "TEXT DEFAULT ''"),
+    # P0-9, ingest hardening. The retry queue had no memory: every failure was
+    # identical to the first, so a permanently-undeliverable event was retried for ever
+    # and — because the queue is ordered oldest-first — blocked every newer event
+    # behind it. attempts/next_retry_ts give the queue a clock; quarantined gives it a
+    # way to give up LOUDLY rather than silently jamming.
+    ("events", "attempts", "INTEGER DEFAULT 0"),
+    ("events", "next_retry_ts", "REAL"),
+    ("events", "quarantined", "INTEGER DEFAULT 0"),
 ]
 
 
@@ -299,6 +322,46 @@ def record_payload(event_id: int, payload: dict) -> None:
     except sqlite3.Error:
         # Recording the payload must never lose the event itself.
         pass
+
+
+def prune_events(keep_days: float = 90.0) -> int:
+    """Bound the events table, without ever throwing away evidence.
+
+    snapshots have been pruned since v1; events never were. Since P0-5 every row also
+    carries the payload as sent, so they are not small, and a box left running for a
+    year accumulates them for ever.
+
+    Three kinds of row are never deleted, whatever their age:
+      * ACKNOWLEDGED — they are the labelled set. P0-7 protects their frames and it
+        would be absurd to protect the picture and delete the answer.
+      * UNDELIVERED — still owed to CloudBSS. Deleting one is losing an alert quietly.
+      * QUARANTINED — a delivery we gave up on. That is a fact somebody needs to see,
+        and deleting it would erase the only evidence the alert was ever lost.
+    """
+    cutoff = time.time() - keep_days * 86400
+    with tx() as con:
+        cur = con.execute(
+            "DELETE FROM events WHERE ts < ? AND delivered = 1 "
+            "  AND length(ack_verdict) = 0 AND quarantined = 0", (cutoff,))
+        return cur.rowcount or 0
+
+
+def enqueue_outbox(payload: dict) -> int:
+    """Accept a payload for later delivery, without touching the network."""
+    with tx() as con:
+        return con.execute("INSERT INTO outbox (ts, payload) VALUES (?,?)",
+                           (time.time(), json.dumps(payload))).lastrowid
+
+
+def prune_outbox(keep_days: float = 30.0) -> int:
+    """Delivered notices age out. Pending and quarantined ones never do — the same
+    reasoning as prune_events: an undelivered notice is still owed, and a quarantined
+    one is the only evidence it was lost."""
+    cutoff = time.time() - keep_days * 86400
+    with tx() as con:
+        cur = con.execute("DELETE FROM outbox WHERE ts < ? AND delivered = 1 "
+                          "AND quarantined = 0", (cutoff,))
+        return cur.rowcount or 0
 
 
 def record_decision(event_id: int, decision) -> None:

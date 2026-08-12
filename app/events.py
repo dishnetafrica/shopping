@@ -22,6 +22,36 @@ log = logging.getLogger("events")
 
 TIMEOUT = 10
 
+# ── P0-9: the retry queue runs inside the CAPTURE thread ──────────────────────────
+#
+# retry_undelivered() was called from the scheduler loop with limit=20 and no time
+# budget. With the webhook down, each POST waits the full TIMEOUT, so one pass could
+# block for 20 x 10 = 200 SECONDS on a 15-second loop — starving every camera on the
+# box. That is the same failure P0-3 fixed for dead cameras, in a different disguise,
+# and it compounds: the uplink being down is exactly when events pile up.
+#
+# The budget is the hard stop. The early exit is the useful one: if the FIRST retry
+# fails the uplink is down, and grinding through nineteen more proves nothing while
+# costing 190 seconds of capture.
+RETRY_BUDGET_S = float(os.environ.get("RETRY_BUDGET_S", "8"))
+RETRY_BATCH = int(os.environ.get("RETRY_BATCH", "20"))
+
+# A failing event backs off instead of being hammered. Without this the queue is
+# ordered oldest-first for ever, so ONE permanently-undeliverable event — a payload
+# CloudBSS answers 400 to, say — is retried every loop and blocks every newer event
+# behind it. The shop stops receiving alerts and nothing anywhere says why.
+RETRY_BACKOFF_BASE_S = float(os.environ.get("RETRY_BACKOFF_BASE_S", "30"))
+RETRY_BACKOFF_CAP_S = float(os.environ.get("RETRY_BACKOFF_CAP_S", "3600"))
+
+# After this many attempts an event is quarantined: taken out of the queue so it stops
+# blocking, and counted in /api/health so somebody finds out. Silently dropping it
+# would be losing an alert; retrying for ever would be losing all the others.
+MAX_ATTEMPTS = int(os.environ.get("RETRY_MAX_ATTEMPTS", "12"))
+
+
+def retry_delay(attempts: int) -> float:
+    return min(RETRY_BACKOFF_BASE_S * (2 ** max(0, attempts - 1)), RETRY_BACKOFF_CAP_S)
+
 # Configuration is read from the environment AT CALL TIME, not at import.
 #
 # These used to be module constants. That made the delivery settings impossible to
@@ -185,21 +215,86 @@ def build_camera_payload(camera_name: str, online: bool, detail: str,
 
 
 def send(payload: dict) -> bool:
-    """Deliver a payload that has no row in the local events table.
+    """Accept a payload that has no row in the local events table. Does NOT post.
 
     Health and quality events are about the box, not about a shelf, so they are not
-    stored as zone transitions. They still go through post_payload — the one place
-    anything crosses the wire — so they carry the same token and the same timeout, and
-    a self-test proving delivery proves these too.
+    stored as zone transitions. They used to be POSTed synchronously from right here —
+    and every caller of this function runs in the capture thread.
+
+    P0-10: that was the third appearance of one bug. P0-3 found dead cameras starving
+    the capture thread; P0-9 found the retry queue doing it; this is the first-attempt
+    path doing the same. A camera going offline while three zones are obstructed is
+    four synchronous POSTs at a ten-second timeout — forty seconds inside a fifteen
+    second loop, and no camera on the box is read in the meantime.
+
+    So nothing crosses the wire from the capture thread any more. This enqueues; the
+    budgeted drain in the scheduler sends. Returns True meaning ACCEPTED, not
+    delivered — the distinction the whole audit was about, so it is stated here.
     """
     if not webhook_url():
-        log.info("event %s (%s) [no webhook configured]", payload.get("event"), payload.get("camera"))
+        log.info("event %s (%s) [no webhook configured]",
+                 payload.get("event"), payload.get("camera"))
         return False
-    ok, detail = post_payload(payload)
-    if not ok:
-        log.warning("could not deliver %s for %s: %s", payload.get("event"),
-                    payload.get("camera"), detail)
-    return ok
+    db.enqueue_outbox(payload)
+    return True
+
+
+def drain_outbox(limit: int | None = None, budget_s: float | None = None,
+                 started: float | None = None) -> dict:
+    """Send queued notices under the same budget and backoff as the event queue.
+
+    Deliberately the same machinery rather than a second implementation: two retry
+    paths would drift, and the one that drifted would be the one nobody was watching.
+    """
+    out = {"attempted": 0, "delivered": 0, "failed": 0, "stopped": ""}
+    if not webhook_url():
+        out["stopped"] = "no webhook configured"
+        return out
+    limit = RETRY_BATCH if limit is None else limit
+    budget = RETRY_BUDGET_S if budget_s is None else budget_s
+    started = time.time() if started is None else started
+
+    rows = db.db().execute(
+        "SELECT id, payload, attempts FROM outbox WHERE delivered=0 AND quarantined=0 "
+        "ORDER BY COALESCE(next_retry_ts, ts) LIMIT ?", (limit,)).fetchall()
+    for r in rows:
+        if time.time() - started >= budget:
+            out["stopped"] = "time budget spent"
+            break
+        try:
+            payload = json.loads(r["payload"])
+        except ValueError:
+            with db.tx() as con:
+                con.execute("UPDATE outbox SET quarantined=1 WHERE id=?", (r["id"],))
+            log.error("outbox row %s is unreadable; quarantined", r["id"])
+            continue
+        out["attempted"] += 1
+        ok, detail = post_payload(payload)
+        if ok:
+            with db.tx() as con:
+                con.execute("UPDATE outbox SET delivered=1, next_retry_ts=NULL WHERE id=?",
+                            (r["id"],))
+            out["delivered"] += 1
+            continue
+        out["failed"] += 1
+        attempts = int((r["attempts"] if "attempts" in r.keys() else 0) or 0)
+        _fail_outbox(r["id"], attempts, detail)
+        out["stopped"] = "uplink appears down — stopping this round"
+        break
+    return out
+
+
+def _fail_outbox(row_id: int, attempts: int, detail: str) -> None:
+    attempts += 1
+    if attempts >= MAX_ATTEMPTS:
+        with db.tx() as con:
+            con.execute("UPDATE outbox SET attempts=?, quarantined=1, next_retry_ts=NULL "
+                        "WHERE id=?", (attempts, row_id))
+        log.error("outbox %s GIVEN UP after %s attempts: %s", row_id, attempts, detail)
+        return
+    with db.tx() as con:
+        con.execute("UPDATE outbox SET attempts=?, next_retry_ts=? WHERE id=?",
+                    (attempts, time.time() + retry_delay(attempts), row_id))
 
 
 STILL_OUT = "shelf.still_out_of_stock"
@@ -381,55 +476,132 @@ def deliver(event_id: int, payload: dict) -> None:
     if not webhook_url():
         log.info("event %s (%s/%s -> %s) [no webhook configured]",
                  event_id, payload["camera"], payload["zone"], payload["to_state"])
-        return
+        return False
     ok, detail = post_payload(payload)
     if ok:
         with db.tx() as con:
-            con.execute("UPDATE events SET delivered=1 WHERE id=?", (event_id,))
-    else:
-        log.warning("webhook delivery failed for event %s: %s (will retry)", event_id, detail)
+            con.execute("UPDATE events SET delivered=1, next_retry_ts=NULL WHERE id=?",
+                        (event_id,))
+        return True
+    _record_failure(event_id, detail)
+    return False
 
 
-def retry_undelivered(limit: int = 20) -> None:
-    """Re-send exactly what was built, not a reconstruction of it.
-
-    This function used to rebuild the payload from columns, and got it wrong twice: it
-    sent `confidence = fill` where the first attempt had sent `1 - fill`, and it stamped
-    the payload with time.strftime() at RETRY time, so an event delayed by an hour of
-    failed webhooks arrived claiming to have just happened. Same event, two different
-    stories, depending on whether the network was up.
-
-    The payload as sent is now stored on the row, so a retry is a re-send rather than a
-    re-derivation. Only the thumbnail is absent — it is deliberately not stored, because
-    base64 images would bloat the database for a field nothing downstream requires.
-    """
-    if not webhook_url():
+def _record_failure(event_id: int, detail: str) -> None:
+    """Count the attempt, back off, and give up loudly rather than jamming the queue."""
+    row = db.db().execute("SELECT attempts FROM events WHERE id=?", (event_id,)).fetchone()
+    attempts = int((row["attempts"] if row else 0) or 0) + 1
+    if attempts >= MAX_ATTEMPTS:
+        with db.tx() as con:
+            con.execute("UPDATE events SET attempts=?, quarantined=1, next_retry_ts=NULL "
+                        "WHERE id=?", (attempts, event_id))
+        log.error("event %s GIVEN UP after %s attempts: %s — this alert is lost and is "
+                  "counted in /api/health", event_id, attempts, detail)
         return
+    with db.tx() as con:
+        con.execute("UPDATE events SET attempts=?, next_retry_ts=? WHERE id=?",
+                    (attempts, time.time() + retry_delay(attempts), event_id))
+    log.warning("webhook delivery failed for event %s (attempt %s): %s (will retry)",
+                event_id, attempts, detail)
+
+
+def retry_undelivered(limit: int | None = None, budget_s: float | None = None) -> dict:
+    """Work the store-and-forward queue, inside a hard time budget.
+
+    Three P0-9 changes, each fixing a way this could take the box down:
+
+    **A time budget.** This runs in the capture thread. Twenty POSTs at a 10-second
+    timeout is 200 seconds on a 15-second loop — every camera starved, precisely when
+    the uplink is down and events are piling up.
+
+    **Stop on the first failure.** If one retry fails the uplink is down; nineteen more
+    prove nothing and cost 190 seconds. The next loop tries again in fifteen.
+
+    **Ordered by when each event is next DUE, not by age.** Oldest-first meant one
+    permanently-undeliverable event was retried every loop for ever and blocked every
+    newer event behind it — the shop silently stops receiving alerts, and the cause is
+    a single bad row at the head of a queue nobody can see.
+
+    Returns a summary so /api/health can report a queue that is not draining.
+    """
+    out = {"attempted": 0, "delivered": 0, "failed": 0, "stopped": ""}
+    if not webhook_url():
+        out["stopped"] = "no webhook configured"
+        return out
+
+    limit = RETRY_BATCH if limit is None else limit
+    budget = RETRY_BUDGET_S if budget_s is None else budget_s
+    started = time.time()
+
     rows = db.db().execute(
         "SELECT e.id, e.ts, e.to_state, e.from_state, e.fill, e.payload, e.zone_id, "
         "z.name AS zone_name, c.name AS cam_name FROM events e "
         "JOIN zones z ON z.id=e.zone_id JOIN cameras c ON c.id=z.camera_id "
-        "WHERE e.delivered=0 ORDER BY e.ts LIMIT ?", (limit,)).fetchall()
+        "WHERE e.delivered=0 AND e.quarantined=0 "
+        # Backoff governs ORDER, not eligibility. Filtering on next_retry_ts looked
+        # right and was wrong: after a two-hour outage every queued event carries a
+        # long delay, so the queue would sit idle for up to an hour AFTER the link
+        # came back. Ordering instead gives both properties — a repeatedly-failing
+        # event sorts behind fresher ones so it can no longer block them, and recovery
+        # is immediate because nothing is excluded.
+        "ORDER BY COALESCE(e.next_retry_ts, e.ts) LIMIT ?",
+        (limit,)).fetchall()
+
     for r in rows:
+        if time.time() - started >= budget:
+            out["stopped"] = "time budget spent"
+            break
         stored = _row_get(r, "payload")
+        payload = None
         if stored:
             try:
                 payload = json.loads(stored)
                 payload["thumbnail"] = None
-                deliver(r["id"], payload)
-                continue
             except ValueError:
                 log.warning("event %s has an unreadable stored payload; rebuilding", r["id"])
-        # Pre-P0-5 rows, or a corrupt one. Rebuilt with the SAME formulas as
-        # build_payload rather than the old divergent ones, and stamped with the
-        # event's own ts so a late delivery still tells the truth about when.
-        payload = {
-            "event": EVENT_NAMES.get(r["to_state"], "shelf.state_changed"),
-            "uid": event_uid(r["zone_id"], r["ts"], r["to_state"]),
-            "store": store_id(), "camera": r["cam_name"], "zone": r["zone_name"],
-            "from_state": r["from_state"], "to_state": r["to_state"],
-            "confidence": None, "confidence_basis": "unknown (pre-P0-5 event)",
-            "fill": r["fill"], "duration_s": None, "duration_human": "",
-            "thumbnail": None, "timestamp": _iso(r["ts"]),
-        }
-        deliver(r["id"], payload)
+        if payload is None:
+            # Pre-P0-5 rows, or a corrupt one. Rebuilt with the SAME formulas as
+            # build_payload rather than the old divergent ones, and stamped with the
+            # event's own ts so a late delivery still tells the truth about when.
+            payload = {
+                "event": EVENT_NAMES.get(r["to_state"], "shelf.state_changed"),
+                "uid": event_uid(r["zone_id"], r["ts"], r["to_state"]),
+                "store": store_id(), "camera": r["cam_name"], "zone": r["zone_name"],
+                "from_state": r["from_state"], "to_state": r["to_state"],
+                "confidence": None, "confidence_basis": "unknown (pre-P0-5 event)",
+                "fill": r["fill"], "duration_s": None, "duration_human": "",
+                "thumbnail": None, "timestamp": _iso(r["ts"]),
+            }
+        out["attempted"] += 1
+        if deliver(r["id"], payload):
+            out["delivered"] += 1
+        else:
+            out["failed"] += 1
+            out["stopped"] = "uplink appears down — stopping this round"
+            break
+    return out
+
+
+def queue_health() -> dict:
+    """What the retry queue looks like, for /api/health.
+
+    `quarantined` is the number that matters: those are alerts this box gave up on. A
+    non-zero value is not a warning, it is a report that the shop was never told
+    something it should have been.
+    """
+    row = db.db().execute(
+        "SELECT COUNT(*) FILTER (WHERE delivered=0 AND quarantined=0) AS pending, "
+        "       COUNT(*) FILTER (WHERE quarantined=1) AS quarantined, "
+        "       MIN(ts) FILTER (WHERE delivered=0 AND quarantined=0) AS oldest "
+        "  FROM events").fetchone()
+    ob = db.db().execute(
+        "SELECT COUNT(*) FILTER (WHERE delivered=0 AND quarantined=0) AS pending, "
+        "       COUNT(*) FILTER (WHERE quarantined=1) AS quarantined FROM outbox").fetchone()
+    return {"pending": row["pending"] or 0,
+            "quarantined": row["quarantined"] or 0,
+            "oldest_pending_ts": row["oldest"],
+            # The outbox carries camera/quality/reference notices, which have no event
+            # row of their own. Reported separately because "no shelf alerts are stuck
+            # but every health notice is" is a different fault with a different cause.
+            "notices_pending": ob["pending"] or 0,
+            "notices_quarantined": ob["quarantined"] or 0}

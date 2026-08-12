@@ -470,6 +470,11 @@ def test_fresh_install_delivers_its_first_real_event(clean_env, fresh_box):
         assert cloud.requests == [], "one frame must not raise an alert"
         cam_row = db.db().execute("SELECT * FROM cameras WHERE id=?", (cam,)).fetchone()
         scheduler.evaluate_zones(cam_row, None, empty_jpeg)      # 2nd: confirmed
+        # P0-10: the capture path no longer POSTs. It writes the row; the budgeted
+        # drain sends it a loop later. The promise this test guards — a fresh box gets
+        # its first real event onto the wire — is unchanged, but it now travels the
+        # same path as every retry instead of a separate inline one.
+        events.retry_undelivered()
 
         shelf_events = [r for r in cloud.rows() if str(r["event"]).startswith("shelf.")]
         assert len(shelf_events) == 1, (

@@ -211,7 +211,6 @@ def _escalate_if_stale(z, cam_row, state: str, fill: float, since: float, now: f
     db.record_decision(ev_id, decision)
     with db.tx() as con:
         con.execute("UPDATE zones SET escalated_at=? WHERE id=?", (now, z["id"]))
-    events.deliver(ev_id, payload)
     log.warning("STILL OUT %s/%s after %.0fs", cam_row["name"], z["name"], age)
 
 
@@ -333,7 +332,12 @@ def evaluate_zones(cam_row, snap_id: int, jpeg: bytes) -> None:
                 ts=now, duration_s=held_for, decision=decision)
             db.record_payload(ev_id, payload)
             db.record_decision(ev_id, decision)
-            events.deliver(ev_id, payload)
+            # P0-10: NOT delivered here. deliver() POSTs, and this runs in the capture
+            # thread — five zones changing state while the uplink is slow was fifty
+            # seconds of blocked capture inside a fifteen-second loop. The row is
+            # written with delivered=0 and the budgeted drain sends it, at most one
+            # loop later. Fifteen seconds of latency on a shelf alert is nothing; a
+            # box that stops looking at its shelves is everything.
             log.info("EVENT %s/%s: %s -> %s (fill %.2f, held %.0fs)",
                      cam_row["name"], z["name"], z["state"], new_state, fill,
                      held_for or 0)
@@ -354,6 +358,45 @@ def _thumb(img, polygon, max_w: int = 320) -> bytes:
     return buf.tobytes()
 
 
+EVENT_KEEP_DAYS = float(os.environ.get("EVENT_KEEP_DAYS", "90"))
+PRUNE_EVERY_S = float(os.environ.get("PRUNE_EVERY_S", "3600"))
+_last_prune = 0.0
+
+
+def _drain(started: float) -> dict:
+    """The ONLY place this process talks to the network, and it is on a clock.
+
+    Both queues share one budget. Splitting them would let a stalled outbox spend the
+    event queue's time, which is precisely the coupling P0-10 exists to remove — and
+    events are drained first because a shelf alert outranks a notice that a lens is
+    dirty.
+    """
+    ev = events.retry_undelivered(budget_s=events.RETRY_BUDGET_S)
+    spent = time.time() - started
+    left = max(0.0, events.RETRY_BUDGET_S - spent)
+    ob = events.drain_outbox(budget_s=left) if left > 0 else {
+        "attempted": 0, "delivered": 0, "failed": 0, "stopped": "no budget left"}
+    return {"events": ev, "outbox": ob}
+
+
+def _prune_due(now: float) -> None:
+    """Trim the events table, at most hourly.
+
+    snapshots have been pruned since v1 and events never were — and since P0-5 each row
+    carries the payload as sent, so they are not small. Hourly rather than per-loop
+    because this runs in the capture thread and a DELETE across a large table is not
+    something to do every fifteen seconds.
+    """
+    global _last_prune
+    if now - _last_prune < PRUNE_EVERY_S:
+        return
+    _last_prune = now
+    n = db.prune_events(EVENT_KEEP_DAYS)
+    db.prune_outbox(EVENT_KEEP_DAYS)
+    if n:
+        log.info("pruned %s delivered events older than %s days", n, EVENT_KEEP_DAYS)
+
+
 def loop(stop: threading.Event) -> None:
     log.info("scheduler started (loop %ss)", LOOP_S)
     while not stop.is_set():
@@ -362,7 +405,8 @@ def loop(stop: threading.Event) -> None:
             for row in db.list_cameras(include_disabled=False):
                 if is_due(row, now):
                     capture_one(row)
-            events.retry_undelivered()
+            _drain(now)
+            _prune_due(now)
         except Exception:
             log.exception("scheduler loop error")
         stop.wait(LOOP_S)

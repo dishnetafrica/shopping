@@ -795,6 +795,205 @@ mutate "a miss may be reported against any zone name" app/main.py \
         raise HTTPException(404, "no zone with that uid")' \
   '    z = True'
 
+# ── P0-9 mutants ──────────────────────────────────────────────────────────────────
+# The retry queue fails by taking the whole box with it: a dead uplink starving every
+# camera, or one bad row silently blocking every alert behind it.
+
+mutate "the retry queue hammers a dead uplink" app/events.py \
+  '            out["stopped"] = "uplink appears down — stopping this round"
+            break' \
+  '            pass'
+
+mutate "the time budget is removed" app/events.py \
+  '        if time.time() - started >= budget:' \
+  '        if False:'
+
+mutate "the budget is set past any real loop" app/events.py \
+  'RETRY_BUDGET_S = float(os.environ.get("RETRY_BUDGET_S", "8"))' \
+  'RETRY_BUDGET_S = float(os.environ.get("RETRY_BUDGET_S", "600"))'
+
+mutate "the queue goes back to oldest-first (head-of-line blocking)" app/events.py \
+  '        "ORDER BY COALESCE(e.next_retry_ts, e.ts) LIMIT ?",' \
+  '        "ORDER BY e.ts LIMIT ?",'
+
+mutate "backoff filters eligibility again (slow recovery)" app/events.py \
+  '        "WHERE e.delivered=0 AND e.quarantined=0 "' \
+  '        "WHERE e.delivered=0 AND e.quarantined=0 AND COALESCE(e.next_retry_ts,0) <= 1 "'
+
+mutate "quarantined events are retried anyway" app/events.py \
+  '        "WHERE e.delivered=0 AND e.quarantined=0 "' \
+  '        "WHERE e.delivered=0 "'
+
+mutate "failures are never counted" app/events.py \
+  '    attempts = int((row["attempts"] if row else 0) or 0) + 1' \
+  '    attempts = 1'
+
+mutate "the backoff never grows" app/events.py \
+  '    return min(RETRY_BACKOFF_BASE_S * (2 ** max(0, attempts - 1)), RETRY_BACKOFF_CAP_S)' \
+  '    return RETRY_BACKOFF_BASE_S'
+
+mutate "the backoff is uncapped" app/events.py \
+  '    return min(RETRY_BACKOFF_BASE_S * (2 ** max(0, attempts - 1)), RETRY_BACKOFF_CAP_S)' \
+  '    return RETRY_BACKOFF_BASE_S * (2 ** max(0, attempts - 1))'
+
+mutate "an event is never given up on" app/events.py \
+  '    if attempts >= MAX_ATTEMPTS:' \
+  '    if False:'
+
+mutate "giving up happens after one failure" app/events.py \
+  'MAX_ATTEMPTS = int(os.environ.get("RETRY_MAX_ATTEMPTS", "12"))' \
+  'MAX_ATTEMPTS = int(os.environ.get("RETRY_MAX_ATTEMPTS", "1"))'
+
+mutate "deliver stops reporting whether it worked" app/events.py \
+  '        return True
+    _record_failure(event_id, detail)
+    return False' \
+  '        return True
+    _record_failure(event_id, detail)
+    return True'
+
+mutate "quarantined events vanish from health" app/events.py \
+  '        "       COUNT(*) FILTER (WHERE quarantined=1) AS quarantined, "' \
+  '        "       0 AS quarantined, "'
+
+mutate "retention deletes acknowledged labels" app/db.py \
+  '  AND length(ack_verdict) = 0 AND quarantined = 0' \
+  '  AND quarantined = 0'
+
+mutate "retention deletes undelivered alerts" app/db.py \
+  '            "DELETE FROM events WHERE ts < ? AND delivered = 1 "' \
+  '            "DELETE FROM events WHERE ts < ? "'
+
+mutate "retention deletes the record of alerts we gave up on" app/db.py \
+  '  AND length(ack_verdict) = 0 AND quarantined = 0' \
+  '  AND length(ack_verdict) = 0'
+
+mutate "retention ignores age and deletes everything" app/db.py \
+  '    cutoff = time.time() - keep_days * 86400' \
+  '    cutoff = time.time() + 86400'
+
+mutate "the scheduler prunes on every single loop" app/scheduler.py \
+  '    if now - _last_prune < PRUNE_EVERY_S:
+        return' \
+  '    if False:
+        return'
+
+mutate "the scheduler never prunes" app/scheduler.py \
+  '            _prune_due(now)' \
+  '            pass'
+
+# ── P0-10 mutants ─────────────────────────────────────────────────────────────────
+# The same starvation bug has now appeared three times. These mutants put each half of
+# the structural fix back the way it was.
+
+mutate "send() posts from the capture thread again" app/events.py \
+  '    db.enqueue_outbox(payload)
+    return True' \
+  '    ok, detail = post_payload(payload)
+    return ok'
+
+mutate "send() queues even with no webhook configured" app/events.py \
+  '    if not webhook_url():
+        log.info("event %s (%s) [no webhook configured]",
+                 payload.get("event"), payload.get("camera"))
+        return False' \
+  '    if False:
+        return False'
+
+mutate "the outbox drain hammers a dead uplink" app/events.py \
+  '        out["stopped"] = "uplink appears down — stopping this round"
+        break
+    return out
+
+
+def _fail_outbox' \
+  '        pass
+    return out
+
+
+def _fail_outbox'
+
+mutate "the outbox drain ignores its time budget" app/events.py \
+  '        if time.time() - started >= budget:
+            out["stopped"] = "time budget spent"
+            break
+        try:
+            payload = json.loads(r["payload"])' \
+  '        if False:
+            out["stopped"] = "time budget spent"
+            break
+        try:
+            payload = json.loads(r["payload"])'
+
+mutate "an unreadable outbox row is retried for ever" app/events.py \
+  '            with db.tx() as con:
+                con.execute("UPDATE outbox SET quarantined=1 WHERE id=?", (r["id"],))' \
+  '            if False:
+                pass'
+
+mutate "outbox notices are never given up on" app/events.py \
+  '    if attempts >= MAX_ATTEMPTS:
+        with db.tx() as con:
+            con.execute("UPDATE outbox SET attempts=?, quarantined=1, next_retry_ts=NULL "' \
+  '    if False:
+        with db.tx() as con:
+            con.execute("UPDATE outbox SET attempts=?, quarantined=1, next_retry_ts=NULL "'
+
+mutate "quarantined notices are drained anyway" app/events.py \
+  '        "SELECT id, payload, attempts FROM outbox WHERE delivered=0 AND quarantined=0 "' \
+  '        "SELECT id, payload, attempts FROM outbox WHERE delivered=0 "'
+
+mutate "stuck notices vanish from health" app/events.py \
+  '            "notices_pending": ob["pending"] or 0,' \
+  '            "notices_pending": 0,'
+
+mutate "the capture path delivers inline again" app/scheduler.py \
+  '            db.record_payload(ev_id, payload)
+            db.record_decision(ev_id, decision)' \
+  '            db.record_payload(ev_id, payload)
+            db.record_decision(ev_id, decision)
+            events.deliver(ev_id, payload)'
+
+mutate "the escalation path delivers inline again" app/scheduler.py \
+  '    db.record_payload(ev_id, payload)
+    db.record_decision(ev_id, decision)
+    with db.tx() as con:' \
+  '    db.record_payload(ev_id, payload)
+    db.record_decision(ev_id, decision)
+    events.deliver(ev_id, payload)
+    with db.tx() as con:'
+
+mutate "the loop stops draining entirely" app/scheduler.py \
+  '            _drain(now)' \
+  '            pass'
+
+mutate "the outbox is never drained" app/scheduler.py \
+  '    ob = events.drain_outbox(budget_s=left) if left > 0 else {' \
+  '    ob = None if left > 0 else {'
+
+mutate "the two queues get separate full budgets" app/scheduler.py \
+  '    left = max(0.0, events.RETRY_BUDGET_S - spent)' \
+  '    left = events.RETRY_BUDGET_S'
+
+mutate "events are drained after notices, not before" app/scheduler.py \
+  '    ev = events.retry_undelivered(budget_s=events.RETRY_BUDGET_S)
+    spent = time.time() - started' \
+  '    ev = {"attempted": 0, "delivered": 0, "failed": 0, "stopped": ""}
+    spent = time.time() - started'
+
+mutate "the outbox is never pruned" app/db.py \
+  '        cur = con.execute("DELETE FROM outbox WHERE ts < ? AND delivered = 1 "
+                          "AND quarantined = 0", (cutoff,))' \
+  '        cur = con.execute("DELETE FROM outbox WHERE 1=0", ())'
+
+mutate "outbox pruning deletes pending notices" app/db.py \
+  '        cur = con.execute("DELETE FROM outbox WHERE ts < ? AND delivered = 1 "' \
+  '        cur = con.execute("DELETE FROM outbox WHERE ts < ? "'
+
+mutate "outbox pruning deletes the record of notices we gave up on" app/db.py \
+  '                          "AND quarantined = 0", (cutoff,))' \
+  '                          "", (cutoff,))'
+
 echo
 echo "  $killed killed, $survived survived"
 echo

@@ -681,4 +681,8 @@ def health():
             "SELECT COUNT(*) c FROM cameras WHERE quality_state='bad'").fetchone()["c"],
         "zones_obstructed": con.execute(
             "SELECT COUNT(*) c FROM zones WHERE quality_state='bad'").fetchone()["c"],
+        # P0-9. A queue that is not draining is the box telling you the shop is not
+        # being told things. `quarantined` is not a warning — it is a count of alerts
+        # this box gave up on delivering.
+        "queue": events.queue_health(),
     }

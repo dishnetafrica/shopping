@@ -255,10 +255,13 @@ def _cam_with_zone(ref_img, state="stocked"):
 
 
 def _no_delivery(monkeypatch):
+    """See P0-10: the capture thread queues rather than posts, so the payload is
+    observed where it is RECORDED."""
     sent = []
-    monkeypatch.setattr(scheduler.events, "deliver",
-                        lambda eid, p: sent.append(p))
-    monkeypatch.setattr(scheduler.events, "send", lambda p: True)
+    real = db.record_payload
+    monkeypatch.setattr(scheduler.db, "record_payload",
+                        lambda eid, p: (sent.append(p), real(eid, p))[1])
+    monkeypatch.setattr(scheduler.events, "send", lambda p: (sent.append(p), True)[1])
     return sent
 
 

@@ -306,8 +306,10 @@ def _cam_with_zone(ref_img, **zone):
 
 def test_a_real_shelf_event_carries_the_identity_end_to_end(fresh_box, monkeypatch):
     sent = []
-    monkeypatch.setattr(scheduler.events, "deliver", lambda eid, p: sent.append(p))
-    monkeypatch.setattr(scheduler.events, "send", lambda p: True)
+    real = db.record_payload
+    monkeypatch.setattr(scheduler.db, "record_payload",
+                        lambda eid, p: (sent.append(p), real(eid, p))[1])
+    monkeypatch.setattr(scheduler.events, "send", lambda p: (sent.append(p), True)[1])
     cam = _cam_with_zone(aisle(6))
     for _ in range(detector.CONFIRMATIONS + 1):
         scheduler.evaluate_zones(cam, None, _jpeg(aisle(0)))
