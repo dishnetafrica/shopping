@@ -323,6 +323,25 @@ final class CashbookCapability implements ProcessCapability
             'prefill' => ['currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'category' => 'Transport', 'holder' => $me],
             'body' => ['dir' => 'out'],
             'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
+        // Owner drawing — equity out, NOT an expense. `category` rides in the body so nobody has to
+        // pick it, and TradeCashbookController::store() maps it to stage 'drawing', which cashPnl
+        // already keeps out of operating profit. Cash still leaves the chosen person's hand.
+        $evDrawing = ['key' => 'ev_drawing', 'label' => 'Owner drawing', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'note' => $comboPeople, 'holder' => $comboPeople],
+            'labels' => ['native_amount' => 'Amount taken', 'rate_to_usd' => 'Rate (native per $1)', 'note' => 'Which owner is taking it', 'holder' => 'From whose cash'],
+            'prefill' => ['currency' => 'UGX', 'rate_to_usd' => (int) round($ugx), 'holder' => $me],
+            'body' => ['dir' => 'out', 'category' => 'Drawing'],
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
+
+        // Money borrowed from an owner/director. Whether this reads as DEBT or as EQUITY depends
+        // entirely on books.loan_holders naming the lender — the row itself is identical either way.
+        $evLoan = ['key' => 'ev_loan', 'label' => 'Borrowed a loan', 'method' => 'POST', 'endpoint' => '/papi/trade-cashbook', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['native_amount' => 'money', 'currency' => 'enum:UGX,USD,SSP', 'rate_to_usd' => 'number', 'note' => $comboPeople, 'holder' => $comboPeople],
+            'labels' => ['native_amount' => 'Amount borrowed', 'rate_to_usd' => 'Rate (native per $1)', 'note' => 'Who lent it', 'holder' => 'Into whose cash'],
+            'prefill' => ['currency' => 'USD', 'rate_to_usd' => 1, 'holder' => $me],
+            'body' => ['dir' => 'in', 'category' => 'Loan received'],
+            'autoRate' => ['field' => 'rate_to_usd', 'source' => 'currency', 'map' => $rateMap]];
+
         $goOrders = ['key' => 'go_orders', 'label' => 'Customer paid', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrders', 'actor' => 'human'];
         // Customer paid — inline receipt against an open order; the remaining balance is shown right here.
         $orderLabels = []; $orderMap = []; $recvAgg = [];
@@ -388,6 +407,8 @@ final class CashbookCapability implements ProcessCapability
         $tiles[] = ['icon' => 'trend', 'title' => 'Converted currency', 'sub' => 'e.g. $2,000 → UGX at your rate', 'tone' => 'move', 'action' => array_merge($fxExchange, ['label' => 'Converted currency'])];
         if ($paySupplier) { $tiles[] = ['icon' => 'dollar', 'title' => 'Paid a supplier', 'sub' => 'On account — reduces what you owe them', 'tone' => 'out', 'action' => array_merge($paySupplier, ['label' => 'Pay supplier'])]; }
         $tiles[] = ['icon' => 'send', 'title' => 'Paid an expense / someone', 'sub' => 'Transport, salary, rent — to a person or shop', 'tone' => 'out', 'action' => $evExpense];
+        $tiles[] = ['icon' => 'user', 'title' => 'Owner drawing', 'sub' => 'An owner takes money out — not an expense, profit is untouched', 'tone' => 'out', 'action' => $evDrawing];
+        $tiles[] = ['icon' => 'dollar', 'title' => 'Borrowed a loan', 'sub' => 'An owner lends money to the business', 'tone' => 'in', 'action' => $evLoan];
         if ($transfer) { $tiles[] = ['icon' => 'chev', 'title' => 'Moved cash between people', 'sub' => 'Hand cash from one person to another', 'tone' => 'move', 'action' => array_merge($transfer, ['label' => 'Move cash between people'])]; }
 
         $record = ['key' => 'record_activity', 'label' => 'Record activity', 'actor' => 'human', 'tone' => 'primary', 'chooser' => $tiles];

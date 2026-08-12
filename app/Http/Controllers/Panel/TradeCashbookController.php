@@ -207,6 +207,26 @@ class TradeCashbookController extends Controller
             $stage = 'purchase';
         }
 
+        // An owner drawing is not an expense — it is equity leaving the business. Booked as stage
+        // 'drawing' so cashPnl keeps it out of operating profit (it already buckets 'drawing' into
+        // drawings and subtracts it from ending cash). Cash still leaves the chosen person's hand,
+        // so "whose cash" keeps working. NOTE: a 'Drawing' category has been offered in the expense
+        // form (CashbookCapability::$expCats) since before this mapping existed — until now picking
+        // it silently booked owner pay as opex and understated profit.
+        $drawCats = ['owner drawing','drawing','drawings','partner drawing','return of capital'];
+        if ($dir==='cash_out' && $category!==null && in_array(mb_strtolower($category),$drawCats,true)) {
+            $stage = 'drawing';
+        }
+
+        // Money BORROWED from an owner/director. Booked as stage 'funding' because that is the only
+        // stage capitalTrace counts unconditionally — a cash_in is counted only when its NOTE says
+        // capital/startup/introduced/invest, which a loan note does not. Whether the row then reads
+        // as DEBT or as EQUITY depends on books.loan_holders naming the lender.
+        $loanCats = ['loan received','loan from owner','director loan','owner loan'];
+        if ($dir==='cash_in' && $category!==null && in_array(mb_strtolower($category),$loanCats,true)) {
+            $stage = 'funding';
+        }
+
         // "Supplier payment (on account)" — money paid to a supplier to reduce what we owe them.
         // Booked as stage 'supplier_payment' so it nets against their credit purchases automatically
         // (it does NOT book goods again — that avoids double-counting the items).

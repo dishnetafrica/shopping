@@ -230,11 +230,20 @@ final class CashbookExport
             if (! empty($d['period'])) { $line(['Period', $d['period']['label']]); }
             $line([]);
             $line(['Opening balance', $this->num($b['opening']), $c]);
-            $line(['Date', 'Ref', 'Category', 'Held by', 'In', 'Out', 'Balance']);
+            // A Description column, so a single-currency book can be read without opening the app.
+            // When the export is already scoped to one person, "Held by" repeated their name on
+            // every row and cost the width this needed — so it is dropped in that case only.
+            $single = ! empty($d['holder']);
+            $line($single
+                ? ['Date', 'Ref', 'Category', 'Description', 'In', 'Out', 'Balance']
+                : ['Date', 'Ref', 'Category', 'Description', 'Held by', 'In', 'Out', 'Balance']);
             foreach ($b['entries'] as $r) {
-                $line([$r['when'], $r['ref'], $r['category'], $r['holder'],
-                    $r['dir'] === 'In' ? $this->num($r['native']) : '', $r['dir'] === 'Out' ? $this->num($r['native']) : '',
-                    $this->num($r['balance'])]);
+                $cells = [$r['when'], $r['ref'], $r['category'], (string) ($r['note'] ?? '')];
+                if (! $single) { $cells[] = $r['holder']; }
+                $cells[] = $r['dir'] === 'In' ? $this->num($r['native']) : '';
+                $cells[] = $r['dir'] === 'Out' ? $this->num($r['native']) : '';
+                $cells[] = $this->num($r['balance']);
+                $line($cells);
             }
             $line(['Closing balance', $this->num($b['closing']), $c]);
 
@@ -451,16 +460,24 @@ final class CashbookExport
         $money = fn (float $v) => $this->fmt($v, $c);
         $periodSub = ! empty($d['period']) ? (' &nbsp;·&nbsp; Period: ' . $e($d['period']['label'])) : '';
 
-        $rows = '<tr class="tot"><td colspan="6">Opening balance</td><td class="r b">' . $e($money($b['opening'])) . '</td></tr>';
+        // A Description column, so a single-currency book can be read without opening the app.
+        // When the export is already scoped to one person, "Held by" repeated their name on every
+        // row and cost the width this needed — so it is dropped in that case only, keeping the
+        // column count (and the opening/closing colspan) exactly as it was.
+        $single = ! empty($d['holder']);
+        $span = $single ? 6 : 7;
+
+        $rows = '<tr class="tot"><td colspan="' . $span . '">Opening balance</td><td class="r b">' . $e($money($b['opening'])) . '</td></tr>';
         foreach ($b['entries'] as $r) {
             $cls = $r['dir'] === 'In' ? 'in' : 'out';
             $rows .= '<tr><td>' . $e($r['when']) . '</td><td>' . $e($r['ref']) . '</td><td>' . $e($r['category'])
-                . '</td><td>' . $e($r['holder'])
-                . '</td><td class="r in">' . ($r['dir'] === 'In' ? $e($money($r['native'])) : '')
+                . '</td><td class="desc">' . $e((string) ($r['note'] ?? ''))
+                . '</td>' . ($single ? '' : '<td>' . $e($r['holder']) . '</td>')
+                . '<td class="r in">' . ($r['dir'] === 'In' ? $e($money($r['native'])) : '')
                 . '</td><td class="r out">' . ($r['dir'] === 'Out' ? $e($money($r['native'])) : '')
                 . '</td><td class="r">' . $e($money($r['balance'])) . '</td></tr>';
         }
-        $rows .= '<tr class="tot"><td colspan="6">Closing balance</td><td class="r b">' . $e($money($b['closing'])) . '</td></tr>';
+        $rows .= '<tr class="tot"><td colspan="' . $span . '">Closing balance</td><td class="r b">' . $e($money($b['closing'])) . '</td></tr>';
 
         return '<!doctype html><html><head><meta charset="utf-8"><style>
             * { font-family: DejaVu Sans, sans-serif; }
@@ -475,10 +492,15 @@ final class CashbookExport
             tr.tot td { font-weight: bold; background: #f9fafb; border-top: 2px solid #d1d5db; }
             .in { color: #15803d; } .out { color: #b91c1c; }
             .foot { margin-top: 18px; color: #9ca3af; font-size: 9px; text-align: center; }
+            /* Notes carry the real detail ("Epoxy Spiked Shoes (qty 1 x UGX 180,000)"), so let them
+               wrap onto a second line rather than pushing the money columns off the page. */
+            td.desc { font-size: 10px; color: #374151; max-width: 240px; word-wrap: break-word; }
         </style></head><body>
             <h1>' . $e($d['business']) . ' — ' . (! empty($d['holder']) ? $e($d['holder']) . ' — ' : '') . $e($c) . ' Cashbook</h1>
             <div class="sub">' . $e($d['generated']) . ' &nbsp;·&nbsp; ' . $e($d['scope']) . $periodSub . '</div>
-            <table><thead><tr><th>Date</th><th>Ref</th><th>Category</th><th>Held by</th><th class="r">In</th><th class="r">Out</th><th class="r">Balance</th></tr></thead>
+            <table><thead><tr><th>Date</th><th>Ref</th><th>Category</th><th>Description</th>'
+                . ($single ? '' : '<th>Held by</th>')
+                . '<th class="r">In</th><th class="r">Out</th><th class="r">Balance</th></tr></thead>
             <tbody>' . $rows . '</tbody></table>
             <div class="foot">Generated by CloudBSS · single-currency cash book with running balance</div>
         </body></html>';
