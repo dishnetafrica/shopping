@@ -1362,25 +1362,43 @@ button{ -webkit-tap-highlight-color:transparent }
 @media(prefers-reduced-motion:reduce){.scanov .scanline{animation:none;top:50%}}
 </style>
 <style id="chatOnlyCss">
-/* v4.93 — /chat mode. Purely presentational: hides the website around the chat and lets the panel
-   own the viewport. No script in the page is disabled, so the catalogue, prod(), cartAdd(), CART and
-   every chat path keep working exactly as they do on the ordinary storefront. Removing the body
-   class restores the shop. */
-body.chat-only > header, body.chat-only > nav, body.chat-only .topbar, body.chat-only .hero,
-body.chat-only .btmnav, body.chat-only footer, body.chat-only .sf-foot, body.chat-only .home,
-body.chat-only .trending, body.chat-only .deptbar, body.chat-only .catbar { display:none !important; }
-body.chat-only { background:#fff; overflow:hidden; }
-body.chat-only #whChatFab { display:none !important; }
-body.chat-only #whChat{
-  position:fixed; inset:0; width:100% !important; max-width:none !important;
-  height:100dvh !important; max-height:100dvh !important; margin:0 !important;
-  border-radius:0 !important; box-shadow:none !important; z-index:9999;
+/* v4.93.1 — /chat mode.
+   The first attempt enumerated selectors (header, nav, .hero, .btmnav, footer…) and hid nothing,
+   because this page's chrome is .top, #delvBar, .searchwrap, #dgridwrap, #footer, #cartbar and
+   nav.btmnav. Guessing class names against a 360KB page was the wrong method. So: hide EVERY direct
+   child of body and name the handful that must survive. A new storefront section added later is
+   hidden automatically instead of leaking into the chat.
+
+   Kept alive on purpose:
+     #whChat   the conversation itself
+     #sheet    the cart sheet — "View Cart" inside the chat opens THIS. Hiding it breaks the cart.
+     #cbToast  toasts (added to cart, errors)
+     #svoicebar / #searchOverlay  the dictation mic surface
+   Nothing here disables script, so prod(), cartAdd(), saveCart(), CART and every chat path are
+   untouched. Remove the body class and the shop is back. */
+body.chat-only > *:not(#whChat):not(#sheet):not(#cbToast):not(#searchOverlay):not(#svoicebar):not(script):not(style):not(noscript):not(template){
+  display:none !important;
 }
-/* keyboard-safe: the composer rides above the on-screen keyboard on iOS/Android */
-body.chat-only #whChat .wh-in{ padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
+body.chat-only{ background:#fff; overflow:hidden; }
+body.chat-only #whChat{
+  position:fixed !important; inset:0 !important;
+  width:100% !important; max-width:none !important;
+  height:100dvh !important; max-height:100dvh !important;
+  margin:0 !important; border-radius:0 !important; box-shadow:none !important;
+  z-index:9999; display:flex !important; flex-direction:column;
+}
+/* the composer rides above the on-screen keyboard */
+body.chat-only #whChat .wh-in, body.chat-only #whChat .whin, body.chat-only #whChat form{
+  padding-bottom:calc(8px + env(safe-area-inset-bottom));
+}
+/* the cart sheet must sit ON TOP of a full-screen chat, not behind it */
+body.chat-only #sheet{ z-index:10000 !important; }
 @media (min-width:900px){
-  body.chat-only #whChat{ inset:auto; left:50%; top:0; transform:translateX(-50%);
-    width:480px !important; height:100dvh !important; border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb; }
+  body.chat-only #whChat{
+    inset:0 !important; left:50% !important; transform:translateX(-50%);
+    width:min(560px, 100%) !important;
+    border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb;
+  }
 }
 </style>
 </head>
