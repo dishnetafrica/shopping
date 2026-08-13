@@ -306,6 +306,13 @@ class ChatController extends Controller
                 $msgs = $collector->messages();  // same rule: the reply never dies for a card
             }
 
+            // v5.04 — and a quotation link becomes a quotation. See quoteCards().
+            try {
+                $msgs = $this->quoteCards($tenant, $msgs, $from);
+            } catch (\Throwable $e) {
+                // the link still works; a failed enrichment must never cost the customer their quote
+            }
+
             if ($cards !== []) {
                 BotTrace::log($tenant->id, 'web', $from, 'web_cards', (string) count($cards));
             }
@@ -315,6 +322,103 @@ class ChatController extends Controller
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * v5.04 — the quotation stops being a file name and becomes a quotation.
+     *
+     * Both web quotation paths in AiBrain end at the same line:
+     *
+     *     $gateway->sendDocument('', $from, $q->canonicalPortalUrl(), 'Quotation '.$no, '')
+     *
+     * so the browser receives `{type:'document', url:'…/q/{token}'}` and renders "📄 Quotation
+     * ORD-Q260813-XXXX" — a file name, at the exact moment the customer is deciding whether to buy.
+     * Everything needed to show them what they are about to agree to is already in the database, and
+     * the 40-character token is an EXACT key to it. No guessing, no matching by time or by customer.
+     *
+     * ENRICHED, NOT REPLACED. The message keeps `type:'document'`, so a browser running the previous
+     * shop.html — a tab left open across a deploy — renders the same clickable link it always did and
+     * loses nothing. New clients see `m.quote` and draw the card. This is a better trade than a new
+     * message type, whose fallback branch would have rendered a bare, unlinkified URL.
+     *
+     * DELIVERY IS DELIBERATELY ABSENT unless the quotation itself carries freight. The card states
+     * only facts already stored on the row; the portal and the PDF carry the terms. This is the one
+     * place a sixth delivery source could quietly appear, and it does not.
+     *
+     * Touches nothing: QuotationService, Quotation, the portal, the PDF, AiBrain and the numbering
+     * are all read-only here — one SELECT on a row that was just written.
+     */
+    private function quoteCards(Tenant $tenant, array $msgs, string $from): array
+    {
+        $tokens = [];
+        foreach ($msgs as $m) {
+            if (($m['type'] ?? '') !== 'document') continue;
+            $path = (string) (parse_url(trim((string) ($m['url'] ?? '')), PHP_URL_PATH) ?: '');
+            if (preg_match('#/q/([a-z0-9]{40})$#', $path, $mm)) $tokens[$mm[1]] = true;
+        }
+        if ($tokens === []) return $msgs;
+
+        $rows = \App\Models\Quotation::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('public_token', array_keys($tokens))
+            ->with(['items' => fn ($q) => $q->orderBy('id')])
+            ->get()->keyBy('public_token');
+        if ($rows->isEmpty()) return $msgs;
+
+        $shown = 0;
+        $out   = [];
+        foreach ($msgs as $m) {
+            if (($m['type'] ?? '') !== 'document') { $out[] = $m; continue; }
+            $url  = trim((string) ($m['url'] ?? ''));
+            $path = (string) (parse_url($url, PHP_URL_PATH) ?: '');
+            if (! preg_match('#/q/([a-z0-9]{40})$#', $path, $mm) || ! $rows->has($mm[1])) {
+                $out[] = $m;                       // a token we cannot resolve is not ours to reinterpret
+                continue;
+            }
+
+            $q    = $rows[$mm[1]];
+            $qcur = strtoupper(trim((string) ($q->currency ?: $tenant->setting('currency', 'UGX'))));
+
+            // Amounts are formatted HERE, by the same helper the PDF and the portal use, and sent as
+            // strings. The browser has its own money formatter keyed on the STOREFRONT's currency,
+            // and a quotation may not be in it — a UGX quotation rendered by a USD page would grow
+            // two decimals it never had. One rule, one place: Pricing::decimalsForCurrency().
+            $dec   = \App\Services\Pricing::decimalsForCurrency($qcur);
+            $money = fn ($v) => $qcur . ' ' . number_format((float) $v, $dec);
+
+            $lines = [];
+            foreach ($q->items as $it) {
+                $lines[] = [
+                    'name'   => (string) $it->name,
+                    'qty'    => (int) $it->qty,
+                    'unit'   => (string) ($it->unit_label ?? ''),
+                    'amount' => $money($it->line_total),
+                ];
+            }
+            $count   = count($lines);
+            $freight = (float) ($q->freight ?? 0);
+
+            $m['quote'] = [
+                'number'      => (string) $q->quote_no,
+                'currency'    => $qcur,
+                'total_txt'   => $money($q->total),
+                'freight_txt' => $freight > 0 ? $money($freight) : '',
+                'valid'       => $q->valid_until ? $q->valid_until->format('j M Y') : '',
+                'url'         => $url,
+                'pdf'         => rtrim($url, '/') . '/pdf',
+                'lines'       => array_slice($lines, 0, 5),
+                'more'        => max(0, $count - 5),
+                'count'       => $count,
+            ];
+            $out[] = $m;
+            $shown++;
+        }
+
+        if ($shown > 0) {
+            BotTrace::log($tenant->id, 'web', $from, 'web_quote_card', (string) $shown);
+        }
+
+        return $out;
     }
 
     /**

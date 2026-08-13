@@ -1196,6 +1196,28 @@ button{ -webkit-tap-highlight-color:transparent }
 .whchat .bub.im{padding:6px}
 .whchat .bub.im img{max-width:min(210px,60vw);border-radius:10px;display:block}
 .whchat .bub.im span{display:block;padding:7px 4px 2px;font-size:12.5px}
+/* v5.04 — quotation card. Deliberately NOT inside the chat-only stylesheet: a quotation is worth
+   showing properly in the small widget on the storefront too, and on a phone, not just at /chat. */
+.whchat .row.qrow .bub.quote{max-width:none;width:100%;padding:0;overflow:hidden}
+.whchat .bub.quote .qh{display:flex;align-items:baseline;gap:8px;padding:11px 13px;background:#f0fdf4;border-bottom:1px solid #dcfce7}
+.whchat .bub.quote .qh b{font-size:13.5px;color:#14532d}
+.whchat .bub.quote .qh span{margin-left:auto;font-size:11.5px;color:#4b5563;font-weight:700;letter-spacing:.3px}
+.whchat .bub.quote .qt{padding:6px 13px 2px}
+.whchat .bub.quote .qr{display:flex;gap:8px;align-items:baseline;padding:6px 0;font-size:12.5px;border-bottom:1px solid #f3f4f6}
+.whchat .bub.quote .qr .qn{flex:1;min-width:0;color:#1a202c}
+.whchat .bub.quote .qr .qq{flex:0 0 auto;color:#6b7280;font-size:11.5px;white-space:nowrap}
+.whchat .bub.quote .qr .qa{flex:0 0 auto;font-weight:700;white-space:nowrap}
+.whchat .bub.quote .qr.qmore .qn{color:#6b7280;font-style:italic}
+.whchat .bub.quote .qr.qsum .qn{color:#6b7280}
+.whchat .bub.quote .qr.qtot{border-bottom:0;padding-top:9px;font-size:14.5px}
+.whchat .bub.quote .qr.qtot .qn{font-weight:800}
+.whchat .bub.quote .qr.qtot .qa{font-weight:900;color:var(--green-d,#15803d)}
+.whchat .bub.quote .qv{padding:0 13px 8px;font-size:11.5px;color:#6b7280}
+.whchat .bub.quote .qgo{display:block;margin:2px 13px 10px;padding:11px;border-radius:10px;background:var(--green-d,#15803d);
+  color:#fff;font-weight:800;font-size:13px;text-align:center;text-decoration:none}
+.whchat .bub.quote .qacts{display:flex;gap:8px;padding:0 13px 12px}
+.whchat .bub.quote .qacts a,.whchat .bub.quote .qacts button{flex:1;text-align:center;padding:8px 6px;border-radius:9px;
+  border:1px solid #e5e7eb;background:#fff;color:#374151;font:inherit;font-size:12px;text-decoration:none;cursor:pointer}
 .whchat .bub.doc{display:flex;align-items:center;gap:7px;text-decoration:none;font-weight:700;color:var(--green-d)}
 .whchat .bub.doc svg{width:16px;height:16px}
 .whchat .bub.err{background:#FEF3F2;border-color:#FEE4E2;color:#B42318}
@@ -1547,6 +1569,9 @@ body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
   body.chat-only #whChatBd{ display:block; padding-left:22px; padding-right:22px; }
   body.chat-only #whChatBd > .row{ margin-bottom:8px; }
   body.chat-only #whChatBd .row.bot .bub{ max-width:78%; }
+  /* the quotation is a document, not a remark — give it a readable, fixed column */
+  body.chat-only #whChatBd .row.qrow{ max-width:430px; }
+  body.chat-only #whChatBd .row.qrow .bub.quote{ max-width:none; }
   body.chat-only #whChatBd .row:not(.bot) .bub{ max-width:66%; }
 
   /* v4.97 — THE WIDE EMPTY BOX. A photo bubble sizes to its CAPTION, and captions carry variant
@@ -3809,6 +3834,33 @@ function whChatLauncher(){
   bd.innerHTML='<div class="row bot">'+whChatAva()+'<div class="bub">Hello! 👋<br>I’m the '+esc(SHOP.name||'shop')+' assistant. Ask about products, prices, pack sizes or delivery — or tap one:<span class="ts">'+whChatTime(Date.now())+'</span></div></div>'
     +'<div class="sugg">'+chips.map(function(c){ return '<button class="sg" onclick="whChatSend('+jk(c[1])+')">'+esc(c[0])+'</button>'; }).join('')+'</div>';
 }
+/* v5.04 — the quotation card. Every number here came off the stored quotation row; nothing is
+   computed, summed or inferred in the browser, so the card cannot disagree with the portal or the
+   PDF. Long quotations show their first five lines and say honestly how many more there are. */
+function whChatQuote(m){
+  /* Every amount arrives pre-formatted from the server, by the same helper the PDF and the portal
+     use. Nothing is summed, converted or re-rounded here — this page's own money formatter is keyed
+     on the STOREFRONT's currency, and a quotation need not be in it. */
+  var q=m.quote||{};
+  var rows=(q.lines||[]).map(function(l){
+    return '<div class="qr"><span class="qn">'+esc(l.name||'')+'</span>'
+         + '<span class="qq">'+(+l.qty||0)+(l.unit?(' '+esc(l.unit)):'')+'</span>'
+         + '<span class="qa">'+esc(l.amount||'')+'</span></div>';
+  }).join('');
+  if(q.more>0) rows += '<div class="qr qmore"><span class="qn">+ '+(+q.more)+' more item'+(q.more===1?'':'s')+'</span><span class="qq"></span><span class="qa"></span></div>';
+  var frt = q.freight_txt
+    ? '<div class="qr qsum"><span class="qn">Delivery</span><span class="qq"></span><span class="qa">'+esc(q.freight_txt)+'</span></div>' : '';
+  return '<div class="row bot qrow">'+whChatAva()+'<div class="bub quote">'
+    + '<div class="qh"><b>Your quotation</b><span>'+esc(q.number||'')+'</span></div>'
+    + '<div class="qt">'+rows+frt
+    + '<div class="qr qtot"><span class="qn">Total</span><span class="qq"></span><span class="qa">'+esc(q.total_txt||'')+'</span></div></div>'
+    + (q.valid?'<div class="qv">Valid until '+esc(q.valid)+'</div>':'')
+    + '<a class="qgo" target="_blank" rel="noopener" href="'+esc(q.url||'')+'">Review &amp; approve →</a>'
+    + '<div class="qacts">'
+    +   '<a target="_blank" rel="noopener" href="'+esc(q.pdf||'')+'">⬇ Download PDF</a>'
+    +   '<button onclick="whChatSend(\'__human__\')">Talk to our team</button>'
+    + '</div></div></div>';
+}
 function whChatPaint(m,save){
   var bd=document.getElementById('whChatBd'); if(!bd) return;
   if(m.t==null && save!==false){ m.t=Date.now(); }   /* v4.84 — stamped once; replayed history keeps its ORIGINAL time (old logs without t simply show none) */
@@ -3816,6 +3868,13 @@ function whChatPaint(m,save){
   var h='';
   if(m.role==='me') h='<div class="row me"><div class="bub">'+esc(m.text||'')+ts+'</div></div>';
   else if(m.type==='image') h='<div class="row bot">'+whChatAva()+'<div class="bub im"><img loading="lazy" src="'+esc(m.url||'')+'" alt="">'+(m.caption?'<span>'+esc(m.caption).replace(/\n/g,'<br>')+'</span>':'')+'</div></div>';
+  /* v5.04 — a quotation, drawn from the row the server just read back by its own portal token.
+     Facts only: the numbered lines that are on it, the total that is on it, and freight ONLY when
+     the quotation actually carries some. Nothing about delivery is asserted here — the portal and
+     the PDF carry the terms, and this is exactly where a sixth delivery source would creep in.
+     The message is still type:'document', so a browser on the previous shop.html renders the same
+     clickable link and loses nothing. */
+  else if(m.type==='document' && m.quote) h=whChatQuote(m);
   else if(m.type==='document') h='<div class="row bot">'+whChatAva()+'<a class="bub doc" target="_blank" rel="noopener" href="'+esc(m.url||'')+'">📄 '+esc(m.name||'Document')+'</a></div>';
   else if(m.type==='location') h='<div class="row bot">'+whChatAva()+'<a class="bub doc" target="_blank" rel="noopener" href="https://maps.google.com/?q='+(+m.lat||0)+','+(+m.lng||0)+'">📍 '+esc(m.name||'Location')+'</a></div>';
   /* v4.84 — the card goes visual (owner's mockup): photo left, bold price with unit, its own
@@ -3974,7 +4033,13 @@ function whChatRetry(btn){
    uses), so chat → cart → checkout is one system, not two. */
 function whChatAdd(name,btn,id){
   try{
-    cartAdd(name);
+    /* v5.04 — OPENS AT THE MOQ, like the storefront's own grid. The chat used cartAdd(), which
+       starts a line at 1; the shop's product cards use inc(), which starts it at minq(p). So a card
+       printing "MOQ: 5 carton" put ONE carton in the cart — the card arguing with itself, on a
+       wholesale shop. inc() is the storefront's function, unchanged; only the call site moves.
+       (Whether the ORDER ENGINE should refuse a below-MOQ quantity is a separate, unmade decision:
+       moq_mode is still 'off', so it allows them and annotates "(min order 5)".) */
+    if(typeof inc === 'function') inc(name); else cartAdd(name);
     if(btn){ var sp=btn.querySelector('span')||btn; var was=sp.textContent; sp.textContent='Added ✓'; setTimeout(function(){ sp.textContent=was; },1200); }
     sTrack('chat_add',{product_id:(+id||0)});
     // v4.81 — remember that chat touched this cart, so the eventual order is attributable.
