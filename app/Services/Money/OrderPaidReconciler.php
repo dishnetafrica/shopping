@@ -69,7 +69,13 @@ final class OrderPaidReconciler
             } elseif ($oc === $base) {
                 $paid += (float) $p->usd_amount;
             } else {
-                $paid += (float) $p->usd_amount * ($fx->ratePerUsd($oc) ?: 1);
+                // Convert at the rate in force ON THE DAY THE MONEY ARRIVED, not today's. Without a
+                // date, every change to fx_rates rewrites orders.amount_paid on every foreign-currency
+                // order: seven UGX orders settled exactly at 3,655 read as 1.5% OVERPAID the moment the
+                // tenant's rate moved to 3,710. Fx is effective-dated precisely so a settled document
+                // stays settled — this call was the one place not asking it for a date.
+                $on = $p->created_at ? $p->created_at->format('Y-m-d') : null;
+                $paid += (float) $p->usd_amount * ($fx->ratePerUsd($oc, $on) ?: 1);
             }
         }
 

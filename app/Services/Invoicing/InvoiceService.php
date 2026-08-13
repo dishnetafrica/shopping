@@ -254,7 +254,10 @@ class InvoiceService
                 } elseif ($cur === 'USD') {
                     $paid += (float) $p->usd_amount;             // any → USD (already normalised)
                 } else {
-                    $paid += (float) $p->usd_amount * $fx->ratePerUsd($cur); // USD → invoice currency
+                    // At the rate in force when the payment landed — see OrderPaidReconciler. A dateless
+                    // rate here makes a settled UGX invoice drift every time fx_rates changes.
+                    $on = $p->created_at ? $p->created_at->format('Y-m-d') : null;
+                    $paid += (float) $p->usd_amount * $fx->ratePerUsd($cur, $on); // USD → invoice currency
                 }
             }
             $paid = round($paid, 2);
