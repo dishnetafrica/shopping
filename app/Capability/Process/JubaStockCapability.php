@@ -131,9 +131,17 @@ final class JubaStockCapability implements ProcessCapability
                  . $this->qty($detail['ordUnits']) . ' off orders that were never invoiced.';
         }
         if ($unmatched > 0) {
-            $sub .= ' ' . $unmatched . ' invoice line' . ($unmatched === 1 ? '' : 's')
-                 . ' (' . $this->qty($unmatchedQty) . ' units) could not be matched to a product by name and '
-                 . 'are NOT deducted — nothing is matched on a guess.';
+            // "invoice line" was wrong here and the verification run proved it: of 27, nine were
+            // invoice lines and eighteen were order lines. A subtitle that misnames where the
+            // problem is sends somebody to the wrong screen to fix it.
+            $mi = $this->missTotals($detail['miss'], 'invoice');
+            $mo = $this->missTotals($detail['miss'], 'order');
+            $where = [];
+            if ($mi['lines'] > 0) { $where[] = $mi['lines'] . ' on invoices (' . $this->qty($mi['units']) . ' units)'; }
+            if ($mo['lines'] > 0) { $where[] = $mo['lines'] . ' on orders (' . $this->qty($mo['units']) . ' units)'; }
+            $sub .= ' ' . $unmatched . ' sales line' . ($unmatched === 1 ? '' : 's')
+                 . ' could not be matched to a product by name and ' . ($unmatched === 1 ? 'is' : 'are')
+                 . ' NOT deducted — ' . implode(', ', $where) . '. Nothing is matched on a guess.';
         }
 
         return (new WorkspacePayload)
@@ -200,6 +208,11 @@ final class JubaStockCapability implements ProcessCapability
             'unmatchedLines' => count($detail['miss']),
             'unmatchedUnits' => round(array_sum(array_column($detail['miss'], 'qty')), 3),
             'unmatched'      => array_slice($detail['miss'], 0, 120),
+            // …and split by which kind of document, because a checker walking invoices can only ever
+            // find the invoice ones. Comparing its total against the combined figure reports a fault
+            // that is not there — which is exactly what happened, twice, before this line existed.
+            'unmatchedInv'   => $this->missTotals($detail['miss'], 'invoice'),
+            'unmatchedOrd'   => $this->missTotals($detail['miss'], 'order'),
             // every invoice wording seen, and the product it resolved to (null = matched nothing).
             // The checker reads a line off an invoice document and needs the same answer this class
             // reached; handing it the map is the difference between checking the arithmetic and
@@ -351,7 +364,8 @@ final class JubaStockCapability implements ProcessCapability
                 $d['lineMap'][$k] = $pid;                 // null is an answer too: "this matched nothing"
                 if ($pid === null) {
                     $unmatched++; $unmatchedQty += $q;
-                    $d['miss'][] = ['doc' => (string) ($r->invoice_no ?: 'invoice'), 'name' => trim($raw), 'qty' => $q];
+                    $d['miss'][] = ['doc' => (string) ($r->invoice_no ?: 'invoice'), 'src' => 'invoice',
+                                    'name' => trim($raw), 'qty' => $q];
                     continue;
                 }
                 $d['invLines']++; $d['invUnits'] += $q;
@@ -393,7 +407,8 @@ final class JubaStockCapability implements ProcessCapability
                         $pid = $byName[$this->normName((string) ($it['name'] ?? ''))] ?? null;
                         if ($pid === null) {
                             $unmatched++; $unmatchedQty += $q;
-                            $d['miss'][] = ['doc' => $ono, 'name' => trim((string) ($it['name'] ?? '(no name)')), 'qty' => $q];
+                            $d['miss'][] = ['doc' => $ono, 'src' => 'order',
+                                            'name' => trim((string) ($it['name'] ?? '(no name)')), 'qty' => $q];
                             continue;
                         }
                     }
@@ -434,6 +449,18 @@ final class JubaStockCapability implements ProcessCapability
         $d['ordUnits'] = round($d['ordUnits'], 3);
 
         return [$sold, $unmatched, round($unmatchedQty, 3), $d];
+    }
+
+    /** @param array<int,array{src:string,qty:float}> $miss */
+    private function missTotals(array $miss, string $src): array
+    {
+        $lines = 0; $units = 0.0;
+        foreach ($miss as $m) {
+            if (($m['src'] ?? '') !== $src) { continue; }
+            $lines++; $units += (float) $m['qty'];
+        }
+
+        return ['lines' => $lines, 'units' => round($units, 3)];
     }
 
     /** Case-folded, whitespace-collapsed. Nothing else — no stemming, no fuzz. */
