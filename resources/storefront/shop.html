@@ -1389,7 +1389,15 @@ body.chat-only #whChat .wh-in, body.chat-only #whChat .whin, body.chat-only #whC
    as fixed-size items and the body had no min-height:0, so the scroll area overflowed UPWARDS and
    the first message sat behind the header. This is the standard three-part fix and it is why the
    product card was cut in half. */
-body.chat-only #whChat > .hd{ flex:0 0 auto; position:relative; z-index:2; }
+/* v4.98 — the header casts a shadow over the scroll area. A conversation scrolled up clips its
+   older messages at the top of the viewport — that is what a scroll container does, and it is not
+   the v4.96 bug returning. But with the header sitting flush against that clip line and no
+   separation, a half-visible product card reads as "hidden behind the header" rather than "there
+   is more above". The shadow is the standard messaging-app treatment and costs nothing.
+   If the measurement in the probe file shows a REAL overlap, this is not the fix — tell me. */
+body.chat-only #whChat > .hd{
+  flex:0 0 auto; position:relative; z-index:2; box-shadow:0 2px 8px rgba(16,24,40,.10);
+}
 body.chat-only #whChat > .bd, body.chat-only #whChat > #whChatBd{
   flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-top:14px;
 }
@@ -1423,6 +1431,10 @@ body.chat-only #whChat .qa{ display:none !important; }
     font:inherit; font-size:14px; color:#111827;
   }
   body.chat-only #coRail button:hover{ background:#f9fafb; border-color:#d1d5db; }
+  body.chat-only #coRail button.on{
+    background:#f0fdf4; border-color:var(--green, #16a34a); color:#14532d; font-weight:600;
+    box-shadow:inset 3px 0 0 var(--green, #16a34a);
+  }
   body.chat-only #coRail .ic{
     width:22px; height:22px; flex:0 0 22px; display:flex; align-items:center; justify-content:center;
     overflow:hidden; border-radius:6px;
@@ -3581,7 +3593,7 @@ function whCcRead(id){
    Everything here is a CLIENT for POST /chat (M-CHAT-1) — no product logic, no prices, no rules,
    no keys. Injected only when whChatOn(); classic shops carry zero extra DOM and zero listeners.
    The panel itself is built LAZILY on first open — a visitor who never chats pays nothing. */
-var WHCHAT={sid:'',open:false,built:false,busy:false,last:'',log:[]};
+var WHCHAT={sid:'',open:false,built:false,busy:false,last:'',log:[],biz:''};
 function whChatOn(){ return whOn() && !!SHOP.webChat; }
 function whChatSid(){
   if(WHCHAT.sid) return WHCHAT.sid;
@@ -3737,6 +3749,12 @@ function whChatSend(text,action){
      after that, exactly like the contact fields above. Both values were sanitised server-side before
      they reached this page, so nothing here can smuggle a query string into the log. */
   try{ var cx=SHOP.chatCtx||{}; if(cx.source) body.source=cx.source; if(cx.campaign) body.campaign=cx.campaign; }catch(e){}
+  /* v4.98 — which "Shop by Business" tile was tapped, as an ID, one message only. The label alone
+     ("Office Supplies") is merchandising that exists on this website and nowhere in the catalogue,
+     so the bot answered — correctly, from its point of view — that no such category exists. The
+     SERVER resolves this id against the tenant's own business_banners and hands the brain the real
+     categories and keywords behind it. Nothing about the collection is described here. */
+  try{ if(WHCHAT.biz){ body.biz=String(WHCHAT.biz).slice(0,40); WHCHAT.biz=''; } }catch(e){}
   fetch((SHOP.base||'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
   .then(function(r){ return r.json().then(function(j){ return {st:r.status,j:j}; }).catch(function(){ return {st:r.status,j:null}; }); })
   .then(function(x){
@@ -4790,22 +4808,32 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       if(list && list.length){
         head = 'Shop by Business';
         items = list.map(function(b){
-          return { label:(b.label||b.id),
+          return { id:(b.id||''), label:(b.label||b.id),
                    icon:((typeof bizIcon==='function')?bizIcon(b.icon||b.id):''), img:'' };
         });
       } else if(typeof CATS !== 'undefined' && CATS && CATS.length){
         head = 'Shop by Category';
-        items = CATS.slice(0,10).map(function(c){ return { label:c.name, icon:'', img:(c.img||'') }; });
+        /* No id here on purpose: a category IS a catalogue category, so the brain already knows it
+           and needs no translation. Only the business tiles carry one. */
+        items = CATS.slice(0,10).map(function(c){ return { id:'', label:c.name, icon:'', img:(c.img||'') }; });
       }
       if(!items.length) return;
       var r = document.createElement('aside');
       r.id='coRail'; r.className='co-rail';
       r.innerHTML = '<div class="co-railh">'+esc(head)+'</div>' + items.map(function(b){
         var ic = b.icon ? b.icon : (b.img ? '<img loading="lazy" src="'+esc(b.img)+'" alt="">' : '');
-        return '<button onclick="whChatSend('+jk('Show me '+b.label)+')">'
+        return '<button onclick="'+(b.id?('WHCHAT.biz='+jk(b.id)+';'):'')+'whChatSend('+jk('Show me '+b.label)+')">'
              + '<span class="ic">'+ic+'</span>'
              + '<span>'+esc(b.label)+'</span></button>';
       }).join('');
+      /* the tapped tile stays marked, so the rail shows where the conversation is */
+      r.addEventListener('click', function(ev){
+        var t = ev.target, b = (t && t.closest) ? t.closest('button') : null;
+        if(!b || !r.contains(b)) return;
+        var bs = r.querySelectorAll('button');
+        for(var i=0;i<bs.length;i++) bs[i].classList.remove('on');
+        b.classList.add('on');
+      });
       /* Benefits under the categories — from SHOP.home.benefits, which is the very data your
          storefront hero already renders ("FREE DELIVERY · in Juba · Min. 5 Cartons"). Nothing is
          written here that the shop does not already say elsewhere; if the setting is empty, the
@@ -4857,36 +4885,30 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
         + '</div>';
     }).join('');
 
-    /* DELIVERY — read from the storefront's own rule (activeFreeRule/_freeOver/freeQualified), never
-       hardcoded here. If the shop has no rule configured we say nothing rather than invent one; the
-       delivery contradiction is a business decision, not something a cart panel should settle. */
+    /* DELIVERY — v4.98. The ONE authority is the shop's configured delivery rule
+       (activeFreeRule → freeRuleForCity → freeRules). Nothing else.
+
+       WHAT v4.96 DID WRONG, in my own words: _freeOver() returns 0 on /chat because
+       activeFreeRule() is keyed on currentCity() and a chat visitor has never picked a branch. I
+       filled that silence with SHOP.home.benefits — the storefront hero's marketing line. The
+       result printed "FREE DELIVERY (Min. 5 Cartons)" above a cart holding THREE cartons: an
+       unearned promise that contradicted itself on its own line. Marketing copy is not a delivery
+       rule, and a cart panel is the last place that should decide one. Removed.
+
+       So: a real rule and a chosen city → the real numbers. Anything else → we do not know yet,
+       and the cart says exactly that. */
     var del = '';
     try{
       var fo = (typeof _freeOver === 'function') ? _freeOver() : 0;
+      var city = (typeof currentCity === 'function') ? currentCity() : '';
       if(fo > 0){
         del = (typeof freeQualified === 'function' && freeQualified(sub))
-          ? '<div class="ccdel"><span>Delivery</span><b class="ok">FREE</b></div>'
-          : '<div class="ccdel"><span>Delivery</span><b>'+ugx(fo-sub)+' more to qualify</b></div>';
+          ? '<div class="ccdel"><span>Delivery'+(city?(' to '+esc(city)):'')+'</span><b class="ok">FREE</b></div>'
+          : '<div class="ccdel"><span>Delivery'+(city?(' to '+esc(city)):'')+'</span><b>'+ugx(fo-sub)+' more to qualify</b></div>';
       } else {
-        /* v4.96 — WHY THIS LINE WAS MUTE. activeFreeRule() is keyed on currentCity(), which is the
-           delivery place the VISITOR picked — and on /chat they have never picked one, so the rule
-           lookup returns null and the cart had nothing to say. Worth knowing too: freeRules() is
-           VALUE-based (free_over: an amount), while the shop's actual policy is QUANTITY-based
-           ("Min. 5 Cartons"). The rule engine cannot express it either way.
-           So fall back to the shop's OWN configured delivery benefit — the same home_benefits text
-           the storefront hero shows. Not invented, not hardcoded: his copy, displayed twice. */
-        var ben = null;
-        try{
-          var bl = (SHOP.home && SHOP.home.benefits) ? SHOP.home.benefits : [];
-          for(var bi=0; bi<bl.length; bi++){
-            if(/deliver/i.test(String(bl[bi].t||''))){ ben = bl[bi]; break; }
-          }
-        }catch(e){}
-        del = ben
-          ? '<div class="ccdel"><span>Delivery '+esc(ben.s||'')+'</span><b class="ok">'+esc(ben.t||'')+(ben.s2?(' <i>('+esc(ben.s2)+')</i>'):'')+'</b></div>'
-          : '<div class="ccdel"><span>Delivery</span><b class="mut">confirmed by our team</b></div>';
+        del = '<div class="ccdel"><span>Delivery</span><b class="mut">confirmed by our team</b></div>';
       }
-    }catch(e){ del = ''; }
+    }catch(e){ del = '<div class="ccdel"><span>Delivery</span><b class="mut">confirmed by our team</b></div>'; }
 
     return '<div class="cch">Your Cart <span>('+cartCount()+')</span>'
          + '<button class="ccclr" onclick="if(typeof clearCart===\'function\'){clearCart()}else{CART={};saveCart();render();bar();}">Clear</button></div>'

@@ -41,6 +41,7 @@ class ChatController extends Controller
             'contact_phone' => 'nullable|string|max:32',    // v4.85 — WhatsApp number, canonicalised server-side
             'source'        => 'nullable|string|max:48',    // v4.93 — attribution, re-sanitised below
             'campaign'      => 'nullable|string|max:48',
+            'biz'           => 'nullable|string|max:40',    // v4.98 — tapped "Shop by Business" tile, resolved in bizNote()
         ]);
 
         $sid = (string) ($data['session_id'] ?? '');
@@ -221,7 +222,8 @@ class ChatController extends Controller
             // as ad-awareness in the WhatsApp job). The inbox logged the raw text above; the brain
             // sees the annotation and stops asking for a location the website already knows.
             $loc = trim((string) ($data['location'] ?? ''));
-            $aiText = $text . ($loc !== '' ? "\n[delivery location selected on the website: {$loc}]" : '');
+            $aiText = $text . ($loc !== '' ? "\n[delivery location selected on the website: {$loc}]" : '')
+                    . $this->bizNote($tenant, (string) ($data['biz'] ?? ''), $from);
 
             $collector = new CollectorGateway();
             try {
@@ -303,6 +305,59 @@ class ChatController extends Controller
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * v4.98 — translate a tapped "Shop by Business" tile into something the brain can act on.
+     *
+     * The rail's tiles come from `business_banners`, which is MERCHANDISING: a grouping that exists
+     * on this website and nowhere in the catalogue. A visitor tapped "Office Supplies", the page
+     * sent "Show me Office Supplies", and the bot replied — correctly, from where it was standing —
+     * "We don't have a specific category for Office Supplies". The label was never in its world.
+     *
+     * The tile's ID rides along with that one message and is resolved HERE, against the tenant's own
+     * saved config, into the categories and keywords the owner put behind it. Nothing about any
+     * collection is written into the prompt, nothing is hardcoded, and a shop that has never
+     * configured business banners produces no annotation at all. Same weave pattern as the delivery
+     * location above: the inbox logs what the customer actually said, the brain gets the context.
+     */
+    private function bizNote(Tenant $tenant, string $bizId, string $from): string
+    {
+        $bizId = mb_substr(strtolower(trim($bizId)), 0, 40);
+        $bizId = (string) preg_replace('/[^a-z0-9._-]+/', '', $bizId);
+        if ($bizId === '') return '';
+
+        try {
+            foreach ((array) data_get($tenant->settings, 'business_banners.businesses', []) as $b) {
+                if (! is_array($b)) continue;
+                if (strtolower(trim((string) ($b['id'] ?? ''))) !== $bizId) continue;
+                if (($b['active'] ?? true) === false) return '';
+
+                $label = trim((string) ($b['label'] ?? '')) ?: $bizId;
+                $cats  = array_values(array_filter(array_map('trim', (array) data_get($b, 'match.categories', []))));
+                $kws   = array_values(array_filter(array_map('trim', (array) data_get($b, 'match.keywords', []))));
+
+                $bits = [];
+                if ($cats !== []) $bits[] = 'catalogue categories ' . implode(', ', array_slice($cats, 0, 20));
+                if ($kws !== [])  $bits[] = 'keywords ' . implode(', ', array_slice($kws, 0, 30));
+                if (data_get($b, 'match.bulk')) $bits[] = 'plus every bulk or carton line (pack size or MOQ above 1)';
+
+                BotTrace::log($tenant->id, 'web', $from, 'chat_biz', $bizId);
+
+                return "\n[the customer tapped the \"" . $label . '" collection on this shop\'s website. '
+                     . 'It is a grouping this shop publishes, not a catalogue category, so it will not appear in the '
+                     . 'PRODUCTS list — but it is real and it is ours. '
+                     . ($bits !== []
+                        ? 'It covers ' . implode('; ', $bits) . '. Answer from those products.'
+                        : 'The owner has not yet mapped it to categories or keywords, so offer the closest lines you can '
+                          . 'and say you will confirm the full range.')
+                     . ' Do not tell the customer we have no such collection.]';
+            }
+        } catch (\Throwable $e) {
+            return '';                      // context is a bonus; the message goes through regardless
+        }
+
+        return '';
     }
 
     /**
