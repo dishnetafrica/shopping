@@ -841,6 +841,10 @@ Route::middleware('web')->group(function () use ($qToken) {
     // v4.78 (M-CHAT-1, ADR-018) — website chat into the SAME bot brain as WhatsApp. Throttled
     // per IP; the controller adds per-session and per-tenant daily caps (AI calls cost money).
     Route::post('/chat',           [\App\Http\Controllers\Storefront\ChatController::class, 'message'])->middleware('throttle:12,1');
+    // v4.93 — the SHAREABLE chat surface: familyshoppers.net/chat opens straight into the shopping
+    // conversation. Same storefront page, chrome hidden (see StorefrontController::chatLanding) —
+    // there was no GET route on this path at all, only the POST above, which is why the URL 404'd.
+    Route::get('/chat',            [\App\Http\Controllers\Storefront\StorefrontController::class, 'chatLanding']);
     Route::get('/c/{slug}',        [\App\Http\Controllers\Storefront\StorefrontController::class, 'category']);
     // v4.27 — a real, indexable page per product: /p/sugar-2kg-kakira-412. The trailing id is what
     // resolves it, so renaming a product never breaks an indexed link (the canonical updates itself).
@@ -881,6 +885,7 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/learn',              [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'index'])->where('shop', $shopSlug);
     Route::get('/{shop}/how',                [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'how'])->where('shop', $shopSlug);
     Route::get('/{shop}/learn/{slug}',       [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'article'])->where('shop', $shopSlug)->where('slug', '[a-z0-9-]+');
+    Route::get('/{shop}/chat',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'chatLanding'])->where('shop', $shopSlug);
     Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'landing'])->where('shop', $shopSlug);
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
     Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);

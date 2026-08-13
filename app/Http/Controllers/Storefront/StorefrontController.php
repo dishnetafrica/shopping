@@ -165,7 +165,7 @@ class StorefrontController extends Controller
     }
 
     /** Render the shop HTML for a resolved tenant. $base is '' on a custom domain, '/{slug}' on the platform. */
-    private function renderShop(Tenant $tenant, string $base, ?string $seoCat = null, $seoProduct = null, int $wantedId = 0)
+    private function renderShop(Tenant $tenant, string $base, ?string $seoCat = null, $seoProduct = null, int $wantedId = 0, array $chat = [])
     {
 
         $cfg = [
@@ -194,6 +194,15 @@ class StorefrontController extends Controller
             // v4.79 (M-CHAT-2) — the chat UI renders only when the owner switched the channel on.
             'webChat'      => (bool) $tenant->setting('web_chat', false),
             'webChatContact' => (bool) $tenant->setting('web_chat_contact', true),   // v4.85 — contact-first gate; server enforces regardless
+            // v4.93 — /chat mode. Absent (false) on every ordinary storefront render, so the normal
+            // shop is byte-for-byte unaffected by this feature existing.
+            'chatOnly'     => (bool) ($chat['chatOnly'] ?? false),
+            'chatCtx'      => [
+                'source'   => (string) ($chat['source'] ?? ''),
+                'campaign' => (string) ($chat['campaign'] ?? ''),
+                'category' => (string) ($chat['category'] ?? ''),
+                'product'  => (string) ($chat['product'] ?? ''),
+            ],
         ];
 
         $path = resource_path('storefront/shop.html');
@@ -348,6 +357,39 @@ class StorefrontController extends Controller
         [$tenant, $base] = $this->resolveShop($shop);
         if ($this->autoPartsEnabled($tenant)) { return $this->autoParts($shop, $tenant, $base); } // AUTO_PARTS
         return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant, $base) : $this->renderShop($tenant, $base);
+    }
+
+    /**
+     * v4.93 — /chat : the SAME storefront page, opened straight into the shopping conversation with
+     * the website chrome hidden. Deliberately not a separate view.
+     *
+     * The chat's product cards read prices through prod(), its Add button is the storefront's own
+     * cartAdd(), and the cart it fills is the page's CART. A standalone chat page would have none of
+     * those, so Add to Cart would look fine and quietly do nothing. Serving the same page keeps every
+     * one of those paths intact and makes this reversible by deleting one route.
+     */
+    public function chatLanding(Request $request, ?string $shop = null)
+    {
+        [$tenant, $base] = $this->resolveShop($shop);
+
+        return $this->renderShop($tenant, $base, null, null, 0, [
+            'chatOnly' => true,
+            // Campaign context, sanitised HERE. The page never invents these and the model is never
+            // handed a raw query string.
+            'source'   => $this->ctxWord($request->query('source', $request->query('utm_source', ''))),
+            'campaign' => $this->ctxWord($request->query('campaign', $request->query('utm_campaign', ''))),
+            'category' => $this->ctxWord($request->query('category', '')),
+            'product'  => $this->ctxWord($request->query('product', '')),
+        ]);
+    }
+
+    /** Campaign words are attribution, not content: lowercase, short, and nothing exotic. */
+    private function ctxWord($v): string
+    {
+        $v = strtolower(trim((string) $v));
+        $v = (string) preg_replace('/[^a-z0-9._-]+/', '-', $v);
+
+        return mb_substr(trim($v, '-'), 0, 48);
     }
 
     private function brandSiteEnabled($tenant): bool

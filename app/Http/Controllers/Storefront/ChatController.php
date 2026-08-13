@@ -39,6 +39,8 @@ class ChatController extends Controller
             'auth'          => 'nullable|string|max:2000',  // v4.81 — the customer login token, validated server-side
             'contact_name'  => 'nullable|string|max:60',    // v4.85 — pre-chat form (owner's contact-first rule)
             'contact_phone' => 'nullable|string|max:32',    // v4.85 — WhatsApp number, canonicalised server-side
+            'source'        => 'nullable|string|max:48',    // v4.93 — attribution, re-sanitised below
+            'campaign'      => 'nullable|string|max:48',
         ]);
 
         $sid = (string) ($data['session_id'] ?? '');
@@ -93,6 +95,21 @@ class ChatController extends Controller
             $convo->save();
 
             $state = is_array($convo->state) ? $convo->state : [];
+
+            // v4.93 — where this conversation came from, recorded ONCE per session. The values are
+            // sanitised server-side in StorefrontController::ctxWord before they ever reach the page,
+            // so this is a short slug, not a query string. Written to bot_events (the telemetry that
+            // already exists) rather than a new table, so "did the Facebook aluminium-foil advert
+            // produce quotations?" is answerable by reading the same log as everything else.
+            $src = substr(preg_replace('/[^a-z0-9._-]+/', '', strtolower((string) ($data['source'] ?? ''))), 0, 48);
+            $cmp = substr(preg_replace('/[^a-z0-9._-]+/', '', strtolower((string) ($data['campaign'] ?? ''))), 0, 48);
+            if (($src !== '' || $cmp !== '') && empty($state['source']) && empty($state['campaign'])) {
+                $state['source']   = $src;
+                $state['campaign'] = $cmp;
+                $convo->state = $state;
+                $convo->save();
+                BotTrace::log($tenant->id, 'web', $from, 'chat_source', trim($src . ' ' . $cmp));
+            }
 
             // v4.85 — first valid contact: remember it on the conversation, tell the inbox and
             // the brain who this is, and create the customer master the way ORDERS do

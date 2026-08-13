@@ -1361,6 +1361,28 @@ button{ -webkit-tap-highlight-color:transparent }
 .scanov .scanhint{color:#dbe4ee;text-align:center;font-size:13.5px;padding:16px 20px 30px}
 @media(prefers-reduced-motion:reduce){.scanov .scanline{animation:none;top:50%}}
 </style>
+<style id="chatOnlyCss">
+/* v4.93 — /chat mode. Purely presentational: hides the website around the chat and lets the panel
+   own the viewport. No script in the page is disabled, so the catalogue, prod(), cartAdd(), CART and
+   every chat path keep working exactly as they do on the ordinary storefront. Removing the body
+   class restores the shop. */
+body.chat-only > header, body.chat-only > nav, body.chat-only .topbar, body.chat-only .hero,
+body.chat-only .btmnav, body.chat-only footer, body.chat-only .sf-foot, body.chat-only .home,
+body.chat-only .trending, body.chat-only .deptbar, body.chat-only .catbar { display:none !important; }
+body.chat-only { background:#fff; overflow:hidden; }
+body.chat-only #whChatFab { display:none !important; }
+body.chat-only #whChat{
+  position:fixed; inset:0; width:100% !important; max-width:none !important;
+  height:100dvh !important; max-height:100dvh !important; margin:0 !important;
+  border-radius:0 !important; box-shadow:none !important; z-index:9999;
+}
+/* keyboard-safe: the composer rides above the on-screen keyboard on iOS/Android */
+body.chat-only #whChat .wh-in{ padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
+@media (min-width:900px){
+  body.chat-only #whChat{ inset:auto; left:50%; top:0; transform:translateX(-50%);
+    width:480px !important; height:100dvh !important; border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb; }
+}
+</style>
 </head>
 <body>
 
@@ -3581,6 +3603,10 @@ function whChatSend(text,action){
   if(action) body.action=action;
   try{ if(typeof AUTHTOK!=='undefined'&&AUTHTOK) body.auth=AUTHTOK; }catch(e){}   // v4.81 — server validates; never trusted client-side
   var ctc=whChatContact(); if(ctc){ body.contact_name=ctc.name; body.contact_phone=ctc.phone; }   // v4.85 — rides every message; server stores once
+  /* v4.93 — campaign attribution rides along; the server stores it once per session and ignores it
+     after that, exactly like the contact fields above. Both values were sanitised server-side before
+     they reached this page, so nothing here can smuggle a query string into the log. */
+  try{ var cx=SHOP.chatCtx||{}; if(cx.source) body.source=cx.source; if(cx.campaign) body.campaign=cx.campaign; }catch(e){}
   fetch((SHOP.base||'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
   .then(function(r){ return r.json().then(function(j){ return {st:r.status,j:j}; }).catch(function(){ return {st:r.status,j:null}; }); })
   .then(function(x){
@@ -4549,6 +4575,32 @@ window.addEventListener('scroll',function(){ var lm=$('loadmore'); if(!lm)return
 })();
 
 loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopChips();whSearchIcons();}catch(e){} bar(); restoreDelv(); if($('content'))$('content').innerHTML=(whOn()?whSkeleton():skeletonGrid(8)); load();   /* v4.83 — wholesale chrome + a wholesale-shaped skeleton BEFORE first paint (the desktop CLS fix). Gated: classic shops boot exactly as before. */
+
+/* v4.93 — /chat: open the conversation instead of the shop. The page is identical; only the chrome
+   is hidden (chatOnlyCss) and the panel is opened on load rather than on a launcher tap. Campaign
+   context arrives from the server already sanitised and is handed to the chat as its opening intent,
+   so attribution is decided server-side and never guessed here. */
+(function(){
+  if(!SHOP || !SHOP.chatOnly) return;
+  document.body.classList.add('chat-only');
+  var ctx = SHOP.chatCtx || {};
+  function openIt(){
+    try{ whChatShow(); }catch(e){ return; }
+    try{
+      var seed = '';
+      if(ctx.product)  seed = 'I am looking for product ' + ctx.product;
+      else if(ctx.category) seed = 'Show me ' + ctx.category.replace(/-/g,' ');
+      else if(ctx.campaign) seed = 'I saw your ' + ctx.campaign.replace(/-/g,' ') + ' offer';
+      // whChatSend() is the SAME path the launcher chips and the composer use — the campaign seed
+      // is an ordinary customer message, so the AI, the caps, the contact gate and the logging all
+      // treat it exactly like one. Nothing about campaigns is special-cased downstream.
+      if(seed && typeof whChatSend === 'function') whChatSend(seed);
+    }catch(e){}
+  }
+  if(document.readyState === 'complete') setTimeout(openIt, 60);
+  else window.addEventListener('load', function(){ setTimeout(openIt, 60); });
+})();
+
 </script>
 <div id="detail" class="detail" aria-hidden="true"></div>
 </body>
