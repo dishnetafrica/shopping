@@ -13,6 +13,31 @@ use App\Services\Money\ReportingCurrency;
  */
 final class SettingsWriteService
 {
+    /**
+     * The keys the Settings screen renders as an image upload — derived from the schema, exactly as
+     * BrandingUploadController derives what it will accept, so the two can never drift. A blank
+     * submitted for one of these is discarded rather than written.
+     */
+    private static function imageKeys(): array
+    {
+        try {
+            $out = [];
+            foreach (\App\Support\SettingsSchema::fields() as $key => $f) {
+                if (($f['type'] ?? '') === 'image') {
+                    $out[] = $key;
+                }
+            }
+            if ($out) {
+                return $out;
+            }
+        } catch (\Throwable $e) {
+            // schema unavailable → the explicit list below still protects the ones that matter most
+        }
+
+        return ['logo', 'stamp_image', 'catalog_cover_image', 'catalog_promo_image',
+            'catalog_qr_image', 'home_hero_image', 'home_hero_image_mobile'];
+    }
+
     /** Base currency must be one Fx can rate, or consolidation would be meaningless. */
     public const BASE_CHOICES = ReportingCurrency::RATEABLE;   // USD / UGX / SSP
 
@@ -193,11 +218,29 @@ final class SettingsWriteService
         }
 
         // Free-text settings.
+        //
+        // IMAGE fields are the exception, and it is not a small one. They hold a URL the upload
+        // widget wrote; the owner never types them. A form that submits them blank therefore erases
+        // pictures nobody asked to remove — which is exactly how tenant 17 lost its logo, stamp,
+        // hero, hero-mobile and both catalogue images in a single Save, while every file sat safe on
+        // disk the whole time. NUM_KEYS and ENUM_KEYS below already skip blanks; image keys now do
+        // too. Ordinary text (tagline, invoice_footer, bank_details) stays clearable, because there
+        // a blank IS the intent.
+        //
+        // Consequence to know: removing an image can no longer be done by clearing the field. Upload
+        // a replacement, or clear it with putSetting. That is the deliberate trade — a picture you
+        // have to replace on purpose beats five pictures that vanish by accident.
+        $imageKeys = self::imageKeys();
         foreach (self::TEXT_KEYS as $k) {
-            if (array_key_exists($k, $input)) {
-                $tenant->putSetting($k, trim((string) $input[$k]));
-                $changed[] = str_replace('_', ' ', $k);
+            if (! array_key_exists($k, $input)) {
+                continue;
             }
+            $val = trim((string) $input[$k]);
+            if ($val === '' && in_array($k, $imageKeys, true)) {
+                continue;
+            }
+            $tenant->putSetting($k, $val);
+            $changed[] = str_replace('_', ' ', $k);
         }
 
         // Numeric settings (validated, clamped to a sane minimum).
