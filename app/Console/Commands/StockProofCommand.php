@@ -48,14 +48,19 @@ class StockProofCommand extends Command
         $home  = StockLedger::home($t);
         $limit = max(1, (int) $this->option('limit'));
 
+        // v4.99 FIX — this command had never run. It selected `cost` and `unit`; the columns are
+        // `cost_price` and `unit_label`, so every invocation died on SQLSTATE 42703 before printing a
+        // line. The pure classifier underneath was covered by 46 assertions and 22 mutants; the four
+        // words of SQL wrapping it were not, because a harness over a pure function cannot reach
+        // them. Exactly the "proves the logic, not the wiring" caveat, collecting.
         $products = [];
-        DB::table('products')->where('tenant_id', $t->id)->select('id', 'name', 'sku', 'cost', 'unit')
+        DB::table('products')->where('tenant_id', $t->id)->select('id', 'name', 'sku', 'cost_price', 'unit_label')
             ->orderBy('id')->chunkById(1000, function ($rows) use (&$products) {
                 foreach ($rows as $p) {
                     $products[(int) $p->id] = [
                         'name' => (string) ($p->name ?? ''),
-                        'unit' => (string) ($p->unit ?? ''),
-                        'cost' => (float) ($p->cost ?? 0),
+                        'unit' => (string) ($p->unit_label ?? ''),
+                        'cost' => (float) ($p->cost_price ?? 0),
                     ];
                 }
             });
