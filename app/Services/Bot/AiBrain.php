@@ -434,7 +434,7 @@ class AiBrain
             $caption = "📄 Quotation {$doc['no']} — Total {$cur} " . number_format($doc['total']) . ". Valid "
                      . (((int) $tenant->setting('quote_validity_days', 14)) ?: 14) . " days. Reply to confirm and we'll arrange delivery.";
 
-            $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
+            $media = $this->mediaForGateway($gateway, $doc);
             try {
                 $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
                 \App\Support\QuotationPipeline::stage($tenant->id, $from, 'wa_sent', true, (string) $doc['no']);
@@ -691,7 +691,7 @@ class AiBrain
         $caption = (string) ($tenant->setting('price_list_caption', '')
             ?: "Here's our current price list 📄 For bulk quantities, tell me the items and how many and I'll send you a quotation.");
 
-        $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
+        $media = $this->mediaForGateway($gateway, $doc);
         try {
             $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', '[price-list] ' . $doc['fileName'], null, null, ['via' => 'ai', 'kind' => 'price_list']);
@@ -1045,6 +1045,27 @@ class AiBrain
         return trim(implode("\n", $out));
     }
 
+
+    /**
+     * v4.92 — what to hand sendDocument(), decided by who is receiving it.
+     *
+     * WhatsApp wants the base64: Evolution embeds it reliably, while a URL depends on APP_URL being
+     * publicly correct (the 2026-07-30 incident where an internal container hostname meant the PDF
+     * never attached). A BROWSER wants the opposite — base64 in an href is a relative path, which is
+     * how a real customer clicking a real quotation got 414 Request-URI Too Large from nginx.
+     * Every document sender routes through here so the preference cannot drift apart again.
+     */
+    private function mediaForGateway(WhatsAppGateway $gateway, array $doc): string
+    {
+        $b64 = (string) ($doc['b64'] ?? '');
+        $url = (string) ($doc['url'] ?? '');
+        if ($gateway instanceof \App\Services\Bot\CollectorGateway) {
+            return $url !== '' ? $url : '';      // browser: a real URL or nothing
+        }
+
+        return $b64 !== '' ? $b64 : $url;        // WhatsApp: base64 first, as before
+    }
+
     private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply, string $channel = 'whatsapp', ?WhatsAppGateway $gateway = null): string
     {
         $pos = stripos($reply, '<<ORDER');
@@ -1396,6 +1417,35 @@ class AiBrain
                 return ['reply' => $msg, 'sent' => true];
             }
 
+            // v4.92 — CROSS-PATH DUPLICATE GUARD. The cache check above only sees quotations this
+            // method minted. The ORDER path (captureOrderAsQuote) mints its own, with its own guard,
+            // and neither could see the other: a customer who confirmed an order and then said "send
+            // it again" got a SECOND quotation number for the identical basket (observed live —
+            // ORD-Q260813-LCNM, then ORD-Q260813-AFIZ). Same failure the 2026-07-30 incident
+            // described, arriving through the door the fix did not cover. Check the table, not just
+            // the cache, and re-offer the existing one.
+            try {
+                $wantTotal = round((float) ($quote['total'] ?? 0), 2);
+                if ($wantTotal > 0) {
+                    $existing = \App\Models\Quotation::where('tenant_id', $tenant->id)
+                        ->where('customer_phone', $from)
+                        ->where('status', '!=', 'void')
+                        ->where('created_at', '>=', now()->subHours(24))
+                        ->orderByDesc('id')->first();
+                    if ($existing && abs(round((float) $existing->total, 2) - $wantTotal) < 0.01) {
+                        \App\Support\BotTrace::log($tenant->id, 'ai-order', $from, 'quote_reused', (string) $existing->quote_no);
+                        if ($gateway instanceof \App\Services\Bot\CollectorGateway) {
+                            try {
+                                $gateway->sendDocument('', $from, $existing->canonicalPortalUrl(),
+                                    'Quotation ' . (string) $existing->quote_no, '');
+                            } catch (\Throwable $e) { /* the text below still names it */ }
+                        }
+
+                        return ['reply' => $clean . "\n\nThat's quotation *{$existing->quote_no}* — the same one as before, still valid \u{1F44D}", 'sent' => true];
+                    }
+                }
+            } catch (\Throwable $e) { /* dedupe is best-effort; fall through and quote normally */ }
+
             $doc = $svc->generate($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote);
             if (! $doc) {
                 \App\Support\QuotationPipeline::stage($tenant->id, $from, 'pdf_generate', false, '', 'generate() returned null (render/store failed)');
@@ -1451,12 +1501,21 @@ class AiBrain
                 $gateway->sendText($tenant->whatsapp_instance, $from, $clean);
                 MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $clean, null, null, ['via' => 'ai']);
             }
-            $media = $doc['b64'] !== '' ? $doc['b64'] : $doc['url'];
+            $media = $this->mediaForGateway($gateway, $doc);
             $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
 
             $quoteRow = $svc->persist($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote, $doc, 'bot');
             if ($meta && $quoteRow) { $quoteRow->meta = $meta; $quoteRow->save(); }
+            // v4.92 — the browser's copy. mediaForGateway() correctly refuses to put a PDF blob in an
+            // href, which means without this the web customer is told "here is your quotation" and
+            // handed nothing at all. The portal link is the thing they can actually open.
+            if ($quoteRow && $gateway instanceof \App\Services\Bot\CollectorGateway) {
+                try {
+                    $gateway->sendDocument('', $from, $quoteRow->canonicalPortalUrl(),
+                        'Quotation ' . (string) $doc['no'], '');
+                } catch (\Throwable $e) { Log::warning('web quotation link not delivered: ' . $e->getMessage()); }
+            }
             Cache::put($cacheKey, ['sig' => $sig, 'no' => $doc['no']], now()->addMinutes(30));
 
             // High-value quotation alert: ping the sales/management team so a person closes a big
