@@ -56,6 +56,24 @@ final class ChatCapability implements ObjectCapability
                 ->orderByDesc('id')->value('customer_name'));
         }
         $name = $name !== '' ? $name : $phone;
+
+        // v4.94 — a WEBSITE conversation: identify it by the contact the pre-chat form captured, not
+        // by the session key. Staff opening this needed a name to greet and a number to ring; the
+        // header was showing them `web:w-msmradvd-u0e7sai3cztbtsvty3` twice.
+        $isWeb   = (string) $c->instance === \App\Services\Bot\WebChatPolicy::INSTANCE;
+        $chanTag = 'WhatsApp';
+        if ($isWeb) {
+            $chanTag  = '🌐 Website chat';
+            $st       = is_array($c->state) ? $c->state : [];
+            $webName  = trim((string) ($st['contact_name'] ?? ''));
+            $webPhone = trim((string) ($st['contact_phone'] ?? ($st['linked_phone'] ?? '')));
+            if ($webName !== '')  { $name = $webName; }
+            elseif ($name === $phone) { $name = 'Website visitor'; }
+            $phone = $webPhone !== '' ? '+' . ltrim($webPhone, '+') : 'no number given yet';
+            $src = trim((string) ($st['campaign'] ?? '')) ?: trim((string) ($st['source'] ?? ''));
+            if ($src !== '') { $chanTag .= ' · ' . str_replace('-', ' ', $src); }
+        }
+
         $canChat = $ctx->can('menu:whatsapp');
 
         $msgs = Message::where('tenant_id', $t)
@@ -190,7 +208,7 @@ final class ChatCapability implements ObjectCapability
         return (new WorkspacePayload)
             ->object([
                 'type' => 'chat', 'id' => (string) $c->id, 'title' => $name,
-                'subtitle' => $phone.' · '.($c->agent_active ? 'Agent mode (bot paused)' : 'Bot answering').' · last activity '.$lastAt,
+                'subtitle' => $chanTag.' · '.$phone.' · '.($c->agent_active ? 'Agent mode (bot paused)' : 'Bot answering').' · last activity '.$lastAt,
             ])
             ->financials([
                 ['key' => 'unread', 'label' => 'Unread', 'value' => (string) (int) $c->unread, 'tone' => ((int) $c->unread) > 0 ? 'danger' : 'ok'],

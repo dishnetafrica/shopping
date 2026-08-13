@@ -57,6 +57,22 @@ final class ChatListCapability implements ProcessCapability
         foreach ($convos as $c) {
             $phone  = (string) $c->customer_phone;
             $name   = trim((string) ($names[$phone] ?? '')) ?: (trim((string) ($orderNames[$phone] ?? '')) ?: $phone);
+
+            // v4.94 — WEBSITE conversations. Their customer_phone is `web:<session>`, which is what the
+            // inbox has been showing as the customer's name: unreadable, unsearchable, and impossible to
+            // ring back. The pre-chat form already captured a real name and WhatsApp number and parked
+            // them on the conversation (v4.85) — nothing read them here. Now they are the identity, the
+            // session key drops to a badge, and staff can tell the two channels apart at a glance.
+            $isWeb = (string) $c->instance === \App\Services\Bot\WebChatPolicy::INSTANCE;
+            if ($isWeb) {
+                $st       = is_array($c->state) ? $c->state : [];
+                $webName  = trim((string) ($st['contact_name'] ?? ''));
+                $webPhone = trim((string) ($st['contact_phone'] ?? ($st['linked_phone'] ?? '')));
+                if ($webName !== '')  { $name  = $webName; }
+                if ($webPhone !== '') { $phone = '+' . ltrim($webPhone, '+'); }
+                elseif ($name === (string) $c->customer_phone) { $name = 'Website visitor'; $phone = 'not given yet'; }
+                else { $phone = 'not given yet'; }
+            }
             $unread = (int) $c->unread;
             $last   = $lastByPhone[$phone] ?? null;
             $lastAt = $c->last_message_at ? Carbon::parse($c->last_message_at) : null;
@@ -68,7 +84,10 @@ final class ChatListCapability implements ProcessCapability
             $awaiting = $last && $last->direction === 'in' && $unread > 0;
 
             $rows[] = [
-                'contact' => ['value' => $name, 'sub' => $phone, 'avatar' => true],
+                'contact' => ['value' => $name, 'sub' => ($isWeb ? '🌐 Website · ' : '') . $phone, 'avatar' => true],
+                'channel' => $isWeb
+                    ? ['value' => 'Web', 'badge' => 'info', 'sort' => 'web']
+                    : ['value' => 'WhatsApp', 'badge' => 'default', 'sort' => 'whatsapp'],
                 'last'    => ['value' => trim($who.' '.$preview)],
                 'unread'  => $unread > 0
                     ? ['value' => (string) $unread, 'badge' => 'danger', 'sort' => $unread]
@@ -96,6 +115,8 @@ final class ChatListCapability implements ProcessCapability
 
         $columns = [
             ['key' => 'contact', 'label' => 'Contact', 'type' => 'avatar', 'sortable' => true],
+            // v4.94 — sortable so the whole website inbox can be pulled to the top in one click.
+            ['key' => 'channel', 'label' => 'Channel', 'type' => 'badge', 'sortable' => true],
             ['key' => 'last', 'label' => 'Last message'],
             ['key' => 'unread', 'label' => 'Unread', 'type' => 'badge', 'align' => 'right', 'sortable' => true],
             ['key' => 'mode', 'label' => 'Mode', 'type' => 'badge', 'sortable' => true],
