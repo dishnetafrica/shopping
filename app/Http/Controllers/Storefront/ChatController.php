@@ -242,9 +242,10 @@ class ChatController extends Controller
             // v4.80 — product cards: the brain stars EXACT catalogue names (its own protocol);
             // we look those up for real and card ONLY what exists. No row, no card — a wrongly
             // starred phrase costs nothing. Explicit tenant scoping, console-rule style.
-            $cards = [];
-            $msgs  = $collector->messages();
-            $cur   = strtoupper(trim((string) $tenant->setting('currency', 'UGX')));
+            $cards  = [];
+            $missed = [];
+            $msgs   = $collector->messages();
+            $cur    = strtoupper(trim((string) $tenant->setting('currency', 'UGX')));
             try {
                 $names = \App\Services\Bot\ChatCards::starredNames($msgs);
                 if ($names !== []) {
@@ -282,16 +283,25 @@ class ChatController extends Controller
                                 'price' => $p->price, 'currency' => $cur, 'unit_label' => (string) $p->unit_label,
                                 'pack_size' => $p->pack_size, 'moq' => $p->moq,
                             ]);
+                        } else {
+                            // v5.01 — a name the reply used that matched NO product. Silence here is
+                            // how "3 named, 2 carded" stayed a mystery: the miss is the interesting
+                            // half. Logged, capped, never guessed at.
+                            $missed[] = $n;
                         }
                     }
                 }
             } catch (\Throwable $e) {
                 $cards = [];                    // cards are a bonus; the reply never dies for them
             }
+            if ($missed !== []) {
+                BotTrace::log($tenant->id, 'web', $from, 'web_card_miss',
+                    mb_substr(implode(' | ', $missed), 0, 280));
+            }
 
             // v4.97 — a photo reply becomes a REAL card here too. See cardImages().
             try {
-                $msgs = $this->cardImages($tenant, $msgs, $cards, $cur);
+                $msgs = $this->cardImages($tenant, $msgs, $cards, $cur, $from);
             } catch (\Throwable $e) {
                 $msgs = $collector->messages();  // same rule: the reply never dies for a card
             }
@@ -380,11 +390,26 @@ class ChatController extends Controller
      * on foreign hosts, so neither can match image_url. Both keep their plain bubble, which is
      * right: neither is a thing to add to a cart.
      *
+     * v5.01 — AND THE REPLY'S OWN WORDS DECIDE WHICH PRODUCTS APPEAR.
+     *
+     * Two selectors were feeding this screen and they never agreed. The brain picks what to name;
+     * ProductImageResponder independently browses the same category and returns up to three photos.
+     * A real turn came back with "Here are some options: 1. Kent Hazelnut 2. Macdo Chilli 3. Macdo
+     * Tomato" over FIVE cards — two from the names, three from the browse, and Kent Hazelnut absent
+     * from both. Every card was a real, correctly-priced product, so nothing false was shown; it was
+     * simply not the answer the sentence above it had given.
+     *
+     * So: if the reply NAMED products that exist, those are the cards. Photos of products it did not
+     * name are dropped — card and photo both — because rendering them as bare photos is the very
+     * thing v4.97 fixed, and adding them as cards is what made the screen incoherent. When the reply
+     * named nothing that matched, the photos are all we have and every one of them cards, exactly as
+     * before. Drops are counted into BotTrace, never silent.
+     *
      * @param  array<int,array<string,mixed>>  $msgs
      * @param  array<int,array<string,mixed>>  $cards  appended to, in place
      * @return array<int,array<string,mixed>>  the rewritten message list
      */
-    private function cardImages(Tenant $tenant, array $msgs, array &$cards, string $cur): array
+    private function cardImages(Tenant $tenant, array $msgs, array &$cards, string $cur, string $from = ''): array
     {
         // ProductImageResponder::absUrl() sends "https://<domain>/<image_url>", while the column
         // itself may hold "/storage/x.jpg", "storage/x.jpg" or a full URL depending on how the
@@ -425,6 +450,10 @@ class ChatController extends Controller
         $seen = [];
         foreach ($cards as $c) $seen[(int) ($c['id'] ?? 0)] = true;
 
+        // The reply named products that exist → it has already answered, and the browse is noise.
+        $replyNamed = $cards !== [];
+        $dropped    = 0;
+
         $new = [];              // held back until we know the rewrite is safe to keep
         $out = [];
         foreach ($msgs as $m) {
@@ -434,6 +463,11 @@ class ChatController extends Controller
             $p = ($k !== '' && array_key_exists($k, $byUrl)) ? $byUrl[$k] : null;
 
             if ($p === null) { $out[] = $m; continue; }
+
+            if ($replyNamed && ! isset($seen[(int) $p->id])) {
+                $dropped++;      // a product the sentence above did not mention — neither card nor photo
+                continue;
+            }
 
             if (! isset($seen[(int) $p->id])) {
                 $seen[(int) $p->id] = true;
@@ -460,6 +494,10 @@ class ChatController extends Controller
         if ($out === []) return $msgs;
 
         foreach ($new as $c) $cards[] = $c;
+
+        if ($dropped > 0) {
+            BotTrace::log($tenant->id, 'web', $from, 'web_browse_dropped', (string) $dropped);
+        }
 
         return $out;
     }
