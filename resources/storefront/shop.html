@@ -1449,7 +1449,8 @@ body.chat-only #whChat .qa{ display:none !important; }
   body.chat-only #coCart .ccamt{ font-weight:700; font-size:13px; white-space:nowrap; }
   body.chat-only #coCart .ccsum{ border-top:1px solid #eef0f2; margin-top:6px; padding-top:12px; }
   body.chat-only #coCart .ccrow, body.chat-only #coCart .ccdel{ display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:8px; color:#374151; }
-  body.chat-only #coCart .ccdel b.ok{ color:#16a34a; }
+  body.chat-only #coCart .ccdel b.ok{ color:#16a34a; text-align:right; }
+  body.chat-only #coCart .ccdel b.ok i{ font-style:normal; color:#6b7280; font-weight:600; }
   body.chat-only #coCart .ccdel b.mut{ color:#6b7280; font-weight:600; }
   body.chat-only #coCart .ccrow.tot{ font-size:15px; color:#111827; }
   body.chat-only #coCart .ccgo{ width:100%; margin-top:10px; padding:12px; border:0; border-radius:10px; cursor:pointer;
@@ -4830,7 +4831,23 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
           ? '<div class="ccdel"><span>Delivery</span><b class="ok">FREE</b></div>'
           : '<div class="ccdel"><span>Delivery</span><b>'+ugx(fo-sub)+' more to qualify</b></div>';
       } else {
-        del = '<div class="ccdel"><span>Delivery</span><b class="mut">confirmed by our team</b></div>';
+        /* v4.96 — WHY THIS LINE WAS MUTE. activeFreeRule() is keyed on currentCity(), which is the
+           delivery place the VISITOR picked — and on /chat they have never picked one, so the rule
+           lookup returns null and the cart had nothing to say. Worth knowing too: freeRules() is
+           VALUE-based (free_over: an amount), while the shop's actual policy is QUANTITY-based
+           ("Min. 5 Cartons"). The rule engine cannot express it either way.
+           So fall back to the shop's OWN configured delivery benefit — the same home_benefits text
+           the storefront hero shows. Not invented, not hardcoded: his copy, displayed twice. */
+        var ben = null;
+        try{
+          var bl = (SHOP.home && SHOP.home.benefits) ? SHOP.home.benefits : [];
+          for(var bi=0; bi<bl.length; bi++){
+            if(/deliver/i.test(String(bl[bi].t||''))){ ben = bl[bi]; break; }
+          }
+        }catch(e){}
+        del = ben
+          ? '<div class="ccdel"><span>Delivery '+esc(ben.s||'')+'</span><b class="ok">'+esc(ben.t||'')+(ben.s2?(' <i>('+esc(ben.s2)+')</i>'):'')+'</b></div>'
+          : '<div class="ccdel"><span>Delivery</span><b class="mut">confirmed by our team</b></div>';
       }
     }catch(e){ del = ''; }
 
