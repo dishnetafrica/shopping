@@ -1385,6 +1385,16 @@ body.chat-only #whChat{
 body.chat-only #whChat .wh-in, body.chat-only #whChat .whin, body.chat-only #whChat form{
   padding-bottom:calc(8px + env(safe-area-inset-bottom));
 }
+/* v4.96 — THE CLIPPED CARD. #whChat is a flex column, but the header and composer were not pinned
+   as fixed-size items and the body had no min-height:0, so the scroll area overflowed UPWARDS and
+   the first message sat behind the header. This is the standard three-part fix and it is why the
+   product card was cut in half. */
+body.chat-only #whChat > .hd{ flex:0 0 auto; position:relative; z-index:2; }
+body.chat-only #whChat > .bd, body.chat-only #whChat > #whChatBd{
+  flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-top:14px;
+}
+body.chat-only #whChat > .in, body.chat-only #whChat > .wh-in, body.chat-only #whChat > form,
+body.chat-only #whChat > .ft, body.chat-only #whChat > .foot{ flex:0 0 auto; }
 body.chat-only #sheet{ z-index:10000 !important; }
 body.chat-only #coRail, body.chat-only #coCart{ display:none; }
 
@@ -1395,10 +1405,10 @@ body.chat-only #whChat .hd .co-shop{
 }
 body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
 
-/* TABLET (>=768): the action buttons move up into the header, one column still. */
-@media (min-width:768px){
-  body.chat-only #whChat .qa{ order:-1; border-bottom:1px solid #e5e7eb; border-top:0; }
-}
+/* v4.96 — the .qa bar is hidden in chat-only mode (its buttons live in the header now, and the
+   right rail is the cart). The earlier `order:-1` floated it ABOVE the header, which is the stray
+   "View Cart" in the screenshot. */
+body.chat-only #whChat .qa{ display:none !important; }
 
 /* DESKTOP (>=1024): three columns — 250 / flexible / 320. */
 @media (min-width:1024px){
@@ -1446,16 +1456,30 @@ body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
     background:var(--green-d, #15803d); color:#fff; font:inherit; font-weight:700; }
 
   /* the conversation sits between the two rails */
+  /* v4.96 — offsets are driven by what actually rendered. co-wide is added only when the rail is
+     really in the DOM, so an empty business list collapses to two columns instead of leaving a
+     250px hole. */
   body.chat-only #whChat{
-    left:250px !important; right:320px !important; width:auto !important;
-    border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb;
+    left:0 !important; right:320px !important; width:auto !important;
+    border-right:1px solid #e5e7eb;
   }
-  body.chat-only:not(.co-wide) #whChat{ left:0 !important; }
+  body.chat-only.co-wide #whChat{ left:250px !important; border-left:1px solid #e5e7eb; }
 
-  /* three product cards across, where there is width for them */
-  body.chat-only #whChatBd .row.cardrow{ display:inline-flex; width:auto; max-width:32%; vertical-align:top; margin-right:8px; }
+  /* v4.96 — reading widths. Full-bleed bubbles across a 900px column read as a document, not a
+     conversation; these are the proportions a messaging app uses. */
+  body.chat-only #whChatBd{ padding-left:22px; padding-right:22px; }
+  body.chat-only #whChatBd .row.bot .bub{ max-width:78%; }
+  body.chat-only #whChatBd .row:not(.bot) .bub{ max-width:66%; }
+
+  /* three product cards across, degrading 3 → 2 → 1 with the column width */
+  body.chat-only #whChatBd .row.cardrow{
+    display:inline-flex; width:auto; vertical-align:top; margin:0 10px 10px 0;
+    max-width:calc(33.333% - 10px); min-width:210px;
+  }
   body.chat-only #whChatBd .row.cardrow .av{ display:none; }
-  body.chat-only #whChatBd .row.cardrow .bub.card{ width:100%; }
+  body.chat-only #whChatBd .row.cardrow .bub.card{ width:100%; max-width:none; height:100%; }
+  @media (max-width:1399px){ body.chat-only #whChatBd .row.cardrow{ max-width:calc(50% - 10px); } }
+  @media (max-width:1150px){ body.chat-only #whChatBd .row.cardrow{ max-width:100%; } }
 }
 
   /* the two action buttons, now living in the header */
@@ -4705,7 +4729,9 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
           box.appendChild(el);
         });
         if(box.children.length) hd.appendChild(box);
-        if(!qaEl.children.length) qaEl.style.display='none';
+        /* v4.96 — the leftover View Cart floated ABOVE the header (the tablet order:-1 rule leaking
+           into desktop). On a page whose right rail IS the cart, the bar has nothing left to do. */
+        qaEl.style.display = 'none';
       }
     }catch(e){}
 
@@ -4722,6 +4748,10 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
      exactly as on a phone. */
   function chatOnlyDesk(){
     if(!window.matchMedia || !window.matchMedia('(min-width:1024px)').matches) return;
+    /* v4.96 — WHY THE RAIL WAS MISSING. activeBiz() reads BANNERS, and BANNERS is filled by the
+       catalogue fetch (`d.settings.business_banners`), which had not landed when this ran 60ms after
+       load. So the list was empty and the rail silently did not render — not a missing setting, a
+       race. Retry while the feed arrives, and hook render() so it also builds the moment data lands. */
     /* v4.95 — option (b): #dcart is the STOREFRONT's cart and is left exactly where it is. The chat
        gets its own VIEW over the same CART object (coCart below) — one cart, two presentations. */
     /* Left rail from the shop's REAL business list (settings.business_banners → activeBiz()). No
@@ -4839,6 +4869,22 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
         document.body.appendChild(cc);
       }
       coHookCart(); coCartRender();
+    }catch(e){}
+    /* keep trying until the catalogue feed brings BANNERS (or we give up quietly) */
+    try{
+      var tries = 0;
+      var iv = setInterval(function(){
+        tries++;
+        try{ chatOnlyDesk(); }catch(e){}
+        if(document.getElementById('coRail') || tries > 20) clearInterval(iv);
+      }, 400);
+      if(!window.__coRenderHooked){
+        window.__coRenderHooked = true;
+        var _render = window.render;
+        if(typeof _render === 'function'){
+          window.render = function(){ var r=_render.apply(this,arguments); try{ chatOnlyDesk(); }catch(e){} return r; };
+        }
+      }
     }catch(e){}
     try{
       var seed = '';

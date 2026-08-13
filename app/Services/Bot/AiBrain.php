@@ -1501,8 +1501,16 @@ class AiBrain
                 $gateway->sendText($tenant->whatsapp_instance, $from, $clean);
                 MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $clean, null, null, ['via' => 'ai']);
             }
-            $media = $this->mediaForGateway($gateway, $doc);
-            $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
+            // v4.96 — ONE quotation bubble on the web, not two. The raw PDF and the portal link were
+            // both being sent, so the customer saw "Quotation-….pdf" AND "Quotation ORD-…" and could
+            // reasonably ask which one was theirs. WhatsApp still gets the PDF attachment, because
+            // that IS the deliverable there; a browser gets the portal, which carries the PDF, the
+            // approve button and the line items. Nothing about generating or storing it changes.
+            $isWebGw = $gateway instanceof \App\Services\Bot\CollectorGateway;
+            if (! $isWebGw) {
+                $media = $this->mediaForGateway($gateway, $doc);
+                $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, $doc['fileName'], $caption);
+            }
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
 
             $quoteRow = $svc->persist($tenant, $from, (string) ($convoRow->customer_name ?? ''), $quote, $doc, 'bot');
