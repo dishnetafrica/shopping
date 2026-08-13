@@ -1164,6 +1164,26 @@ button{ -webkit-tap-highlight-color:transparent }
 .whcfab svg{width:19px;height:19px}
 .whcfab.hid{display:none}
 .whwfab{position:fixed;right:14px;bottom:calc(var(--nav-h) + var(--safe-b) + 72px);z-index:46;width:44px;height:44px;border-radius:50%;background:#25D366;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.16)}
+/* v5.06 — THE CART BAR OWNS THAT BAND WHILE IT IS ON SCREEN.
+   The three of them were laid out independently and collided the moment a cart existed:
+
+     .cartbar   bottom: nav + safe + 10px   →  spans roughly 10–76px, z-index 40
+     .whcfab    bottom: nav + safe + 14px   →  spans roughly 14–57px, z-index 46, right:14px
+     .whwfab    bottom: nav + safe + 72px   →  spans roughly 72–116px, z-index 46
+
+   Same band, same right-hand corner, and the FAB paints ON TOP — so "Chat here" was sitting over
+   the cart bar's own "View cart →" button and swallowing the tap. A customer who filled a basket in
+   /chat, came back to the shop and reached for checkout got the chat instead. That is the exact
+   journey a Facebook click will take.
+
+   Driven by .cartbar.show, the class bar() already toggles, through a sibling combinator — the FABs
+   are appended to <body> after #cartbar, so they are always its later siblings. No new state, no
+   JavaScript, and the moment the cart empties everything returns to where it was. */
+@media (max-width:1023px){
+  .cartbar.show ~ .whcfab{ bottom:calc(var(--nav-h) + var(--safe-b) + 88px); }
+  .cartbar.show ~ .whwfab{ bottom:calc(var(--nav-h) + var(--safe-b) + 146px); }
+  .whcfab, .whwfab{ transition:bottom .18s ease; }
+}
 .whwfab svg{width:24px;height:24px}
 .whchat{position:fixed;z-index:47;right:0;left:0;bottom:calc(var(--nav-h) + var(--safe-b));top:7dvh;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden}
 .whchat.on{display:flex}
