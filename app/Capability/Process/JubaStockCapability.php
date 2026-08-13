@@ -6,53 +6,58 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\Product;
-use App\Services\Inventory\StockLedger;
-use App\Services\Inventory\StockProvenance;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Juba Stock — one question, three columns.
+ * Juba Stock — Current = Purchased − Sold, read from the purchase and sales RECORDS.
  *
- *      Current stock = Purchased − Sold
+ * ── why not the stock ledger ────────────────────────────────────────────────────────────────────
  *
- * v4.99 rewrite, at the owner's instruction. What this screen showed before, and why it changed:
+ * The first version of this rewrite read `stock_movements`, and the owner's own data killed it:
  *
- * ── WHAT IT USED TO SHOW ───────────────────────────────────────────────────────────────────────
+ *     juba-consignment   backfill_product   432 rows   224,181 units    typed openings
+ *     juba-consignment   purchase            44 rows       128 units    ← every purchase the ledger knows
+ *     juba-consignment   order_delivery      35 rows       -75 units
+ *     kampala            purchase             3 rows         3 units
  *
- * `StockLedger::onHandMap()` sums EVERY movement at the warehouse, whatever wrote it. At this shop
- * that is three different kinds of number added together:
+ * Two things are wrong with using that as the source.
  *
- *     purchases   (ref_type `purchase`, `procurement_receive`, …)   — a supplier bill says so
- *     sales       (ref_type `order_delivery`, `pos_return`, …)      — a customer took them
- *     typed       (`backfill_product`, `product_create`, …)         — somebody typed a figure once
+ * **It is nearly empty.** A purchase only posts a stock movement if it was SAVED after v4.64 went in
+ * (Aug 2026) — `StockReceiver` runs on save, and relinking an old line to a product does not go back
+ * and write the receipt it never wrote. So the ledger holds 128 units of buying, while `order_costs`
+ * holds the whole history. A screen built on the ledger answers "what did we buy since August", which
+ * is not the question.
  *
- * So "available" was `typed openings + purchases − sales`, and the typed part is the largest and the
- * least supported: 256 of 464 opening balances on this shop are exactly `100` — a default entered
- * once and copied down a catalogue, not 256 stock counts that happen to agree.
+ * **And it depends on a setting nobody set.** `stock_home_location` is NULL on this shop, so
+ * `StockLedger::home()` returns its default of `kampala` — where 3 purchase rows live. The previous
+ * screen dodged that by hard-coding `LOC_JUBA`; my first rewrite used `home()` and read the wrong
+ * warehouse, which is how a foil business came to show a MikroTik router as its stock. Reading the
+ * records directly removes the setting from the question entirely.
  *
- * ── WHAT IT SHOWS NOW ──────────────────────────────────────────────────────────────────────────
+ * ── the two sources ─────────────────────────────────────────────────────────────────────────────
  *
- * Only the two kinds of movement with a counterparty behind them. Purchased is what a supplier
- * billed; Sold is what a customer took. Current is the subtraction, and it is on screen next to its
- * own two operands so it can be checked rather than trusted. A typed opening is reported on the
- * product line as context and is NOT added in — which is the whole point of the change.
+ * PURCHASED  `order_costs`, the line every Buy stock entry writes against a supplier, carrying
+ *            `product_id`, `qty` and `unit_cost`. `stage = purchase`, not voided. **`pay_status` is
+ *            not consulted** — cash, credit, partly paid and unpaid are all goods that arrived, and
+ *            what is owed to the supplier is Finance's question, not this screen's.
  *
- * ── PAYMENT STATUS ─────────────────────────────────────────────────────────────────────────────
+ * SOLD       `order_items` joined to `orders`, excluding cancelled / rejected / void — the same
+ *            shape `DemandSuggestion::salesMap()` uses, with its sales window removed because this
+ *            is a lifetime balance rather than a velocity. Covers POS, web and WhatsApp alike:
+ *            `PosController` writes an `Order` with `OrderItem`s like every other channel. Whether
+ *            the customer has paid does not matter either — the goods left.
  *
- * Never consulted, here or anywhere upstream. `OrderCostController` receives stock whenever a
- * purchase line carries a product and a quantity; `pay_status` only decides `paid_native` and who
- * holds the cash. A credit purchase has always moved stock exactly like a cash one. Verified, not
- * assumed — and the same on the way out: a delivery reduces stock whether or not the customer has
- * paid. Money is Finance's question, not this screen's.
+ * Neither source needs the ledger to be switched on, neither depends on a location, and neither
+ * counts a figure somebody typed into a stock box.
  *
- * ── NEGATIVES ARE SHOWN, NOT CLAMPED ───────────────────────────────────────────────────────────
+ * ── what appears ────────────────────────────────────────────────────────────────────────────────
  *
- * A product can sell more than the purchase records account for — goods were on the shelf that this
- * system never saw arrive, usually because they predate it. That is the most useful row on the
- * screen and floor()ing it to zero would hide exactly the products worth investigating.
+ * Only products with at least one supplier purchase line — "track that item only", as instructed. A
+ * product sold with no purchase record behind it therefore has no row; those are COUNTED on a tile
+ * rather than dropped in silence, because a sale the buying records cannot account for is worth
+ * knowing about even when it is not what you asked to see.
  *
- * Read-only projection: it derives, never writes. Accurate only while the stock ledger is being
- * maintained (Settings → Stock tracking), because sales draw it down only when it is on.
+ * Read-only projection. It derives, never writes.
  */
 final class JubaStockCapability implements ProcessCapability
 {
@@ -62,51 +67,49 @@ final class JubaStockCapability implements ProcessCapability
 
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
-        $t    = $ctx->tenantId();
-        $home = StockLedger::home($ctx->tenant);
-        $acc  = $this->buckets($t, $home);
+        $t = $ctx->tenantId();
+
+        $bought = $this->purchasedMap($t);      // pid => ['qty','lines','supplier']
+        $sold   = $this->soldMap($t);           // pid => qty
 
         $names = [];
-        if ($acc) {
-            $names = Product::where('tenant_id', $t)->whereIn('id', array_keys($acc))->pluck('name', 'id')->all();
+        if ($bought) {
+            $names = Product::where('tenant_id', $t)->whereIn('id', array_keys($bought))->pluck('name', 'id')->all();
         }
 
-        $inStock = 0; $outOfStock = 0; $negative = 0; $units = 0.0;
+        $inStock = 0; $soldOut = 0; $over = 0; $units = 0.0;
+        $totalBought = 0.0; $totalSold = 0.0;
         $rows = [];
-        foreach ($acc as $pid => $a) {
-            $bought  = round($a['in'], 3);            // supplier receipts, always positive
-            $sold    = round(-$a['out'], 3);          // sales are negative in the ledger; returns net off
-            $current = round($bought - $sold, 3);
+        foreach ($bought as $pid => $b) {
+            $bq = round((float) $b['qty'], 3);
+            $sq = round((float) ($sold[$pid] ?? 0), 3);
+            $cur = round($bq - $sq, 3);
 
-            // Never purchased and never sold — the catalogue knows it, the warehouse does not.
-            if (abs($bought) < 0.0005 && abs($sold) < 0.0005) { continue; }
+            $totalBought += $bq; $totalSold += $sq;
+            if ($cur > 0)      { $inStock++; $units += $cur; }
+            elseif ($cur < 0)  { $over++; }
+            else               { $soldOut++; }
 
-            if ($current > 0)      { $inStock++; $units += $current; }
-            elseif ($current < 0)  { $negative++; }
-            else                   { $outOfStock++; }
-
-            $typed = round($a['typed'], 3);
+            $sub = $b['lines'] . ' purchase' . ($b['lines'] === 1 ? '' : 's');
+            if ($b['supplier'] !== '') { $sub .= ' · last from ' . $b['supplier']; }
 
             $rows[] = [
-                'product' => [
-                    'value'  => (string) ($names[$pid] ?? ('#' . $pid)),
-                    // The figure that used to be added in and no longer is — so a number that dropped
-                    // today explains itself on the row rather than becoming a question.
-                    'sub'    => abs($typed) >= 0.0005 ? ('opening figure typed: ' . $this->qty($typed) . ' — not counted here') : '',
-                    'avatar' => false,
-                ],
-                'bought'  => ['value' => $this->qty($bought), 'sort' => $bought],
-                'sold'    => ['value' => $this->qty($sold), 'sort' => $sold],
+                'product' => ['value' => (string) ($names[$pid] ?? ('#' . $pid)), 'sub' => $sub, 'avatar' => false],
+                'bought'  => ['value' => $this->qty($bq), 'sort' => $bq],
+                'sold'    => ['value' => $this->qty($sq), 'sort' => $sq],
                 'current' => [
-                    'value' => $this->qty($current),
-                    'sort'  => $current,
-                    'tone'  => $current > 0 ? 'ok' : ($current < 0 ? 'danger' : 'default'),
+                    'value' => $this->qty($cur), 'sort' => $cur,
+                    'tone'  => $cur > 0 ? 'ok' : ($cur < 0 ? 'danger' : 'default'),
                 ],
             ];
         }
 
-        // Most stock first. The counts that need attention are on the tiles, and every column sorts.
         usort($rows, fn ($a, $b) => $b['current']['sort'] <=> $a['current']['sort']);
+
+        // Sold with nothing bought behind it — not listed, because the instruction was to track the
+        // purchased items only. Counted, because silence about it would be a different kind of wrong.
+        $ghosts = 0;
+        foreach ($sold as $pid => $q) { if ($q > 0 && ! isset($bought[$pid])) { $ghosts++; } }
 
         $columns = [
             ['key' => 'product', 'label' => 'Product', 'type' => 'avatar', 'sortable' => true],
@@ -115,18 +118,20 @@ final class JubaStockCapability implements ProcessCapability
             ['key' => 'current', 'label' => 'Current stock', 'align' => 'right', 'type' => 'num', 'sortable' => true],
         ];
 
-        $ledgerOn = (bool) $ctx->tenant->setting('stock_ledger', false);
-        $note = $ledgerOn
-            ? 'Current stock = Purchased − Sold. Cash and credit purchases both count; payment status never affects stock.'
-            : 'Turn on Settings → Stock tracking first — until then sales do not draw stock down and these figures will read high.';
-
         return (new WorkspacePayload)
-            ->object(['type' => 'process:juba.stock', 'title' => 'Juba Stock', 'subtitle' => $note])
+            ->object([
+                'type' => 'process:juba.stock', 'title' => 'Juba Stock',
+                'subtitle' => 'Current stock = Purchased − Sold. Purchased is every supplier purchase line you have '
+                            . 'entered against a product; Sold is every order that was not cancelled. Cash, credit and '
+                            . 'unpaid all count — payment status never changes stock.',
+            ])
             ->financials([
-                ['key' => 'instock', 'label' => 'In stock', 'value' => $inStock, 'tone' => 'ok', 'foot' => 'products with stock on hand'],
-                ['key' => 'units', 'label' => 'Units on hand', 'value' => $this->qty(round($units, 3)), 'tone' => 'ok', 'foot' => 'total across those products'],
-                ['key' => 'outof', 'label' => 'Sold out', 'value' => $outOfStock, 'tone' => $outOfStock > 0 ? 'warn' : 'ok', 'foot' => 'purchased, all sold'],
-                ['key' => 'neg', 'label' => 'Sold more than bought', 'value' => $negative, 'tone' => $negative > 0 ? 'danger' : 'ok', 'foot' => 'no purchase record for the difference'],
+                ['key' => 'instock', 'label' => 'In stock', 'value' => $inStock, 'tone' => 'ok', 'foot' => 'purchased items still on hand'],
+                ['key' => 'units', 'label' => 'Units on hand', 'value' => $this->qty(round($units, 3)), 'tone' => 'ok', 'foot' => 'total across those items'],
+                ['key' => 'soldout', 'label' => 'Sold out', 'value' => $soldOut, 'tone' => $soldOut > 0 ? 'warn' : 'ok', 'foot' => 'purchased, all sold'],
+                ['key' => 'over', 'label' => 'Sold more than bought', 'value' => $over + $ghosts,
+                 'tone' => ($over + $ghosts) > 0 ? 'danger' : 'ok',
+                 'foot' => $ghosts > 0 ? ($over . ' listed · ' . $ghosts . ' with no purchase line at all') : 'no purchase record for the difference'],
             ])
             ->table($columns, $rows)
             ->meta(['capability' => 'juba.stock', 'ttl' => 30, 'permissions' => ['menu:products']]);
@@ -134,10 +139,11 @@ final class JubaStockCapability implements ProcessCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
-        $acc = $this->buckets($ctx->tenantId(), StockLedger::home($ctx->tenant));
-        $units = 0.0;
-        foreach ($acc as $a) {
-            $c = $a['in'] + $a['out'];
+        $bought = $this->purchasedMap($ctx->tenantId());
+        $sold   = $this->soldMap($ctx->tenantId());
+        $units  = 0.0;
+        foreach ($bought as $pid => $b) {
+            $c = (float) $b['qty'] - (float) ($sold[$pid] ?? 0);
             if ($c > 0) { $units += $c; }
         }
 
@@ -150,46 +156,84 @@ final class JubaStockCapability implements ProcessCapability
     }
 
     /**
-     * Per product at the shop's own warehouse: supplier in, sales out, and the typed remainder.
+     * Everything bought against a product, from the supplier purchase lines.
      *
-     * ONE grouped query, as the old projection was — 464 products must not become 464 queries.
-     * Bucketing is StockProvenance's, unchanged and shared with `stock:proof`, so a movement source
-     * added later is classified in exactly one place. Anything unrecognised lands in `typed`, which
-     * means a new source is excluded from Current until somebody decides it is evidence and says so.
+     * One grouped query for the totals, one small query for the most recent supplier per product —
+     * not one per product, because 400+ products would turn a glance into a page load.
      *
-     * @return array<int,array{in:float,out:float,typed:float}>
+     * @return array<int,array{qty:float,lines:int,supplier:string}>
      */
-    private function buckets(int $tid, string $home): array
+    private function purchasedMap(int $tid): array
     {
         try {
-            $rows = DB::table('stock_movements')
+            $rows = DB::table('order_costs')
                 ->where('tenant_id', $tid)
-                ->where('location', $home)
+                ->where('stage', 'purchase')
+                ->whereNull('voided_at')
                 ->whereNotNull('product_id')
-                ->select('product_id', 'ref_type', DB::raw('SUM(qty) as qty'))
-                ->groupBy('product_id', 'ref_type')
+                ->where('qty', '>', 0)
+                ->select('product_id', DB::raw('SUM(qty) as qty'), DB::raw('COUNT(*) as lines'))
+                ->groupBy('product_id')
                 ->get();
         } catch (\Throwable $e) {
             return [];
         }
 
-        $acc = [];
+        $map = [];
         foreach ($rows as $r) {
-            $pid = (int) $r->product_id;
-            $q   = (float) $r->qty;
-            if (! isset($acc[$pid])) { $acc[$pid] = ['in' => 0.0, 'out' => 0.0, 'typed' => 0.0]; }
+            $map[(int) $r->product_id] = [
+                'qty' => (float) $r->qty, 'lines' => (int) $r->lines, 'supplier' => '',
+            ];
+        }
+        if ($map === []) { return $map; }
 
-            switch (StockProvenance::bucket($r->ref_type)) {
-                case StockProvenance::SUPPLIER: $acc[$pid]['in']  += $q; break;
-                case StockProvenance::SALES:    $acc[$pid]['out'] += $q; break;
-                // A physical count is stronger evidence than a bill, but folding it in would break
-                // the arithmetic printed on the row — Purchased − Sold would no longer equal Current.
-                // It is reported as context instead, with the openings.
-                default:                        $acc[$pid]['typed'] += $q; break;
+        try {
+            $latest = DB::table('order_costs')
+                ->where('tenant_id', $tid)->where('stage', 'purchase')->whereNull('voided_at')
+                ->whereIn('product_id', array_keys($map))
+                ->orderBy('product_id')->orderByDesc('created_at')->orderByDesc('id')
+                ->get(['product_id', 'supplier_name']);
+            foreach ($latest as $r) {
+                $pid = (int) $r->product_id;
+                if (isset($map[$pid]) && $map[$pid]['supplier'] === '') {
+                    $map[$pid]['supplier'] = trim((string) ($r->supplier_name ?? ''));
+                }
             }
+        } catch (\Throwable $e) {
+            // the supplier name is a courtesy on the row; the quantities stand without it
         }
 
-        return $acc;
+        return $map;
+    }
+
+    /**
+     * Everything sold, all time, per product.
+     *
+     * The shape DemandSuggestion::salesMap() already uses — minus its sales window, because that one
+     * measures velocity and this one is a lifetime balance. POS, web and WhatsApp all write an
+     * `Order` with `OrderItem`s, so all three are counted here without naming any of them.
+     *
+     * @return array<int,float>
+     */
+    private function soldMap(int $tid): array
+    {
+        try {
+            $rows = DB::table('order_items')
+                ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                ->where('order_items.tenant_id', $tid)
+                ->whereRaw("lower(coalesce(orders.status,'')) not in ('cancelled','canceled','rejected','void')")
+                ->whereNotNull('order_items.product_id')
+                ->select('order_items.product_id', DB::raw('SUM(order_items.qty) as qty'))
+                ->groupBy('order_items.product_id')
+                ->get();
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($rows as $r) { $map[(int) $r->product_id] = (float) $r->qty; }
+
+        return $map;
     }
 
     private function qty($v): string
