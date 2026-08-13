@@ -126,16 +126,59 @@ let LAST_REC = null;        // last record payload, so tab switches re-render wi
 
 // Append the active report-currency override (?cur=) so every workspace + command call is consistent.
 function withCur(u){ const c=CFG.cur; if(!c) return u; return u+(u.indexOf('?')<0?'?':'&')+'cur='+encodeURIComponent(c); }
+// v4.91 — CFG.csrf was read once, at page load, and never looked at again. Every write for the rest
+// of the day used that one frozen token, so when the session rotated it hours later every save and
+// every upload failed with a 419 the staff reported as "token missing". Refreshing the page always
+// "fixed" it, because a refresh is the only thing that ever re-read the token — which is exactly why
+// it looked random and unfixable from the floor.
+//
+// A write that meets a stale token now fetches a live one and retries itself, once. A dead SESSION is
+// a different failure and must NOT be retried: that one says so plainly and goes to the login screen,
+// instead of the silent nothing staff were getting.
+let __csrfBusy = null;
+async function refreshCsrf(){
+  if(__csrfBusy) return __csrfBusy;      // one refresh in flight no matter how many writes queue behind it
+  __csrfBusy = (async () => {
+    try{
+      const r = await fetch('/api/v1/workspace/_token', { credentials:'include',
+        headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
+      if(r.status === 401) return null;   // the session is gone; a new token would not help
+      const d = await r.json();
+      if(d && d.token){
+        CFG.csrf = d.token;
+        const m = document.querySelector('meta[name=csrf-token]'); if(m) m.content = d.token;
+        return d.token;
+      }
+    }catch(e){}
+    return null;
+  })();
+  const out = await __csrfBusy; __csrfBusy = null; return out;
+}
+function sessionExpired(){
+  toast('Your session ended — please sign in again', true);
+  setTimeout(()=>{ location.href = '/app/login'; }, 1600);
+}
 async function api(path){
   const r = await fetch(withCur(CFG.base+path), { credentials:'include', headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
+  if(r.status === 401){ sessionExpired(); return { _error:401 }; }
   if(!r.ok && r.status!==200){ return { _error:r.status }; }
   return r.json();
 }
 async function post(endpoint, body){
-  const r = await fetch(withCur(endpoint), { method:'POST', credentials:'include',
+  const send = () => fetch(withCur(endpoint), { method:'POST', credentials:'include',
     headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':CFG.csrf,'Content-Type':'application/json' },
     body: JSON.stringify(body||{}) });
-  return r.json();
+  let r = await send();
+  if(r.status === 419){                  // stale token — get a live one and send it again, once only
+    const t = await refreshCsrf();
+    if(t) r = await send();
+  }
+  if(r.status === 401){ sessionExpired(); return { ok:false, error:'Your session ended — please sign in again.' }; }
+  if(r.status === 419){ return { ok:false, error:'Could not verify that request. Please refresh the page and try once more.' }; }
+  // A non-JSON body (an HTML error page, a proxy timeout) used to throw here and surface as nothing
+  // at all. Say what happened instead.
+  try{ return await r.json(); }
+  catch(e){ return { ok:false, error:'The server did not send a readable reply (status ' + r.status + ').' }; }
 }
 // GET-with-query write, for reusing legacy panel endpoints that read $request->query() (e.g. /papi/lead-save).
 // No body/JSON — every field goes on the query string, exactly like the panel does.
@@ -1309,6 +1352,9 @@ async function setImgUpload(k){
   try{
     var fd=new FormData(); fd.append('key',k); fd.append('file',f);
     var res=await fetch('/papi/branding-upload',{method:'POST',credentials:'same-origin',headers:{'X-CSRF-TOKEN':CFG.csrf,'Accept':'application/json'},body:fd});
+    // papi/* is CSRF-exempt, so a 419 cannot happen here — but the auth middleware still 401s on a
+    // dead session, and the old code then threw on res.json() and showed a bare "Upload failed".
+    if(res.status===401){ if(st) st.textContent='Session ended — sign in again'; sessionExpired(); return; }
     var d=await res.json();
     if(d&&d.ok&&d.url){ document.getElementById('sfimgv_'+k).value=d.url; var pv=document.getElementById('sfimg_'+k); if(pv) pv.style.backgroundImage='url(\''+d.url+'\')'; if(st) st.textContent='\u2713 uploaded \u2014 press Save'; }
     else { if(st) st.textContent=(d&&(d.error||d.message))||'Upload failed'; }

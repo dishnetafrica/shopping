@@ -89,6 +89,12 @@ final class CapabilityServiceProvider extends ServiceProvider
             Route::get('/v3/{path?}', fn () => view('shell'))->where('path', '.*');
 
             Route::prefix('api/v1/workspace')->group(function () {
+                // v4.91 — a live CSRF token for the SPA, which otherwise keeps the one it read at
+                // page load until the staff member reloads. Inside this auth group on purpose: a
+                // dead session 401s here, so one call answers both "is my token stale?" and "am I
+                // still signed in?" — and the shell can tell a retryable failure from a real one.
+                // Declared before the /{type} catch-all; "_token" cannot match [a-zA-Z.:]+ anyway.
+                Route::get('/_token', fn () => response()->json(['ok' => true, 'token' => csrf_token()]));
                 Route::get('/', [WorkspaceController::class, 'index']);
                 Route::get('/{type}/{id?}', [WorkspaceController::class, 'show'])->where('type', '[a-zA-Z.:]+');
                 Route::post('/{type}/{id}/{action}', [CommandController::class, 'dispatch'])->where('type', '[a-zA-Z.:]+');
