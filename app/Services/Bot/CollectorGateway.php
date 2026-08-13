@@ -37,7 +37,23 @@ final class CollectorGateway implements WhatsAppGateway
 
     public function sendDocument(string $instance, string $to, string $media, string $fileName, string $caption = ''): array
     {
-        $this->out[] = ['type' => 'document', 'url' => $media, 'name' => $fileName, 'caption' => $caption];
+        // v4.92 — a BROWSER is on the other end of this, not WhatsApp. Every document sender in
+        // AiBrain prefers raw base64 over a URL, because Evolution embeds base64 reliably while a
+        // URL depends on APP_URL being publicly correct. Handed to the widget that base64 became
+        // href="JVBERi0x…", the browser read it as a relative path, and nginx answered
+        // 414 Request-URI Too Large — a real click, on a real quotation, in production.
+        //
+        // A data: URI is not the fix either: Chrome has blocked top-level navigation to data: URLs
+        // since 2017, so the link would simply do nothing. The only thing that works in a browser is
+        // a real URL, so anything else is refused here rather than rendered as a broken link. The
+        // caller's accompanying text still reaches the customer.
+        $m = trim($media);
+        if ($m === '' || ! preg_match('#^(https?://|/)#i', $m)) {
+            \Log::warning('web chat: document dropped, not a URL (' . $fileName . ', ' . strlen($m) . ' bytes)');
+
+            return ['collected' => false, 'error' => 'not_a_url'];
+        }
+        $this->out[] = ['type' => 'document', 'url' => $m, 'name' => $fileName, 'caption' => $caption];
 
         return ['collected' => true];
     }

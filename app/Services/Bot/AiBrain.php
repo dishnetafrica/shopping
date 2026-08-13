@@ -782,6 +782,27 @@ class AiBrain
         $cur = (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX'));
         $name = (string) ($convo->customer_name ?? '');
 
+        // v4.92 — WHO IS THIS QUOTATION FOR? On web, `$from` is `web:<sid>` — a session key. A
+        // quotation filed against that is one your team cannot ring back, and it lands in the CRM as
+        // a customer named after a random string. The pre-chat gate already collected a real name and
+        // WhatsApp number (v4.85) and parked them on the conversation, so use those. If somehow
+        // neither is there, ASK rather than mint a quotation nobody can act on.
+        $quotePhone = $from;
+        $quoteName  = $name;
+        if ($channel === 'web') {
+            $st = is_array($convo->state) ? $convo->state : [];
+            $webPhone = trim((string) ($st['contact_phone'] ?? ($st['linked_phone'] ?? '')));
+            $webName  = trim((string) ($st['contact_name'] ?? ''));
+            if ($webPhone === '') {
+                \App\Support\BotTrace::log($tenant->id, 'ai-order', $from, 'quote_blocked_no_contact', null);
+
+                return "Happy to put that quotation together \u{1F44D} Could I take your name and "
+                    . "WhatsApp number first, so our team can confirm it with you?";
+            }
+            $quotePhone = $webPhone;
+            if ($webName !== '') { $quoteName = $webName; }
+        }
+
         $lines = [];
         foreach (($quote['lines'] ?? []) as $l) {
             $qty   = (int) ($l['qty'] ?? 1);
@@ -842,7 +863,7 @@ class AiBrain
 
         $qNo = null;
         try {
-            $doc = $svc->available() ? $svc->generate($tenant, $from, $name, $qArr) : null;
+            $doc = $svc->available() ? $svc->generate($tenant, $quotePhone, $quoteName, $qArr) : null;
             if ($doc) {
                 $qNo = (string) ($doc['no'] ?? '');
                 // Only auto-send the retail PDF for normal-sized orders; a wholesale order is priced by staff.
@@ -866,7 +887,7 @@ class AiBrain
                         Log::warning('AiBrain quote-first send failed: ' . $e->getMessage());
                     }
                 }
-                $q = $svc->persist($tenant, $from, $name, $qArr, $doc, 'bot');
+                $q = $svc->persist($tenant, $quotePhone, $quoteName, $qArr, $doc, 'bot');
                 // v4.92 — the web customer's copy. The portal already exists (/q/{token} → details,
                 // PDF, approve, revise, share) and Quotation mints a public_token on create; it was
                 // simply never handed to the browser. Sent as a `document`, which the widget already
