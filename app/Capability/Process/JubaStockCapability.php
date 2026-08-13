@@ -7,15 +7,52 @@ use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\Product;
 use App\Services\Inventory\StockLedger;
+use App\Services\Inventory\StockProvenance;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Juba Stock — Ashish's live position, per product, in three states:
- *   • In Juba (available)  = real on-hand at the Juba location (receipts − sales) from the stock ledger
- *   • In transit           = sent from Kampala, not yet received (open shipments' consignment lines)
- *   • Purchased (to send)   = bought by Jayesh but not yet loaded onto a shipment (unallocated PR lines)
- * Read-only projection — it derives, never writes. Accurate once the stock ledger is on (Settings →
- * Stock tracking), because Juba sales only draw the ledger down when the ledger is being maintained.
+ * Juba Stock — one question, three columns.
+ *
+ *      Current stock = Purchased − Sold
+ *
+ * v4.99 rewrite, at the owner's instruction. What this screen showed before, and why it changed:
+ *
+ * ── WHAT IT USED TO SHOW ───────────────────────────────────────────────────────────────────────
+ *
+ * `StockLedger::onHandMap()` sums EVERY movement at the warehouse, whatever wrote it. At this shop
+ * that is three different kinds of number added together:
+ *
+ *     purchases   (ref_type `purchase`, `procurement_receive`, …)   — a supplier bill says so
+ *     sales       (ref_type `order_delivery`, `pos_return`, …)      — a customer took them
+ *     typed       (`backfill_product`, `product_create`, …)         — somebody typed a figure once
+ *
+ * So "available" was `typed openings + purchases − sales`, and the typed part is the largest and the
+ * least supported: 256 of 464 opening balances on this shop are exactly `100` — a default entered
+ * once and copied down a catalogue, not 256 stock counts that happen to agree.
+ *
+ * ── WHAT IT SHOWS NOW ──────────────────────────────────────────────────────────────────────────
+ *
+ * Only the two kinds of movement with a counterparty behind them. Purchased is what a supplier
+ * billed; Sold is what a customer took. Current is the subtraction, and it is on screen next to its
+ * own two operands so it can be checked rather than trusted. A typed opening is reported on the
+ * product line as context and is NOT added in — which is the whole point of the change.
+ *
+ * ── PAYMENT STATUS ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Never consulted, here or anywhere upstream. `OrderCostController` receives stock whenever a
+ * purchase line carries a product and a quantity; `pay_status` only decides `paid_native` and who
+ * holds the cash. A credit purchase has always moved stock exactly like a cash one. Verified, not
+ * assumed — and the same on the way out: a delivery reduces stock whether or not the customer has
+ * paid. Money is Finance's question, not this screen's.
+ *
+ * ── NEGATIVES ARE SHOWN, NOT CLAMPED ───────────────────────────────────────────────────────────
+ *
+ * A product can sell more than the purchase records account for — goods were on the shelf that this
+ * system never saw arrive, usually because they predate it. That is the most useful row on the
+ * screen and floor()ing it to zero would hide exactly the products worth investigating.
+ *
+ * Read-only projection: it derives, never writes. Accurate only while the stock ledger is being
+ * maintained (Settings → Stock tracking), because sales draw it down only when it is on.
  */
 final class JubaStockCapability implements ProcessCapability
 {
@@ -25,64 +62,71 @@ final class JubaStockCapability implements ProcessCapability
 
     public function project(CapabilityContext $ctx): WorkspacePayload
     {
-        $t = $ctx->tenantId();
+        $t    = $ctx->tenantId();
+        $home = StockLedger::home($ctx->tenant);
+        $acc  = $this->buckets($t, $home);
 
-        $juba    = $this->safeMap(fn () => StockLedger::forTenant($ctx->tenant)->onHandMap(StockLedger::LOC_JUBA));
-        $kampala = $this->safeMap(fn () => StockLedger::forTenant($ctx->tenant)->onHandMap(StockLedger::LOC_KAMPALA));
-        $transit = $this->transitMap($t);
-        $toSend  = $this->purchasedToSendMap($t);
-
-        // Union of every product that appears in any state, plus the catalogue for names.
-        $ids = array_values(array_unique(array_merge(array_keys($juba), array_keys($transit), array_keys($toSend), array_keys($kampala))));
         $names = [];
-        if ($ids) {
-            $names = Product::where('tenant_id', $t)->whereIn('id', $ids)->pluck('name', 'id')->all();
+        if ($acc) {
+            $names = Product::where('tenant_id', $t)->whereIn('id', array_keys($acc))->pluck('name', 'id')->all();
         }
 
-        $inJubaSkus = 0; $transitSkus = 0; $toSendSkus = 0; $outSkus = 0;
+        $inStock = 0; $outOfStock = 0; $negative = 0; $units = 0.0;
         $rows = [];
-        foreach ($ids as $pid) {
-            $av = round((float) ($juba[$pid] ?? 0), 3);
-            $tr = round((float) ($transit[$pid] ?? 0), 3);
-            $ts = round((float) ($toSend[$pid] ?? 0), 3);
-            if ($av <= 0 && $tr <= 0 && $ts <= 0) { continue; }
-            $pipeline = round($av + $tr + $ts, 3);
+        foreach ($acc as $pid => $a) {
+            $bought  = round($a['in'], 3);            // supplier receipts, always positive
+            $sold    = round(-$a['out'], 3);          // sales are negative in the ledger; returns net off
+            $current = round($bought - $sold, 3);
 
-            if ($av > 0) { $inJubaSkus++; } elseif ($tr > 0 || $ts > 0) { $outSkus++; }
-            if ($tr > 0) { $transitSkus++; }
-            if ($ts > 0) { $toSendSkus++; }
+            // Never purchased and never sold — the catalogue knows it, the warehouse does not.
+            if (abs($bought) < 0.0005 && abs($sold) < 0.0005) { continue; }
+
+            if ($current > 0)      { $inStock++; $units += $current; }
+            elseif ($current < 0)  { $negative++; }
+            else                   { $outOfStock++; }
+
+            $typed = round($a['typed'], 3);
 
             $rows[] = [
-                'product'  => ['value' => (string) ($names[$pid] ?? ('#' . $pid)), 'sub' => 'Kampala: ' . $this->qty($kampala[$pid] ?? 0), 'avatar' => false],
-                'juba'     => ['value' => $av > 0 ? $this->qty($av) : '0', 'sort' => $av, 'tone' => $av > 0 ? 'ok' : ($tr > 0 || $ts > 0 ? 'danger' : 'default')],
-                'transit'  => ['value' => $tr > 0 ? $this->qty($tr) : '—', 'sort' => $tr, 'tone' => $tr > 0 ? 'warn' : 'default'],
-                'tosend'   => ['value' => $ts > 0 ? $this->qty($ts) : '—', 'sort' => $ts, 'tone' => $ts > 0 ? 'warn' : 'default'],
-                'pipeline' => ['value' => $this->qty($pipeline), 'sort' => $pipeline],
+                'product' => [
+                    'value'  => (string) ($names[$pid] ?? ('#' . $pid)),
+                    // The figure that used to be added in and no longer is — so a number that dropped
+                    // today explains itself on the row rather than becoming a question.
+                    'sub'    => abs($typed) >= 0.0005 ? ('opening figure typed: ' . $this->qty($typed) . ' — not counted here') : '',
+                    'avatar' => false,
+                ],
+                'bought'  => ['value' => $this->qty($bought), 'sort' => $bought],
+                'sold'    => ['value' => $this->qty($sold), 'sort' => $sold],
+                'current' => [
+                    'value' => $this->qty($current),
+                    'sort'  => $current,
+                    'tone'  => $current > 0 ? 'ok' : ($current < 0 ? 'danger' : 'default'),
+                ],
             ];
         }
-        // Most relevant first: lowest available in Juba but with stock in the pipeline (at-risk), then by pipeline.
-        usort($rows, fn ($a, $b) => [$a['juba']['sort'], -$b['pipeline']['sort']] <=> [$b['juba']['sort'], -$a['pipeline']['sort']]);
+
+        // Most stock first. The counts that need attention are on the tiles, and every column sorts.
+        usort($rows, fn ($a, $b) => $b['current']['sort'] <=> $a['current']['sort']);
 
         $columns = [
-            ['key' => 'product',  'label' => 'Product', 'type' => 'avatar', 'sortable' => true],
-            ['key' => 'juba',     'label' => 'In Juba (avail.)', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'transit',  'label' => 'In transit', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'tosend',   'label' => 'Purchased (to send)', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'pipeline', 'label' => 'Total pipeline', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'product', 'label' => 'Product', 'type' => 'avatar', 'sortable' => true],
+            ['key' => 'bought',  'label' => 'Purchased', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'sold',    'label' => 'Sold', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'current', 'label' => 'Current stock', 'align' => 'right', 'type' => 'num', 'sortable' => true],
         ];
 
         $ledgerOn = (bool) $ctx->tenant->setting('stock_ledger', false);
         $note = $ledgerOn
-            ? 'Available = real on-hand in Juba (receipts − sales) from the stock ledger.'
-            : 'Turn on Settings → Stock tracking to make “In Juba” reflect real on-hand (receipts − sales).';
+            ? 'Current stock = Purchased − Sold. Cash and credit purchases both count; payment status never affects stock.'
+            : 'Turn on Settings → Stock tracking first — until then sales do not draw stock down and these figures will read high.';
 
         return (new WorkspacePayload)
             ->object(['type' => 'process:juba.stock', 'title' => 'Juba Stock', 'subtitle' => $note])
             ->financials([
-                ['key' => 'avail', 'label' => 'Available in Juba', 'value' => $inJubaSkus, 'tone' => 'ok', 'foot' => 'products in stock'],
-                ['key' => 'transit', 'label' => 'In transit', 'value' => $transitSkus, 'tone' => $transitSkus > 0 ? 'warn' : 'ok', 'foot' => 'products on the way'],
-                ['key' => 'tosend', 'label' => 'Purchased to send', 'value' => $toSendSkus, 'tone' => $toSendSkus > 0 ? 'warn' : 'ok', 'foot' => 'bought, not yet shipped'],
-                ['key' => 'out', 'label' => 'Out in Juba', 'value' => $outSkus, 'tone' => $outSkus > 0 ? 'danger' : 'ok', 'foot' => 'zero on-hand, in pipeline'],
+                ['key' => 'instock', 'label' => 'In stock', 'value' => $inStock, 'tone' => 'ok', 'foot' => 'products with stock on hand'],
+                ['key' => 'units', 'label' => 'Units on hand', 'value' => $this->qty(round($units, 3)), 'tone' => 'ok', 'foot' => 'total across those products'],
+                ['key' => 'outof', 'label' => 'Sold out', 'value' => $outOfStock, 'tone' => $outOfStock > 0 ? 'warn' : 'ok', 'foot' => 'purchased, all sold'],
+                ['key' => 'neg', 'label' => 'Sold more than bought', 'value' => $negative, 'tone' => $negative > 0 ? 'danger' : 'ok', 'foot' => 'no purchase record for the difference'],
             ])
             ->table($columns, $rows)
             ->meta(['capability' => 'juba.stock', 'ttl' => 30, 'permissions' => ['menu:products']]);
@@ -90,7 +134,14 @@ final class JubaStockCapability implements ProcessCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
-        return ['inTransit' => array_sum($this->transitMap($ctx->tenantId()))];
+        $acc = $this->buckets($ctx->tenantId(), StockLedger::home($ctx->tenant));
+        $units = 0.0;
+        foreach ($acc as $a) {
+            $c = $a['in'] + $a['out'];
+            if ($c > 0) { $units += $c; }
+        }
+
+        return ['unitsOnHand' => round($units, 3)];
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
@@ -98,45 +149,47 @@ final class JubaStockCapability implements ProcessCapability
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 
-    /** Sent to Juba but not yet received, on open (not-arrived) shipments. @return array<int,float> */
-    private function transitMap(int $tid): array
+    /**
+     * Per product at the shop's own warehouse: supplier in, sales out, and the typed remainder.
+     *
+     * ONE grouped query, as the old projection was — 464 products must not become 464 queries.
+     * Bucketing is StockProvenance's, unchanged and shared with `stock:proof`, so a movement source
+     * added later is classified in exactly one place. Anything unrecognised lands in `typed`, which
+     * means a new source is excluded from Current until somebody decides it is evidence and says so.
+     *
+     * @return array<int,array{in:float,out:float,typed:float}>
+     */
+    private function buckets(int $tid, string $home): array
     {
-        return $this->safeMap(function () use ($tid) {
-            $rows = DB::table('consignment_stock')
-                ->join('shipments', 'shipments.id', '=', 'consignment_stock.shipment_id')
-                ->where('consignment_stock.tenant_id', $tid)
-                ->whereNull('shipments.arrived_at')->whereNull('shipments.cancelled_at')
-                ->whereNotNull('consignment_stock.product_id')
-                ->select('consignment_stock.product_id', DB::raw('SUM(consignment_stock.qty_sent - consignment_stock.qty_received) as qty'))
-                ->groupBy('consignment_stock.product_id')->get();
-            $map = [];
-            foreach ($rows as $r) { $map[(int) $r->product_id] = max(0.0, (float) $r->qty); }
-
-            return $map;
-        });
-    }
-
-    /** Purchased on a plan line but not yet loaded/sent (bought − sent, floored at 0). @return array<int,float> */
-    private function purchasedToSendMap(int $tid): array
-    {
-        return $this->safeMap(function () use ($tid) {
-            $rows = DB::table('demand_plan_lines')
+        try {
+            $rows = DB::table('stock_movements')
                 ->where('tenant_id', $tid)
-                ->where('qty_purchased', '>', 0)
+                ->where('location', $home)
                 ->whereNotNull('product_id')
-                ->select('product_id', DB::raw('SUM(GREATEST(qty_purchased - qty_sent, 0)) as qty'))
-                ->groupBy('product_id')->get();
-            $map = [];
-            foreach ($rows as $r) { $map[(int) $r->product_id] = max(0.0, (float) $r->qty); }
+                ->select('product_id', 'ref_type', DB::raw('SUM(qty) as qty'))
+                ->groupBy('product_id', 'ref_type')
+                ->get();
+        } catch (\Throwable $e) {
+            return [];
+        }
 
-            return $map;
-        });
-    }
+        $acc = [];
+        foreach ($rows as $r) {
+            $pid = (int) $r->product_id;
+            $q   = (float) $r->qty;
+            if (! isset($acc[$pid])) { $acc[$pid] = ['in' => 0.0, 'out' => 0.0, 'typed' => 0.0]; }
 
-    /** @return array<int,float> */
-    private function safeMap(callable $fn): array
-    {
-        try { return $fn() ?: []; } catch (\Throwable $e) { return []; }
+            switch (StockProvenance::bucket($r->ref_type)) {
+                case StockProvenance::SUPPLIER: $acc[$pid]['in']  += $q; break;
+                case StockProvenance::SALES:    $acc[$pid]['out'] += $q; break;
+                // A physical count is stronger evidence than a bill, but folding it in would break
+                // the arithmetic printed on the row — Purchased − Sold would no longer equal Current.
+                // It is reported as context instead, with the openings.
+                default:                        $acc[$pid]['typed'] += $q; break;
+            }
+        }
+
+        return $acc;
     }
 
     private function qty($v): string
