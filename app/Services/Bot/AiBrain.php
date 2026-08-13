@@ -215,7 +215,7 @@ class AiBrain
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
         //     The machine block is always stripped so the customer never sees it.
-        $reply = $this->captureOrder($tenant, $convo, $from, $reply, $channel);
+        $reply = $this->captureOrder($tenant, $convo, $from, $reply, $channel, $gateway);
 
         // 3b. PDF quotation — driven by an explicit <<QUOTE {json}>> line the model emits ONLY once
         //     it has the specific item(s) + quantity (mirrors the ORDER flow). This replaces the old
@@ -776,7 +776,7 @@ class AiBrain
      * saved so it appears under Quotations in v3 for staff to convert), instead of creating a sales
      * order. Reuses the same OrderCalculator-priced $quote and the QuotationService the AI bot already
      * uses for price requests — no new quoting logic. Best-effort send; the quotation is always saved.
-     */    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean): string
+     */    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean, string $channel = 'whatsapp', ?WhatsAppGateway $gateway = null): string
     {
         $svc = app(\App\Services\Bot\QuotationService::class);
         $cur = (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX'));
@@ -846,7 +846,13 @@ class AiBrain
             if ($doc) {
                 $qNo = (string) ($doc['no'] ?? '');
                 // Only auto-send the retail PDF for normal-sized orders; a wholesale order is priced by staff.
-                if (! $isBig) {
+                // v4.92 — WhatsApp only. On web this reached for WhatsAppManager directly, ignoring the
+                // gateway it was handed, and sent the PDF to `$from` — which on web chat is `web:<sid>`,
+                // not a phone number. So every website quotation fired a document send from the shop's
+                // own (currently timelocked) WhatsApp instance at a destination that cannot exist, and
+                // the customer was told "quotation prepared" and given nothing. The web link is handed
+                // over after persist() below, where the portal token exists.
+                if (! $isBig && $channel !== 'web') {
                     try {
                         $gw = app(\App\Services\WhatsApp\WhatsAppManager::class)->forTenant($tenant);
                         if (method_exists($gw, 'sendDocument') && $tenant->whatsapp_instance) {
@@ -861,6 +867,19 @@ class AiBrain
                     }
                 }
                 $q = $svc->persist($tenant, $from, $name, $qArr, $doc, 'bot');
+                // v4.92 — the web customer's copy. The portal already exists (/q/{token} → details,
+                // PDF, approve, revise, share) and Quotation mints a public_token on create; it was
+                // simply never handed to the browser. Sent as a `document`, which the widget already
+                // renders as a clickable bubble — the chat text itself is escaped and NOT linkified,
+                // so a bare URL in the reply would arrive as plain characters to copy by hand.
+                if ($channel === 'web' && $q && $gateway) {
+                    try {
+                        $gateway->sendDocument('', $from, $q->canonicalPortalUrl(),
+                            'Quotation ' . ($qNo !== '' ? $qNo : (string) $q->quote_no), '');
+                    } catch (\Throwable $e) {
+                        Log::warning('web quotation link not delivered: ' . $e->getMessage());
+                    }
+                }
                 // v4.39 — the address is confirmed exactly here and nowhere else. Keep it against
                 // the customer so the next conversation can offer it back instead of asking again.
                 if ($delivery !== '') {
@@ -1005,7 +1024,7 @@ class AiBrain
         return trim(implode("\n", $out));
     }
 
-    private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply, string $channel = 'whatsapp'): string
+    private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply, string $channel = 'whatsapp', ?WhatsAppGateway $gateway = null): string
     {
         $pos = stripos($reply, '<<ORDER');
         if ($pos === false) {
@@ -1060,7 +1079,7 @@ class AiBrain
 
             // QUOTE-FIRST: send a quotation for staff to confirm/convert, instead of creating an order.
             if (static::QUOTE_FIRST) {
-                return $this->captureOrderAsQuote($tenant, $convo, $from, $quote, $itemsText, $delivery, $clean);
+                return $this->captureOrderAsQuote($tenant, $convo, $from, $quote, $itemsText, $delivery, $clean, $channel, $gateway);
             }
 
             $order = new \App\Models\Order();
