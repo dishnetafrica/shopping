@@ -118,6 +118,24 @@ class AiBrain
                 'messages'    => $messages,
             ]);
             $reply = trim((string) ($resp->choices[0]->message->content ?? ''));
+            // v4.91 — record what the call actually cost. Nothing anywhere captured $resp->usage, so
+            // "we will re-measure once there is real traffic and decide then" had nothing to measure:
+            // the only figure available was an estimate rebuilt from the prompt, which cannot see the
+            // conversation history, the photo block or the planning preamble that ride with it.
+            // `cached` is the number that decides whether the prefix-caching change earned anything —
+            // guarded, because it only exists on newer client versions.
+            try {
+                $u = $resp->usage ?? null;
+                if ($u) {
+                    $cached = null;
+                    try { $cached = $u->promptTokensDetails->cachedTokens ?? null; } catch (\Throwable $e2) {}
+                    \App\Support\BotTrace::log($tenant->id, 'ai', $from, 'ai_usage',
+                        'in=' . (int) ($u->promptTokens ?? 0)
+                        . ' out=' . (int) ($u->completionTokens ?? 0)
+                        . ' cached=' . ($cached === null ? 'n/a' : (int) $cached)
+                        . ' model=' . $model);
+                }
+            } catch (\Throwable $e) { /* telemetry must never break a reply */ }
         } catch (\Throwable $e) {
             Log::warning('AiBrain reply failed: ' . $e->getMessage());
             return $this->fallback($tenant, $from, $gateway, 'ai_error');
