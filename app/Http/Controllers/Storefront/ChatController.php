@@ -354,11 +354,15 @@ class ChatController extends Controller
 
                 BotTrace::log($tenant->id, 'web', $from, 'chat_biz', $bizId);
 
-                return "\n[the customer tapped the \"" . $label . '" collection on this shop\'s website. '
+                // v5.02 — phrased as a STATE, not an event. The tile now sets the context and it
+                // rides every message until another is opened, so "the customer tapped…" would read
+                // as new on turn five. This says where they are, which stays true.
+                return "\n[the customer is browsing the \"" . $label . '" collection on this shop\'s website. '
                      . 'It is a grouping this shop publishes, not a catalogue category, so it will not appear in the '
                      . 'PRODUCTS list — but it is real and it is ours. '
                      . ($bits !== []
-                        ? 'It covers ' . implode('; ', $bits) . '. Answer from those products.'
+                        ? 'It covers ' . implode('; ', $bits) . '. Prefer those products, and read anything they ask '
+                          . 'for narrowly ("cleaning products") as a request WITHIN this collection.'
                         : 'The owner has not yet mapped it to categories or keywords, so offer the closest lines you can '
                           . 'and say you will confirm the full range.')
                      . ' Do not tell the customer we have no such collection.]';

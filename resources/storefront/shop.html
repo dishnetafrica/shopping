@@ -1588,6 +1588,26 @@ body.chat-only #whChat .qa{ display:none !important; }
   @media (max-width:1150px){
     body.chat-only #whChatBd .row.cardrow{ width:100%; margin-right:0; }
   }
+
+  /* v5.02 — collection chips and the pager for the browse view. Both are inert unless a rail tile
+     has been opened, and the chips only exist when the owner configured collections. */
+  body.chat-only #whChatBd .co-chips{
+    display:flex; gap:8px; overflow-x:auto; padding:2px 2px 12px; scrollbar-width:thin;
+  }
+  body.chat-only #whChatBd .co-chips button{
+    flex:0 0 auto; background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:8px 14px;
+    font:inherit; font-size:13px; color:#374151; cursor:pointer; white-space:nowrap;
+  }
+  body.chat-only #whChatBd .co-chips button:hover{ border-color:#d1d5db; }
+  body.chat-only #whChatBd .co-chips button.on{
+    background:var(--green, #16a34a); border-color:var(--green, #16a34a); color:#fff; font-weight:600;
+  }
+  body.chat-only #whChatBd .co-more{ display:block; clear:both; margin:2px 0 12px; }
+  body.chat-only #whChatBd .co-more button{
+    background:#fff; border:1px solid #d1d5db; border-radius:10px; padding:9px 16px;
+    font:inherit; font-size:13px; color:#111827; cursor:pointer;
+  }
+  body.chat-only #whChatBd .co-more button:hover{ background:#f9fafb; }
 }
 
   /* the two action buttons, now living in the header */
@@ -3830,7 +3850,11 @@ function whChatSend(text,action){
      so the bot answered — correctly, from its point of view — that no such category exists. The
      SERVER resolves this id against the tenant's own business_banners and hands the brain the real
      categories and keywords behind it. Nothing about the collection is described here. */
-  try{ if(WHCHAT.biz){ body.biz=String(WHCHAT.biz).slice(0,40); WHCHAT.biz=''; } }catch(e){}
+  /* v5.02 — it STAYS set while that collection is the one being browsed, so "show me cleaning
+     products" is answered inside Hotel Supplies rather than across the whole catalogue. Cleared
+     only by opening a plain category, which needs no translation. It is 40 characters on the
+     customer's own message, not in the cached prompt prefix, so repeating it costs nothing. */
+  try{ if(WHCHAT.biz){ body.biz=String(WHCHAT.biz).slice(0,40); } }catch(e){}
   fetch((SHOP.base||'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
   .then(function(r){ return r.json().then(function(j){ return {st:r.status,j:j}; }).catch(function(){ return {st:r.status,j:null}; }); })
   .then(function(x){
@@ -4913,22 +4937,20 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
         + '<div class="t"><b>'+esc(SHOP.name||'Shop')+'</b>'
         + (sub ? '<span>'+esc(sub)+'</span>' : '') + '</div></div>';
 
+      /* v5.02 — a tile is a FILTER, not a chat shortcut. It opens the collection locally from the
+         catalogue already in the page: instant, and it costs nothing to run. The marking is done by
+         coRailMark() from the active context rather than from "whatever was last clicked", so the
+         highlight can never disagree with what is on screen. */
       r.innerHTML = brand + '<div class="co-railb"><div class="co-railh">'+esc(head)+'</div>'
         + items.map(function(b){
         var ic = b.icon ? b.icon : (b.img ? '<img loading="lazy" src="'+esc(b.img)+'" alt="">' : '');
-        return '<button onclick="'+(b.id?('WHCHAT.biz='+jk(b.id)+';'):'')+'whChatSend('+jk('Show me '+b.label)+')">'
+        var act = b.id ? ('coBizOpen('+jk(b.id)+')') : ('coCatOpen('+jk(b.label)+')');
+        var tag = b.id ? (' data-biz="'+esc(b.id)+'"') : (' data-cat="'+esc(b.label)+'"');
+        return '<button'+tag+' onclick="'+act+'">'
              + '<span class="ic">'+ic+'</span>'
              + '<span>'+esc(b.label)+'</span>'
              + '<span class="ch">&rsaquo;</span></button>';
       }).join('') + '</div>';
-      /* the tapped tile stays marked, so the rail shows where the conversation is */
-      r.addEventListener('click', function(ev){
-        var t = ev.target, b = (t && t.closest) ? t.closest('button') : null;
-        if(!b || !r.contains(b)) return;
-        var bs = r.querySelectorAll('button');
-        for(var i=0;i<bs.length;i++) bs[i].classList.remove('on');
-        b.classList.add('on');
-      });
       /* Benefits under the categories — from SHOP.home.benefits, which is the very data your
          storefront hero already renders ("FREE DELIVERY · in Juba · Min. 5 Cartons"). Nothing is
          written here that the shop does not already say elsewhere; if the setting is empty, the
@@ -4964,6 +4986,165 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       if(h > 0) document.body.style.setProperty('--co-hd', h + 'px');
     }catch(e){}
   }
+
+  /* =========================================================================================
+     v5.02 — THE RAIL BECOMES NAVIGATION.
+
+     Until now a tile sent the words "Show me Hotel Supplies" to the model: a round trip, a
+     token spend, and an answer written from the catalogue text rather than the collection the
+     owner actually configured. Clicking a shop's own navigation should not need an AI at all.
+
+     WHAT THIS CODE DOES NOT DO: it contains no matching rule of its own. Every product decision
+     is delegated to the storefront's existing functions, the same ones currentList() calls —
+
+        business tile → bizProducts(biz)      (bizMatch: match.categories / keywords / bulk)
+        collection chip → collProducts(coll)  (collMatch + collTokens)
+
+     — so a change to the owner's business_banners config, or to those matchers, moves this view
+     with it. The one exception is noted at coCatList(): the category rail, where the storefront's
+     own selector reads a global (curCatList uses CAT) that /chat must not touch, so its single
+     line of body is repeated against a parameter instead.
+
+     Cards are painted by whChatPaint({type:'card'}) — the SAME renderer the AI's cards use, so
+     Add to Cart is whChatAdd → cartAdd, the one cart, unchanged.
+     ========================================================================================= */
+  var CO_PAGE = 12;
+  var CO = { biz:'', cat:'', coll:-1, shown:0 };
+
+  function coBizFind(id){
+    var l = (typeof activeBiz === 'function') ? activeBiz() : [];
+    for(var i=0;i<l.length;i++){ if(String(l[i].id) === String(id)) return l[i]; }
+    return null;
+  }
+
+  /* curCatList() is PRODUCTS.filter(p => p.category === CAT) — but CAT is the STOREFRONT's view
+     state, and setting it from /chat would drive the hidden shop's render. One line, against an
+     argument. This is the only product predicate written here. */
+  function coCatList(name){
+    return (typeof PRODUCTS !== 'undefined' ? PRODUCTS : []).filter(function(p){
+      return p && String(p.category||'') === String(name);
+    });
+  }
+
+  function coList(){
+    if(CO.biz){
+      var biz = coBizFind(CO.biz); if(!biz) return [];
+      var colls = biz.collections || [];
+      if(CO.coll >= 0 && colls[CO.coll] && typeof collProducts === 'function'){
+        return collProducts(colls[CO.coll]);      // the storefront's own collection semantics
+      }
+      return (typeof bizProducts === 'function') ? bizProducts(biz) : [];
+    }
+    if(CO.cat) return coCatList(CO.cat);
+    return [];
+  }
+
+  /* PRODUCTS row → the card payload ChatCards::card() produces server-side. Same honesty rules:
+     no price becomes null ("Price on request"), pack and MOQ appear only when the product really
+     carries them. Nothing is invented and nothing is rounded. */
+  function coCardOf(p){
+    return {
+      id: p.id, name: p.name, image: p.image || '',
+      price: (p.poa || !(Number(p.price) > 0)) ? null : Number(p.price),
+      currency: (typeof CUR !== 'undefined' ? CUR : ''),
+      unit: p.unit || '',
+      pack: ((Number(p.packSize)||0) > 1) ? Number(p.packSize) : null,
+      moq:  ((Number(p.moq)||0) > 1)      ? Number(p.moq)      : null
+    };
+  }
+
+  function coBrowseClear(){
+    try{
+      var els = document.querySelectorAll('#whChatBd .co-bp');
+      for(var i=els.length-1;i>=0;i--) els[i].remove();
+    }catch(e){}
+  }
+
+  function coBrowsePaint(append){
+    var bd = document.getElementById('whChatBd'); if(!bd) return;
+    var list = coList();
+    if(!append){ coBrowseClear(); CO.shown = 0; }
+
+    // collection chips, only when the owner configured collections for this business
+    if(!append && CO.biz){
+      var biz = coBizFind(CO.biz);
+      var colls = (biz && biz.collections) ? biz.collections.filter(function(c){ return c && (c.label||c.cat); }) : [];
+      if(colls.length){
+        var h = '<div class="co-chips co-bp"><button class="'+(CO.coll<0?'on':'')+'" onclick="coBizColl(-1)">All</button>'
+          + colls.map(function(c,i){
+              return '<button class="'+(CO.coll===i?'on':'')+'" onclick="coBizColl('+i+')">'+esc(c.label||c.cat)+'</button>';
+            }).join('') + '</div>';
+        bd.insertAdjacentHTML('beforeend', h);
+      }
+    }
+
+    var older = document.querySelector('#whChatBd .co-more'); if(older) older.remove();
+
+    var slice = list.slice(CO.shown, CO.shown + CO_PAGE);
+    for(var i=0;i<slice.length;i++){
+      whChatPaint({ type:'card', p: coCardOf(slice[i]) }, false);   // save:false — a browse view is not conversation
+      var el = bd.lastElementChild; if(el) el.classList.add('co-bp');
+    }
+    CO.shown += slice.length;
+
+    var left = list.length - CO.shown;
+    if(left > 0){
+      bd.insertAdjacentHTML('beforeend',
+        '<div class="co-more co-bp"><button onclick="coBizMore()">Show '+Math.min(left, CO_PAGE)+' more of '+list.length+'</button></div>');
+    }
+    try{ whChatScroll(); }catch(e){}
+  }
+
+  function coRailMark(id, label){
+    try{
+      var r = document.getElementById('coRail'); if(!r) return;
+      var bs = r.querySelectorAll('button');
+      for(var i=0;i<bs.length;i++){
+        var on = (id && bs[i].getAttribute('data-biz') === String(id))
+              || (!id && label && bs[i].getAttribute('data-cat') === String(label));
+        bs[i].classList.toggle('on', !!on);
+      }
+    }catch(e){}
+  }
+
+  /* A tile press: set the context, say so, show the goods. No network call, no tokens. The model
+     learns which collection is active from the `biz` field on the NEXT message the customer types
+     (ChatController::bizNote resolves it against the owner's own config). */
+  window.coBizOpen = function(id, label){
+    var biz = coBizFind(id); if(!biz) return;
+    CO.biz = String(id); CO.cat = ''; CO.coll = -1; CO.shown = 0;
+    try{ WHCHAT.biz = String(id); }catch(e){}          // stays set: the conversation is in this context now
+    coRailMark(id, null);
+    var list = coList();
+    var name = String(biz.label || id);
+    try{
+      whChatPaint({ type:'text', text: list.length
+        ? ('You are now browsing *'+name+'*.\n'+list.length+' product'+(list.length===1?'':'s')+' — tap Add to Cart, or tell me what you need and I will narrow it down.')
+        : ('Nothing is filed under *'+name+'* in the catalogue yet. Tell me what you are looking for and I will check by name.') });
+    }catch(e){}
+    if(list.length) coBrowsePaint(false); else { coBrowseClear(); try{ whChatScroll(); }catch(e){} }
+  };
+
+  window.coCatOpen = function(name){
+    CO.cat = String(name); CO.biz = ''; CO.coll = -1; CO.shown = 0;
+    try{ WHCHAT.biz = ''; }catch(e){}                  // a category is a catalogue category — no translation needed
+    coRailMark(null, name);
+    var list = coList();
+    try{
+      whChatPaint({ type:'text', text: list.length
+        ? ('You are now browsing *'+name+'*.\n'+list.length+' product'+(list.length===1?'':'s')+' — tap Add to Cart, or tell me what you need and I will narrow it down.')
+        : ('Nothing is filed under *'+name+'* right now. Tell me what you are looking for and I will check by name.') });
+    }catch(e){}
+    if(list.length) coBrowsePaint(false); else { coBrowseClear(); try{ whChatScroll(); }catch(e){} }
+  };
+
+  window.coBizColl = function(i){
+    CO.coll = (i === null || i === undefined) ? -1 : Number(i);
+    CO.shown = 0;
+    coBrowsePaint(false);
+  };
+
+  window.coBizMore = function(){ coBrowsePaint(true); };
 
   /* ---------------------------------------------------------------------------------------
      v4.95 — the chat's CART VIEW. Option (b): this renders the SAME CART object the storefront
