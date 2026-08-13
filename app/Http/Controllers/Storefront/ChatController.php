@@ -161,7 +161,7 @@ class ChatController extends Controller
                 $state['human_until'] = time() + $mins * 60;
                 $convo->state = $state;
                 $convo->save();
-                \App\Jobs\NotifyOwner::dispatch($tenant->id,
+                $this->alertOwner($tenant,
                     '🌐 A website visitor asked to talk to a person — open Chats (' . $from . ') to reply.');
                 BotTrace::log($tenant->id, 'web', $from, 'web_human_requested');
 
@@ -175,9 +175,15 @@ class ChatController extends Controller
             $sessionCount = $this->bump('webchat:s:' . $tenant->id . ':' . $sid, 86400);
             $dayCount     = $this->bump('webchat:d:' . $tenant->id . ':' . now()->format('Y-m-d'), 172800);
 
+            // Website chat answers over HTTP in the browser and never touches Evolution — there is no
+            // sendText anywhere in this path — so it cannot earn a WhatsApp reach-out lock. Reading
+            // bot_mode directly meant a WhatsApp pause silently closed a channel that was not
+            // implicated in it: tenant 17 sat behind a Meta 463 timelock with bot_mode=off, and web
+            // chat deflected every visitor for the duration. `web_chat_mode` lets the two be paused
+            // separately, and DEFAULTS to bot_mode, so no tenant's behaviour changes until it is set.
             $v = WebChatPolicy::verdict(
                 (bool) $tenant->setting('web_chat', false),
-                (string) $tenant->setting('bot_mode', 'auto'),
+                (string) $tenant->setting('web_chat_mode', $tenant->setting('bot_mode', 'auto')),
                 $humanActive,
                 $sessionCount, (int) $tenant->setting('web_chat_session_cap', WebChatPolicy::SESSION_CAP_DEFAULT),
                 $dayCount, (int) $tenant->setting('web_chat_daily_cap', WebChatPolicy::DAY_CAP_DEFAULT),
@@ -205,7 +211,7 @@ class ChatController extends Controller
                 $ok = app(\App\Services\Bot\AiBrain::class)->handle($tenant, $convo, $from, $aiText, $collector, []);
             } catch (\Throwable $e) {
                 BotTrace::log($tenant->id, 'web', $from, 'web_failed', mb_substr($e->getMessage(), 0, 160));
-                \App\Jobs\NotifyOwner::dispatch($tenant->id,
+                $this->alertOwner($tenant,
                     '🌐 Web chat failed for a visitor — please check. (' . mb_substr($e->getMessage(), 0, 120) . ')');
 
                 return response()->json(['ok' => false, 'error' => 'failed', 'retry' => true], 503);
@@ -271,6 +277,28 @@ class ChatController extends Controller
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * Owner alert for a web-chat event — WhatsApp when that channel is usable, the log when it is not.
+     *
+     * NotifyOwner sends a real WhatsApp from the tenant's own instance. That is the ONE thread from
+     * this controller back into the locked channel, and it matters once web chat can run while
+     * WhatsApp is paused (`web_chat_mode`): a shop sitting under a reach-out timelock would answer
+     * web visitors happily and, every time one asked for a person, fire a send that Meta refuses.
+     * Refused sends are the behaviour that earns the lock, so they must not be made on its account.
+     *
+     * Nothing is lost when it is skipped: BotTrace already records both events at the call sites, so
+     * the request is in Chats either way — the owner reads it there instead of on their handset.
+     */
+    private function alertOwner(Tenant $tenant, string $text): void
+    {
+        if ((string) $tenant->setting('bot_mode', 'auto') === 'off') {
+            \Log::info('web chat owner alert not sent (bot_mode=off, WhatsApp paused): ' . $text);
+
+            return;
+        }
+        \App\Jobs\NotifyOwner::dispatch($tenant->id, $text);
     }
 
     /** Counter with a lifetime, returning the count INCLUDING this hit. */
