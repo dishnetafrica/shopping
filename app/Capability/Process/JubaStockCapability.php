@@ -73,11 +73,14 @@ final class JubaStockCapability implements ProcessCapability
         $t = $ctx->tenantId();
 
         $bought = $this->purchasedMap($t);
-        [$sold, $unmatched, $unmatchedQty] = $this->soldMap($t);
+        [$sold, $unmatched, $unmatchedQty, $detail] = $this->soldMap($t);
 
+        // Names for everything that was bought OR sold — the sold-only ones never get a row, but the
+        // reconciliation block below names them, and a number you cannot name is not evidence.
+        $allPids = array_values(array_unique(array_merge(array_keys($bought), array_keys($sold))));
         $names = [];
-        if ($bought) {
-            $names = Product::where('tenant_id', $t)->whereIn('id', array_keys($bought))->pluck('name', 'id')->all();
+        if ($allPids) {
+            $names = Product::where('tenant_id', $t)->whereIn('id', $allPids)->pluck('name', 'id')->all();
         }
 
         $inStock = 0; $soldOut = 0; $over = 0; $units = 0.0;
@@ -120,6 +123,13 @@ final class JubaStockCapability implements ProcessCapability
         $sub = 'Current stock = Purchased − Sold. Purchased is every supplier purchase line; Sold is every '
              . 'invoice that is not void, plus orders that were never invoiced. Cash, credit and unpaid all '
              . 'count — payment status never changes stock.';
+        if (($detail['ordUnits'] ?? 0) > 0) {
+            // Which half of Sold came from where, in plain sight. Written because the first attempt to
+            // verify this screen from the browser summed only the invoices, found less than the screen
+            // said, and reported a fault that was not there — the missing units were the orders.
+            $sub .= ' ' . $this->qty($detail['invUnits']) . ' units came off invoices and '
+                 . $this->qty($detail['ordUnits']) . ' off orders that were never invoiced.';
+        }
         if ($unmatched > 0) {
             $sub .= ' ' . $unmatched . ' invoice line' . ($unmatched === 1 ? '' : 's')
                  . ' (' . $this->qty($unmatchedQty) . ' units) could not be matched to a product by name and '
@@ -137,13 +147,72 @@ final class JubaStockCapability implements ProcessCapability
                  'foot' => $ghosts > 0 ? ($over . ' listed · ' . $ghosts . ' with no purchase line') : 'no purchase record for the difference'],
             ])
             ->table($columns, $rows)
-            ->meta(['capability' => 'juba.stock', 'ttl' => 30, 'permissions' => ['menu:products']]);
+            ->meta([
+                'capability' => 'juba.stock', 'ttl' => 30, 'permissions' => ['menu:products'],
+                // Not rendered anywhere. It exists so the screen can be CHECKED from outside itself.
+                // A browser can walk every invoice document and add the quantities up independently —
+                // it cannot see an order's items_json, which no read endpoint exposes. So the screen
+                // states which half of every Sold figure came from which document, and the checker
+                // verifies the half it can reach instead of guessing at the whole and crying wolf.
+                'reconcile' => $this->reconcile($detail, $names, count($rows)),
+            ]);
+    }
+
+    /**
+     * The provenance block: how Sold was arrived at, per product, in a form something outside this
+     * class can test. Names, not ids, because that is what the table shows.
+     *
+     * @param array<int,mixed>   $detail  the fourth return of soldMap()
+     * @param array<int,string>  $names   product id => name
+     */
+    private function reconcile(array $detail, array $names, int $onScreen): array
+    {
+        $byName = []; $invTot = 0.0; $ordTot = 0.0;
+        $pids = array_values(array_unique(array_merge(array_keys($detail['inv']), array_keys($detail['ord']))));
+        foreach ($pids as $pid) {
+            $iv = round((float) ($detail['inv'][$pid] ?? 0), 3);
+            $ov = round((float) ($detail['ord'][$pid] ?? 0), 3);
+            if ($iv === 0.0 && $ov === 0.0) { continue; }
+            $invTot += $iv; $ordTot += $ov;
+
+            $name = (string) ($names[$pid] ?? ('#' . $pid));
+            $k = $this->normName($name);
+            if ($k === '') { continue; }
+            if (isset($byName[$k])) {
+                // Two products with the same name. Adding them is the only honest thing to do here —
+                // the table shows one line per id and the checker matches on text, so it would see
+                // the sum. Flagged, because it also means one of them is unreachable by name.
+                $byName[$k]['inv'] = round($byName[$k]['inv'] + $iv, 3);
+                $byName[$k]['ord'] = round($byName[$k]['ord'] + $ov, 3);
+                $byName[$k]['dup'] = true;
+                continue;
+            }
+            $byName[$k] = ['pid' => $pid, 'name' => $name, 'inv' => $iv, 'ord' => $ov];
+        }
+
+        return [
+            'rowsOnScreen'   => $onScreen,
+            'invUnits'       => round($invTot, 3),
+            'ordUnits'       => round($ordTot, 3),
+            'invLines'       => (int) $detail['invLines'],
+            'ordLines'       => (int) $detail['ordLines'],
+            'ordersCounted'  => array_values($detail['ordNos']),
+            'unmatchedLines' => count($detail['miss']),
+            'unmatchedUnits' => round(array_sum(array_column($detail['miss'], 'qty')), 3),
+            'unmatched'      => array_slice($detail['miss'], 0, 120),
+            // every invoice wording seen, and the product it resolved to (null = matched nothing).
+            // The checker reads a line off an invoice document and needs the same answer this class
+            // reached; handing it the map is the difference between checking the arithmetic and
+            // re-implementing the decision, and only the arithmetic is worth checking.
+            'lineMap'        => $detail['lineMap'],
+            'byName'         => $byName,
+        ];
     }
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
         $bought = $this->purchasedMap($ctx->tenantId());
-        [$sold] = $this->soldMap($ctx->tenantId());
+        [$sold] = $this->soldMap($ctx->tenantId());   // list() takes the first; the rest is for the screen
         $units = 0.0;
         foreach ($bought as $pid => $b) {
             $c = (float) $b['qty'] - (float) ($sold[$pid] ?? 0);
@@ -198,11 +267,17 @@ final class JubaStockCapability implements ProcessCapability
     /**
      * Units sold per product, from invoices first and orders only where no invoice exists.
      *
-     * @return array{0:array<int,float>,1:int,2:float}  [ pid => qty, unmatched lines, unmatched units ]
+     * The fourth return is the audit trail — which document each unit came off. Nothing on screen
+     * depends on it; it is what makes the screen checkable from outside. See reconcile().
+     *
+     * @return array{0:array<int,float>,1:int,2:float,3:array<string,mixed>}
      */
     private function soldMap(int $tid): array
     {
         $sold = []; $unmatched = 0; $unmatchedQty = 0.0; $fromJson = [];
+        $d = ['inv' => [], 'ord' => [], 'miss' => [], 'lineMap' => [], 'ordNos' => [],
+              'invLines' => 0, 'ordLines' => 0, 'invUnits' => 0.0, 'ordUnits' => 0.0];
+        $empty = [[], 0, 0.0, $d];
 
         // Exact name -> product id, PLUS the aliases in `products.keywords`.
         //
@@ -244,10 +319,19 @@ final class JubaStockCapability implements ProcessCapability
                     foreach (preg_split('/\R/u', $kw) ?: [] as $lineAlias) { $claim($lineAlias, $pid); }
                 } else {
                     foreach (\App\Services\Inventory\PurchaseNameMatch::aliases($kw) as $alias) { $claim($alias, $pid); }
+                    // …and the WHOLE field as one alias, which is the fix for the obvious mistake:
+                    // typing a single comma-bearing wording on one line. The comma parser shreds
+                    // "aluminium foil 45cm (carton of 6pc, min 10)" into two fragments that match
+                    // nothing, and the person who typed it gets no signal at all. Claiming the whole
+                    // string as well costs one map entry and cannot mis-link anything: for a field
+                    // with no comma it is the same string the parser already produced, and a field
+                    // WITH commas can only collide with a product literally named that entire
+                    // comma-bearing string — and a collision is refused, never guessed.
+                    $claim($kw, $pid);
                 }
             }
         } catch (\Throwable $e) {
-            return [[], 0, 0.0];
+            return $empty;
         }
 
         // 1. every live invoice line
@@ -257,16 +341,25 @@ final class JubaStockCapability implements ProcessCapability
                 ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
                 ->where('invoice_items.tenant_id', $tid)
                 ->where('invoices.status', '!=', 'void')
-                ->get(['invoice_items.name', 'invoice_items.qty', 'invoices.order_id']) as $r) {
+                ->get(['invoice_items.name', 'invoice_items.qty', 'invoices.order_id', 'invoices.invoice_no']) as $r) {
                 if ($r->order_id) { $invoiced[(int) $r->order_id] = true; }
                 $q = (float) $r->qty;
                 if ($q <= 0) { continue; }
-                $pid = $byName[$this->normName((string) $r->name)] ?? null;
-                if ($pid === null) { $unmatched++; $unmatchedQty += $q; continue; }
+                $raw = (string) $r->name;
+                $k   = $this->normName($raw);
+                $pid = $byName[$k] ?? null;
+                $d['lineMap'][$k] = $pid;                 // null is an answer too: "this matched nothing"
+                if ($pid === null) {
+                    $unmatched++; $unmatchedQty += $q;
+                    $d['miss'][] = ['doc' => (string) ($r->invoice_no ?: 'invoice'), 'name' => trim($raw), 'qty' => $q];
+                    continue;
+                }
+                $d['invLines']++; $d['invUnits'] += $q;
+                $d['inv'][$pid] = ($d['inv'][$pid] ?? 0) + $q;
                 $sold[$pid] = ($sold[$pid] ?? 0) + $q;
             }
         } catch (\Throwable $e) {
-            return [[], 0, 0.0];
+            return $empty;
         }
 
         // 2. orders that were never invoiced — their own lines.
@@ -280,7 +373,7 @@ final class JubaStockCapability implements ProcessCapability
             foreach (DB::table('orders')
                 ->where('tenant_id', $tid)
                 ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','canceled','rejected','void')")
-                ->get(['id', 'items_json']) as $o) {
+                ->get(['id', 'order_no', 'items_json']) as $o) {
                 $oid = (int) $o->id;
                 if (isset($invoiced[$oid])) { continue; }        // already counted on its invoice
 
@@ -288,6 +381,7 @@ final class JubaStockCapability implements ProcessCapability
                 if (is_string($ij)) { $ij = json_decode($ij, true); }
                 if (! is_array($ij) || $ij === []) { continue; }
 
+                $ono = (string) ($o->order_no ?: ('#' . $oid));
                 foreach ($ij as $it) {
                     if (! is_array($it)) { continue; }
                     $q = (float) ($it['qty'] ?? 0);
@@ -297,9 +391,16 @@ final class JubaStockCapability implements ProcessCapability
                         // a lump-sum or free-text line: match it by name like an invoice line, or
                         // report it. Never guessed.
                         $pid = $byName[$this->normName((string) ($it['name'] ?? ''))] ?? null;
-                        if ($pid === null) { $unmatched++; $unmatchedQty += $q; continue; }
+                        if ($pid === null) {
+                            $unmatched++; $unmatchedQty += $q;
+                            $d['miss'][] = ['doc' => $ono, 'name' => trim((string) ($it['name'] ?? '(no name)')), 'qty' => $q];
+                            continue;
+                        }
                     }
                     $sold[$pid] = ($sold[$pid] ?? 0) + $q;
+                    $d['ord'][$pid] = ($d['ord'][$pid] ?? 0) + $q;
+                    $d['ordLines']++; $d['ordUnits'] += $q;
+                    $d['ordNos'][$oid] = $ono;
                     $fromJson[$oid] = true;
                 }
             }
@@ -314,18 +415,25 @@ final class JubaStockCapability implements ProcessCapability
                 ->where('order_items.tenant_id', $tid)
                 ->whereRaw("lower(coalesce(orders.status,'')) not in ('cancelled','canceled','rejected','void')")
                 ->whereNotNull('order_items.product_id')
-                ->get(['order_items.product_id', 'order_items.qty', 'order_items.order_id']) as $r) {
+                ->get(['order_items.product_id', 'order_items.qty', 'order_items.order_id', 'orders.order_no']) as $r) {
                 $oid = (int) $r->order_id;
                 if (isset($invoiced[$oid]) || isset($fromJson[$oid])) { continue; }
                 $q = (float) $r->qty;
                 if ($q <= 0) { continue; }
-                $sold[(int) $r->product_id] = ($sold[(int) $r->product_id] ?? 0) + $q;
+                $pid = (int) $r->product_id;
+                $sold[$pid] = ($sold[$pid] ?? 0) + $q;
+                $d['ord'][$pid] = ($d['ord'][$pid] ?? 0) + $q;
+                $d['ordLines']++; $d['ordUnits'] += $q;
+                $d['ordNos'][$oid] = (string) ($r->order_no ?: ('#' . $oid));
             }
         } catch (\Throwable $e) {
             // the invoiced half stands
         }
 
-        return [$sold, $unmatched, round($unmatchedQty, 3)];
+        $d['invUnits'] = round($d['invUnits'], 3);
+        $d['ordUnits'] = round($d['ordUnits'], 3);
+
+        return [$sold, $unmatched, round($unmatchedQty, 3), $d];
     }
 
     /** Case-folded, whitespace-collapsed. Nothing else — no stemming, no fuzz. */
