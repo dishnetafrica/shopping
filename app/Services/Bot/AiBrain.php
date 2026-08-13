@@ -41,6 +41,13 @@ class AiBrain
 
     public function handle(Tenant $tenant, Conversation $convo, string $from, string $text, WhatsAppGateway $gateway, array $media = []): bool
     {
+        // v4.91 — WHICH CHANNEL IS THIS? The gateway already answers it: web chat satisfies the
+        // WhatsAppGateway contract with a CollectorGateway that gathers replies for an HTTP response
+        // instead of sending them to WhatsApp. Reading it here means no caller has to change and the
+        // two paths cannot disagree about where a message came from. Everything downstream that used
+        // to assume WhatsApp — the order row, the persona, the usage log — reads this.
+        $channel = $gateway instanceof \App\Services\Bot\CollectorGateway ? 'web' : 'whatsapp';
+
         // 1. deterministic signals + staff alerts, BEFORE the AI
         $this->fireAlerts($tenant, $from, $text, $convo, $gateway, $this->detectSignals($text));
 
@@ -100,7 +107,7 @@ class AiBrain
         $photoBlock = $photoMatch
             ? app(\App\Services\Bot\PhotoCatalogueMatch::class)->promptBlock($tenant, $photoMatch)
             : '';
-        $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant)
+        $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant, $channel)
             .\App\Services\Relationship\ProfileContext::block($tenant, $from)
             .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')
             .$photoBlock]], $prior, [$current]);
@@ -112,6 +119,7 @@ class AiBrain
             if ($imageB64 !== '' && ! str_contains($model, '4o')) $model = 'gpt-4o-mini';
             $tenantKey = (string) $tenant->setting('openai_api_key', '');
             $client    = $tenantKey !== '' ? \OpenAI::client($tenantKey) : OpenAI::getFacadeRoot();
+            $t0        = microtime(true);   // round-trip latency, logged with the usage line below
             $resp      = $client->chat()->create([
                 'model'       => $model,
                 'temperature' => 0.3,
@@ -130,9 +138,11 @@ class AiBrain
                     $cached = null;
                     try { $cached = $u->promptTokensDetails->cachedTokens ?? null; } catch (\Throwable $e2) {}
                     \App\Support\BotTrace::log($tenant->id, 'ai', $from, 'ai_usage',
-                        'in=' . (int) ($u->promptTokens ?? 0)
+                        'channel=' . $channel
+                        . ' in=' . (int) ($u->promptTokens ?? 0)
                         . ' out=' . (int) ($u->completionTokens ?? 0)
                         . ' cached=' . ($cached === null ? 'n/a' : (int) $cached)
+                        . ' ms=' . (int) round((microtime(true) - $t0) * 1000)
                         . ' model=' . $model);
                 }
             } catch (\Throwable $e) { /* telemetry must never break a reply */ }
@@ -205,7 +215,7 @@ class AiBrain
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
         //     The machine block is always stripped so the customer never sees it.
-        $reply = $this->captureOrder($tenant, $convo, $from, $reply);
+        $reply = $this->captureOrder($tenant, $convo, $from, $reply, $channel);
 
         // 3b. PDF quotation — driven by an explicit <<QUOTE {json}>> line the model emits ONLY once
         //     it has the specific item(s) + quantity (mirrors the ORDER flow). This replaces the old
@@ -995,7 +1005,7 @@ class AiBrain
         return trim(implode("\n", $out));
     }
 
-    private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply): string
+    private function captureOrder(Tenant $tenant, Conversation $convo, string $from, string $reply, string $channel = 'whatsapp'): string
     {
         $pos = stripos($reply, '<<ORDER');
         if ($pos === false) {
@@ -1063,7 +1073,11 @@ class AiBrain
             $order->location       = $delivery;
             $order->notes          = $note;
             $order->status         = 'New';
-            $order->channel        = 'whatsapp';
+            // v4.91 — this was hardcoded 'whatsapp'. Web chat runs through the SAME capture path, so
+            // every website order was filed as a WhatsApp order and web sales were invisible in any
+            // report reading orders.channel. The channel is derived once, in handle(), from the
+            // gateway the caller supplied.
+            $order->channel        = $channel;
             $order->save(); // OrderObserver: order_no + track_token + NotifyOwnerNewOrder (staff alert)
 
             // Mirror the lines into order_items so the V3 order screen / margin / analytics see
@@ -1525,7 +1539,7 @@ class AiBrain
     /* ---------------------------------------------------------------- prompt assembly */
 
     /** The "big prompt": persona + rules + company knowledge + FAQ + grounded catalogue. */
-    private function systemPrompt(Tenant $tenant): string
+    private function systemPrompt(Tenant $tenant, string $channel = 'whatsapp'): string
     {
         $isMfr   = Vertical::of($tenant) === Vertical::MANUFACTURER;
         $persona = (string) $tenant->setting('ai_persona', '');
@@ -1554,16 +1568,38 @@ class AiBrain
         $overview = $this->catalogueOverview($tenant);
         $greeting = trim((string) $tenant->setting('bot_greeting', ''));
 
-        $p  = ($persona !== '' ? $persona : 'You are a helpful WhatsApp sales & support assistant.') . "\n\n";
+        $p  = ($persona !== '' ? $persona : 'You are a helpful sales & support assistant for this shop.') . "\n\n";
+
+        // v4.91 — WHICH CHANNEL. The tenant's own persona is written for one channel (tenant 17's
+        // opens "You are the Family Shoppers assistant on WhatsApp"), and web chat runs the SAME
+        // brain, so website visitors were being addressed as if they were on WhatsApp. Rewriting the
+        // owner's persona is not ours to do; overriding its channel assumptions is. Static per
+        // channel, so it stays inside the cacheable prefix.
+        if ($channel === 'web') {
+            $p .= "CHANNEL — YOU ARE ON THE SHOP'S WEBSITE CHAT, NOT WHATSAPP.\n"
+                . "- Wherever the persona above says WhatsApp, read it as this website chat window. Keep the same voice.\n"
+                . "- The customer is on the website looking at the shop right now; they can see product cards and a cart.\n"
+                . "- Do NOT tell them to message you on WhatsApp. They already found you. The only exceptions are when they\n"
+                . "  ask for it themselves, or when you are handing the conversation to a person.\n"
+                . "- Replies can be a little fuller than a WhatsApp message, but still short: no long lists, one idea at a time.\n\n";
+        }
 
         // v4.77 (M-CHAT-0) — the brain gets a clock. Before this, the prompt carried NO current
         // time, timezone or business hours: "are you open now?" and "deliver tomorrow" were
         // unanchored guesses. Everything below is server-computed; the model is forbidden to
         // improvise time. Zone: explicit setting > shop city > platform default.
+        //
+        // v4.91 — the clock is BUILT here and APPENDED LAST (see the end of this method). It used to
+        // sit second, about 477 tokens in, and it changes every minute — so the prompt diverged from
+        // itself long before OpenAI's 1,024-token minimum for prefix caching, and roughly 15,000
+        // tokens of entirely static catalogue and rules were re-billed on every single call with
+        // nothing ever cached. Moving the one volatile block to the end makes the rest a stable
+        // prefix. Nothing about what the model is told changes — only the order it is told in, and
+        // the end of a long context is a stronger position for a rule than the middle.
         $tz = TimeContext::zone((string) $tenant->setting('timezone', ''), (string) $tenant->setting('city', ''));
-        $p .= TimeContext::block(new \DateTimeImmutable('now', new \DateTimeZone($tz)), $tz,
-            trim((string) $tenant->setting('business_hours', '')));
-        $p .= "- TIME RULES: NEVER guess or invent the date, day, hour, or opening status — use ONLY the CURRENT TIME block. Resolve \"today\", \"tomorrow\", \"Monday\", \"this evening\", \"next week\" from it. If asked \"are you open?\" and it says YES/NO, answer that; if it says unknown, share the business-hours text as written (or say you'll confirm the hours) and NEVER state open/closed yourself. Orders can be placed any time — outside hours say the team will follow up when back.\n\n";
+        $timeBlock = TimeContext::block(new \DateTimeImmutable('now', new \DateTimeZone($tz)), $tz,
+            trim((string) $tenant->setting('business_hours', '')))
+            . "- TIME RULES: NEVER guess or invent the date, day, hour, or opening status — use ONLY the CURRENT TIME block. Resolve \"today\", \"tomorrow\", \"Monday\", \"this evening\", \"next week\" from it. If asked \"are you open?\" and it says YES/NO, answer that; if it says unknown, share the business-hours text as written (or say you'll confirm the hours) and NEVER state open/closed yourself. Orders can be placed any time — outside hours say the team will follow up when back.\n\n";
 
         // Explicit location & currency context — overrides any default assumption (e.g. Kampala)
         // baked into a persona. Built from the tenant's own setup so the bot speaks to the right
@@ -1746,6 +1782,12 @@ class AiBrain
             $p .= "CATALOGUE RANGE (the shop's full breadth — you stock ALL of this; use it to answer 'what do you sell', to reassure customers of the range, and to guide them to the right category. For exact names/prices use the PRODUCTS list below):\n" . $overview . "\n\n";
         }
         $p .= "PRODUCTS (a detailed sample with exact names + prices = source of truth for quoting; the full range is larger — see CATALOGUE RANGE. If a customer names an item not shown here, confirm it or offer a special order rather than denying we stock it):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
+
+        // The one volatile block, last — everything above this line is identical call after call for
+        // this tenant and channel, which is the whole point. Keep it here: anything appended after a
+        // per-request value cannot be cached, so a new static block belongs ABOVE this, never below.
+        $p .= "\n" . $timeBlock;
+
         return $p;
     }
 
