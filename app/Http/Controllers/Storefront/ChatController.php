@@ -241,10 +241,11 @@ class ChatController extends Controller
             // we look those up for real and card ONLY what exists. No row, no card — a wrongly
             // starred phrase costs nothing. Explicit tenant scoping, console-rule style.
             $cards = [];
+            $msgs  = $collector->messages();
+            $cur   = strtoupper(trim((string) $tenant->setting('currency', 'UGX')));
             try {
-                $names = \App\Services\Bot\ChatCards::starredNames($collector->messages());
+                $names = \App\Services\Bot\ChatCards::starredNames($msgs);
                 if ($names !== []) {
-                    $cur = strtoupper(trim((string) $tenant->setting('currency', 'UGX')));
                     $rows = \App\Models\Product::withoutGlobalScopes()
                         ->where('tenant_id', $tenant->id)->whereIn('name', $names)->get()->keyBy('name');
                     // v4.82 — second pass for the misses: candidates fetched by the name's
@@ -285,15 +286,127 @@ class ChatController extends Controller
             } catch (\Throwable $e) {
                 $cards = [];                    // cards are a bonus; the reply never dies for them
             }
+
+            // v4.97 — a photo reply becomes a REAL card here too. See cardImages().
+            try {
+                $msgs = $this->cardImages($tenant, $msgs, $cards, $cur);
+            } catch (\Throwable $e) {
+                $msgs = $collector->messages();  // same rule: the reply never dies for a card
+            }
+
             if ($cards !== []) {
                 BotTrace::log($tenant->id, 'web', $from, 'web_cards', (string) count($cards));
             }
 
             return response()->json(WebChatPolicy::shape(
-                $collector->messages(), $ok, (array) ($convo->cart ?? []), $sid, false, false, $cards));
+                $msgs, $ok, (array) ($convo->cart ?? []), $sid, false, false, $cards));
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * v4.97 — a product PHOTO reply becomes a real card on the web.
+     *
+     * ProductImageResponder answers a product question the WhatsApp way: sendImage(url, caption).
+     * That is the correct shape there — on WhatsApp a photo with a caption IS the product card. In
+     * a browser the same thing arrived as a bare <img> with a paragraph under it: no pack size, no
+     * MOQ, no price formatting and — the part that costs money — NO ADD BUTTON. The card renderer
+     * was sitting right there unused, because ChatCards::starredNames() only ever reads messages of
+     * type 'text', and a photo's caption is not one.
+     *
+     * The join is by IMAGE PATH, not by reading the caption: an exact equality against
+     * products.image_url for this tenant. That matters beyond tidiness — it is the one route that
+     * still works for a product whose NAME contains an asterisk ("Aluminium Foil 45CM*150/300"),
+     * which the star protocol cannot express and therefore can never card. No row, or two rows
+     * sharing one photo, means the image is left exactly as it arrived.
+     *
+     * Gallery shots ("more photos") live in gallery_1..3 and marketplace Special Order photos sit
+     * on foreign hosts, so neither can match image_url. Both keep their plain bubble, which is
+     * right: neither is a thing to add to a cart.
+     *
+     * @param  array<int,array<string,mixed>>  $msgs
+     * @param  array<int,array<string,mixed>>  $cards  appended to, in place
+     * @return array<int,array<string,mixed>>  the rewritten message list
+     */
+    private function cardImages(Tenant $tenant, array $msgs, array &$cards, string $cur): array
+    {
+        // ProductImageResponder::absUrl() sends "https://<domain>/<image_url>", while the column
+        // itself may hold "/storage/x.jpg", "storage/x.jpg" or a full URL depending on how the
+        // product was created. The SQL asks for every spelling, and the comparison afterwards is
+        // done on a normalised key, so a missing or extra leading slash cannot silently cost a card.
+        $key = static function (string $v): string {
+            $v = trim($v);
+            if ($v === '') return '';
+            $p = preg_match('#^https?://#i', $v) ? (string) (parse_url($v, PHP_URL_PATH) ?: '') : $v;
+
+            return $p === '' ? '' : '/' . ltrim($p, '/');
+        };
+
+        $want = [];
+        foreach ($msgs as $m) {
+            if (($m['type'] ?? '') !== 'image') continue;
+            $u = trim((string) ($m['url'] ?? ''));
+            if ($u === '') continue;
+            $want[$u] = true;
+            $k = $key($u);
+            if ($k !== '') { $want[$k] = true; $want[ltrim($k, '/')] = true; }
+        }
+        if ($want === []) return $msgs;
+
+        $byUrl = [];
+        $rows = \App\Models\Product::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('image_url', array_keys($want))
+            ->get();
+        foreach ($rows as $p) {
+            $k = $key((string) $p->image_url);
+            if ($k === '') continue;
+            // two products sharing one photo is ambiguous — card neither of them
+            $byUrl[$k] = array_key_exists($k, $byUrl) ? null : $p;
+        }
+        if ($byUrl === []) return $msgs;
+
+        $seen = [];
+        foreach ($cards as $c) $seen[(int) ($c['id'] ?? 0)] = true;
+
+        $new = [];              // held back until we know the rewrite is safe to keep
+        $out = [];
+        foreach ($msgs as $m) {
+            if (($m['type'] ?? '') !== 'image') { $out[] = $m; continue; }
+
+            $k = $key(trim((string) ($m['url'] ?? '')));
+            $p = ($k !== '' && array_key_exists($k, $byUrl)) ? $byUrl[$k] : null;
+
+            if ($p === null) { $out[] = $m; continue; }
+
+            if (! isset($seen[(int) $p->id])) {
+                $seen[(int) $p->id] = true;
+                $new[] = \App\Services\Bot\ChatCards::card([
+                    'id' => $p->id, 'name' => $p->name, 'image_url' => (string) $p->image_url,
+                    'price' => $p->price, 'currency' => $cur, 'unit_label' => (string) $p->unit_label,
+                    'pack_size' => $p->pack_size, 'moq' => $p->moq,
+                ]);
+            }
+
+            // The caption's FIRST line is the name and price, which the card now renders properly.
+            // Everything AFTER it — weight variants, "Reply with:", "Goes well with:" — is real
+            // information the card has no room for, so it stays as an ordinary bubble instead of
+            // being thrown away with the photo.
+            $lines = preg_split('/\R/u', (string) ($m['caption'] ?? '')) ?: [];
+            array_shift($lines);
+            $rest = trim(implode("\n", $lines));
+            if ($rest !== '') $out[] = ['type' => 'text', 'text' => $rest];
+        }
+
+        // A turn that was ONLY photos would now be an empty message list, and shape() reads that as
+        // "the brain said nothing" and apologises on its behalf. Keep the originals in that case —
+        // and drop the cards with them, so the customer never sees the photo and its card twice.
+        if ($out === []) return $msgs;
+
+        foreach ($new as $c) $cards[] = $c;
+
+        return $out;
     }
 
     /**

@@ -1423,7 +1423,12 @@ body.chat-only #whChat .qa{ display:none !important; }
     font:inherit; font-size:14px; color:#111827;
   }
   body.chat-only #coRail button:hover{ background:#f9fafb; border-color:#d1d5db; }
-  body.chat-only #coRail .ic svg, body.chat-only #coRail .ic img{ width:18px; height:18px; }
+  body.chat-only #coRail .ic{
+    width:22px; height:22px; flex:0 0 22px; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; border-radius:6px;
+  }
+  body.chat-only #coRail .ic svg{ width:18px; height:18px; }
+  body.chat-only #coRail .ic img{ width:100%; height:100%; object-fit:cover; background:#f3f4f6; }
   body.chat-only #coRail .co-bens{ margin-top:16px; border-top:1px solid #eef0f2; padding-top:14px; }
   body.chat-only #coRail .co-ben{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; font-size:13px; }
   body.chat-only #coRail .co-ben b{ display:block; font-size:13px; color:#111827; }
@@ -1468,9 +1473,23 @@ body.chat-only #whChat .qa{ display:none !important; }
 
   /* v4.96 — reading widths. Full-bleed bubbles across a 900px column read as a document, not a
      conversation; these are the proportions a messaging app uses. */
-  body.chat-only #whChatBd{ padding-left:22px; padding-right:22px; }
+  /* v4.97 — the conversation is a BLOCK here, not a flex column. Card rows are inline-flex so
+     they can sit three across; inside a flex column they cannot — flex items stack whatever their
+     own display says, so the "3 across" rule of v4.96 could never have taken effect. The column's
+     8px gap is replaced by a margin, since block layout has no gap. */
+  body.chat-only #whChatBd{ display:block; padding-left:22px; padding-right:22px; }
+  body.chat-only #whChatBd > .row{ margin-bottom:8px; }
   body.chat-only #whChatBd .row.bot .bub{ max-width:78%; }
   body.chat-only #whChatBd .row:not(.bot) .bub{ max-width:66%; }
+
+  /* v4.97 — THE WIDE EMPTY BOX. A photo bubble sizes to its CAPTION, and captions carry variant
+     lines and "Goes well with: <two long product names>". The bubble stretched to 78% of a 900px
+     column while the picture stayed capped at 210px, so the photo sat in the top-left corner of a
+     mostly-empty white rectangle. Cap the bubble to card width and let the picture fill it.
+     Photos that survive as photos are galleries and Special Order shots — see cardImages(). */
+  body.chat-only #whChatBd .row.bot .bub.im{ max-width:300px; padding:8px; }
+  body.chat-only #whChatBd .row.bot .bub.im img{ max-width:100%; border-radius:10px; }
+  body.chat-only #whChatBd .row.bot .bub.im span{ font-size:13px; padding:8px 2px 2px; }
 
   /* three product cards across, degrading 3 → 2 → 1 with the column width */
   body.chat-only #whChatBd .row.cardrow{
@@ -4760,14 +4779,32 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
        sends an ordinary chat message, the same path the launcher chips use. */
     try{
       if(document.getElementById('coRail')) return;
+      /* v4.97 — business_banners is an OPTIONAL setting, and a shop that has never filled it in is
+         not a broken shop. Building the rail from it ALONE meant the whole left column silently
+         depended on a feature this tenant may not use. Businesses when they exist; otherwise the
+         shop's OWN category list (CATS — built from the live catalogue in the same fetch, sorted by
+         the tenant's category_order). Both are real data; nothing here is hardcoded, and an empty
+         catalogue still renders no rail. */
       var list = (typeof activeBiz === 'function') ? activeBiz() : [];
-      if(!list || !list.length) return;
+      var head = '', items = [];
+      if(list && list.length){
+        head = 'Shop by Business';
+        items = list.map(function(b){
+          return { label:(b.label||b.id),
+                   icon:((typeof bizIcon==='function')?bizIcon(b.icon||b.id):''), img:'' };
+        });
+      } else if(typeof CATS !== 'undefined' && CATS && CATS.length){
+        head = 'Shop by Category';
+        items = CATS.slice(0,10).map(function(c){ return { label:c.name, icon:'', img:(c.img||'') }; });
+      }
+      if(!items.length) return;
       var r = document.createElement('aside');
       r.id='coRail'; r.className='co-rail';
-      r.innerHTML = '<div class="co-railh">Shop by Business</div>' + list.map(function(b){
-        return '<button onclick="whChatSend('+jk('Show me '+(b.label||b.id))+')">'
-             + '<span class="ic">'+((typeof bizIcon==='function')?bizIcon(b.icon||b.id):'')+'</span>'
-             + '<span>'+esc(b.label||b.id)+'</span></button>';
+      r.innerHTML = '<div class="co-railh">'+esc(head)+'</div>' + items.map(function(b){
+        var ic = b.icon ? b.icon : (b.img ? '<img loading="lazy" src="'+esc(b.img)+'" alt="">' : '');
+        return '<button onclick="whChatSend('+jk('Show me '+b.label)+')">'
+             + '<span class="ic">'+ic+'</span>'
+             + '<span>'+esc(b.label)+'</span></button>';
       }).join('');
       /* Benefits under the categories — from SHOP.home.benefits, which is the very data your
          storefront hero already renders ("FREE DELIVERY · in Juba · Min. 5 Cartons"). Nothing is
