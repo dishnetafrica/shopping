@@ -1362,24 +1362,19 @@ button{ -webkit-tap-highlight-color:transparent }
 @media(prefers-reduced-motion:reduce){.scanov .scanline{animation:none;top:50%}}
 </style>
 <style id="chatOnlyCss">
-/* v4.93.1 — /chat mode.
-   The first attempt enumerated selectors (header, nav, .hero, .btmnav, footer…) and hid nothing,
-   because this page's chrome is .top, #delvBar, .searchwrap, #dgridwrap, #footer, #cartbar and
-   nav.btmnav. Guessing class names against a 360KB page was the wrong method. So: hide EVERY direct
-   child of body and name the handful that must survive. A new storefront section added later is
-   hidden automatically instead of leaking into the chat.
+/* v4.95 — /chat presentation. Structure only (pass 1); spacing and proportions come after a
+   screenshot, because CSS written blind against a 370KB page is how the first attempt hid nothing.
 
-   Kept alive on purpose:
-     #whChat   the conversation itself
-     #sheet    the cart sheet — "View Cart" inside the chat opens THIS. Hiding it breaks the cart.
-     #cbToast  toasts (added to cart, errors)
-     #svoicebar / #searchOverlay  the dictation mic surface
-   Nothing here disables script, so prod(), cartAdd(), saveCart(), CART and every chat path are
-   untouched. Remove the body class and the shop is back. */
-body.chat-only > *:not(#whChat):not(#sheet):not(#cbToast):not(#searchOverlay):not(#svoicebar):not(script):not(style):not(noscript):not(template){
+   Rule 1: hide every direct child of body, then name what survives. Enumerating a page's own class
+   names was the earlier mistake — this cannot miss, and a section added next month is hidden
+   automatically. #sheet survives because View Cart opens it. #dcart is NOT in the survivor list:
+   it belongs to the storefront and is deliberately left alone (option b). */
+body.chat-only > *:not(#whChat):not(#sheet):not(#cbToast):not(#searchOverlay):not(#svoicebar):not(#coRail):not(#coCart):not(script):not(style):not(noscript):not(template){
   display:none !important;
 }
-body.chat-only{ background:#fff; overflow:hidden; }
+body.chat-only{ background:#f7f8fa; overflow:hidden; }
+
+/* MOBILE FIRST — the single column you already tested. Rails do not exist here. */
 body.chat-only #whChat{
   position:fixed !important; inset:0 !important;
   width:100% !important; max-width:none !important;
@@ -1387,48 +1382,92 @@ body.chat-only #whChat{
   margin:0 !important; border-radius:0 !important; box-shadow:none !important;
   z-index:9999; display:flex !important; flex-direction:column;
 }
-/* the composer rides above the on-screen keyboard */
 body.chat-only #whChat .wh-in, body.chat-only #whChat .whin, body.chat-only #whChat form{
   padding-bottom:calc(8px + env(safe-area-inset-bottom));
 }
-/* the cart sheet must sit ON TOP of a full-screen chat, not behind it */
 body.chat-only #sheet{ z-index:10000 !important; }
-/* the way out, and the two desktop rails */
+body.chat-only #coRail, body.chat-only #coCart{ display:none; }
+
+/* the way out, in the header */
 body.chat-only #whChat .hd .co-shop{
   margin-left:auto; margin-right:8px; color:#fff; opacity:.92; font-size:13px;
   text-decoration:none; white-space:nowrap; border-bottom:1px solid rgba(255,255,255,.45);
 }
 body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
-body.chat-only .co-rail, body.chat-only #dcart.co-cart{ display:none !important; }
-@media (min-width:1024px){
-  body.chat-only .co-rail{
-    display:block !important; position:fixed; left:0; top:0; bottom:0; width:250px;
-    overflow:auto; padding:16px 12px; border-right:1px solid #e5e7eb; background:#fff; z-index:9998;
-  }
-  body.chat-only .co-rail .co-railh{ font-weight:700; font-size:13px; margin:4px 6px 10px; color:#374151; }
-  body.chat-only .co-rail button{
-    display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
-    background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; margin-bottom:8px;
-    font:inherit; font-size:14px;
-  }
-  body.chat-only .co-rail button:hover{ background:#f9fafb; }
-  body.chat-only .co-rail .ic svg, body.chat-only .co-rail .ic img{ width:18px; height:18px; }
-  body.chat-only #dcart.co-cart{
-    display:block !important; position:fixed; right:0; top:0; bottom:0; width:320px;
-    overflow:auto; padding:16px 12px; border-left:1px solid #e5e7eb; background:#fff; z-index:9998;
-  }
+
+/* TABLET (>=768): the action buttons move up into the header, one column still. */
+@media (min-width:768px){
+  body.chat-only #whChat .qa{ order:-1; border-bottom:1px solid #e5e7eb; border-top:0; }
 }
-@media (min-width:900px){
+
+/* DESKTOP (>=1024): three columns — 250 / flexible / 320. */
+@media (min-width:1024px){
+  body.chat-only #coRail{
+    display:block; position:fixed; left:0; top:0; bottom:0; width:250px; overflow:auto;
+    padding:18px 14px; background:#fff; border-right:1px solid #e5e7eb; z-index:9998;
+  }
+  body.chat-only #coRail .co-railh{ font-weight:700; font-size:14px; margin:2px 4px 12px; color:#111827; }
+  body.chat-only #coRail button{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
+    background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:11px 12px; margin-bottom:8px;
+    font:inherit; font-size:14px; color:#111827;
+  }
+  body.chat-only #coRail button:hover{ background:#f9fafb; border-color:#d1d5db; }
+  body.chat-only #coRail .ic svg, body.chat-only #coRail .ic img{ width:18px; height:18px; }
+  body.chat-only #coRail .co-bens{ margin-top:16px; border-top:1px solid #eef0f2; padding-top:14px; }
+  body.chat-only #coRail .co-ben{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; font-size:13px; }
+  body.chat-only #coRail .co-ben b{ display:block; font-size:13px; color:#111827; }
+  body.chat-only #coRail .co-ben span{ color:#6b7280; }
+
+  body.chat-only #coCart{
+    display:block; position:fixed; right:0; top:0; bottom:0; width:320px; overflow:auto;
+    padding:18px 14px; background:#fff; border-left:1px solid #e5e7eb; z-index:9998;
+  }
+  body.chat-only #coCart .cch{ display:flex; align-items:center; gap:6px; font-weight:700; font-size:15px; margin-bottom:12px; }
+  body.chat-only #coCart .cch span{ color:#6b7280; font-weight:600; }
+  body.chat-only #coCart .ccclr{ margin-left:auto; background:0; border:0; color:#dc2626; cursor:pointer; font:inherit; font-size:12px; text-decoration:underline; }
+  body.chat-only #coCart .ccempty{ color:#6b7280; font-size:13px; line-height:1.6; border:1px dashed #e5e7eb; border-radius:12px; padding:18px; text-align:center; }
+  body.chat-only #coCart .ccline{ display:flex; gap:10px; align-items:flex-start; border:1px solid #eef0f2; border-radius:12px; padding:10px; margin-bottom:10px; }
+  body.chat-only #coCart .ccimg{ width:48px; height:48px; flex:0 0 48px; border-radius:8px; overflow:hidden; background:#f3f4f6; }
+  body.chat-only #coCart .ccimg img{ width:100%; height:100%; object-fit:contain; }
+  body.chat-only #coCart .ccmid{ flex:1; min-width:0; }
+  body.chat-only #coCart .ccmid b{ display:block; font-size:13px; line-height:1.35; }
+  body.chat-only #coCart .ccpack{ display:block; color:#6b7280; font-size:12px; margin:2px 0 6px; }
+  body.chat-only #coCart .ccqty{ display:inline-flex; align-items:center; border:1px solid #e5e7eb; border-radius:8px; overflow:hidden; }
+  body.chat-only #coCart .ccqty button{ width:26px; height:26px; background:#fff; border:0; cursor:pointer; font-size:15px; line-height:1; }
+  body.chat-only #coCart .ccqty span{ min-width:26px; text-align:center; font-size:13px; }
+  body.chat-only #coCart .ccamt{ font-weight:700; font-size:13px; white-space:nowrap; }
+  body.chat-only #coCart .ccsum{ border-top:1px solid #eef0f2; margin-top:6px; padding-top:12px; }
+  body.chat-only #coCart .ccrow, body.chat-only #coCart .ccdel{ display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:8px; color:#374151; }
+  body.chat-only #coCart .ccdel b.ok{ color:#16a34a; }
+  body.chat-only #coCart .ccdel b.mut{ color:#6b7280; font-weight:600; }
+  body.chat-only #coCart .ccrow.tot{ font-size:15px; color:#111827; }
+  body.chat-only #coCart .ccgo{ width:100%; margin-top:10px; padding:12px; border:0; border-radius:10px; cursor:pointer;
+    background:var(--green-d, #15803d); color:#fff; font:inherit; font-weight:700; }
+
+  /* the conversation sits between the two rails */
   body.chat-only #whChat{
-    inset:0 !important; left:50% !important; transform:translateX(-50%);
-    width:min(560px, 100%) !important;
+    left:250px !important; right:320px !important; width:auto !important;
     border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb;
   }
-  /* leave room for whichever rails actually rendered */
-  @media (min-width:1024px){
-    body.chat-only.co-wide #whChat{ left:calc(250px + (100% - 250px - 320px)/2 + 0px); }
-  }
+  body.chat-only:not(.co-wide) #whChat{ left:0 !important; }
+
+  /* three product cards across, where there is width for them */
+  body.chat-only #whChatBd .row.cardrow{ display:inline-flex; width:auto; max-width:32%; vertical-align:top; margin-right:8px; }
+  body.chat-only #whChatBd .row.cardrow .av{ display:none; }
+  body.chat-only #whChatBd .row.cardrow .bub.card{ width:100%; }
 }
+
+  /* the two action buttons, now living in the header */
+  body.chat-only #whChat .hd .co-acts{ display:flex; gap:8px; margin-left:12px; }
+  body.chat-only #whChat .hd .co-acts button,
+  body.chat-only #whChat .hd .co-acts a{
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+    background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.28);
+    border-radius:999px; padding:7px 12px; font:inherit; font-size:12.5px; text-decoration:none; cursor:pointer;
+  }
+  body.chat-only #whChat .hd .co-acts svg{ width:15px; height:15px; }
+  @media (max-width:767px){ body.chat-only #whChat .hd .co-acts{ display:none; } }
 </style>
 </head>
 <body>
@@ -3613,7 +3652,7 @@ function whChatPaint(m,save){
   /* v4.84 — the card goes visual (owner's mockup): photo left, bold price with unit, its own
      MOQ line, one full-width Add to Cart. The honesty branches are UNCHANGED: price>0 or
      "Price on request"; pack/moq render only when the server sent them (>1), never invented. */
-  else if(m.type==='card'&&m.p) h='<div class="row bot">'+whChatAva()+'<div class="bub card">'
+  else if(m.type==='card'&&m.p) h='<div class="row bot cardrow">'+whChatAva()+'<div class="bub card">'
     +(m.p.image?'<img loading="lazy" src="'+esc(m.p.image)+'" alt="">':'')
     +'<div class="ci"><b>'+esc(m.p.name||'')+'</b>'
     +(m.p.pack?'<span class="cm">Carton of '+(+m.p.pack)+' pcs</span>':'')
@@ -4653,6 +4692,23 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       hd.insertBefore(a, x || null);
     }
 
+    /* v4.95 — "Talk to a person" and "Continue on WhatsApp" belong in the header on a page where the
+       chat IS the page (the reference puts them top-right). Same elements, same handlers — MOVED,
+       not rebuilt, so nothing about what they do changes. */
+    try{
+      var qaEl = p.querySelector('.qa');
+      if(qaEl && !hd.querySelector('.co-acts')){
+        var box = document.createElement('div'); box.className='co-acts';
+        Array.prototype.slice.call(qaEl.children).forEach(function(el){
+          var txt = (el.textContent||'').toLowerCase();
+          if(txt.indexOf('view cart') >= 0) return;      // stays below; the rail shows the cart
+          box.appendChild(el);
+        });
+        if(box.children.length) hd.appendChild(box);
+        if(!qaEl.children.length) qaEl.style.display='none';
+      }
+    }catch(e){}
+
     /* View Cart called whChatHide() first — correct on the storefront, wrong here: it would hide the
        chat and reveal the blank page behind it. Open the sheet over the chat instead. */
     var qa = p.querySelector('.qa');
@@ -4666,10 +4722,8 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
      exactly as on a phone. */
   function chatOnlyDesk(){
     if(!window.matchMedia || !window.matchMedia('(min-width:1024px)').matches) return;
-    try{
-      var dc = document.getElementById('dcart');
-      if(dc && dc.parentNode !== document.body){ document.body.appendChild(dc); dc.classList.add('co-cart'); }
-    }catch(e){}
+    /* v4.95 — option (b): #dcart is the STOREFRONT's cart and is left exactly where it is. The chat
+       gets its own VIEW over the same CART object (coCart below) — one cart, two presentations. */
     /* Left rail from the shop's REAL business list (settings.business_banners → activeBiz()). No
        hardcoded categories: if the setting is empty the rail simply does not render. Clicking one
        sends an ordinary chat message, the same path the launcher chips use. */
@@ -4684,8 +4738,94 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
              + '<span class="ic">'+((typeof bizIcon==='function')?bizIcon(b.icon||b.id):'')+'</span>'
              + '<span>'+esc(b.label||b.id)+'</span></button>';
       }).join('');
+      /* Benefits under the categories — from SHOP.home.benefits, which is the very data your
+         storefront hero already renders ("FREE DELIVERY · in Juba · Min. 5 Cartons"). Nothing is
+         written here that the shop does not already say elsewhere; if the setting is empty, the
+         block does not render. */
+      try{
+        var bens = (SHOP.home && SHOP.home.benefits) ? SHOP.home.benefits : [];
+        if(bens && bens.length){
+          var bh = '<div class="co-bens">' + bens.map(function(b){
+            return '<div class="co-ben"><div><b>'+esc(b.t||'')+'</b>'
+                 + (b.s ? '<span>'+esc(b.s)+'</span>' : '')
+                 + (b.s2 ? '<span>'+esc(b.s2)+'</span>' : '')
+                 + '</div></div>';
+          }).join('') + '</div>';
+          r.insertAdjacentHTML('beforeend', bh);
+        }
+      }catch(e){}
       document.body.appendChild(r);
       document.body.classList.add('co-wide');
+    }catch(e){}
+  }
+
+  /* ---------------------------------------------------------------------------------------
+     v4.95 — the chat's CART VIEW. Option (b): this renders the SAME CART object the storefront
+     uses. There is no second cart, no second localStorage key, no second persistence path — every
+     button below calls bump()/openCart()/openCheckout(), the functions that already own that state.
+     #dcart is the storefront's panel and is not touched.
+     --------------------------------------------------------------------------------------- */
+  function coCartHTML(){
+    var items = (typeof cartItems === 'function') ? cartItems() : [];
+    if(!items.length){
+      return '<div class="cch">Your Cart</div>'
+           + '<div class="ccempty">Your cart is empty.<br><span>Start chatting to find products.</span></div>';
+    }
+    var sub = cartTotal();
+    var rows = items.map(function(i){
+      var pr = (typeof prod === 'function') ? (prod(i.name) || {}) : {};
+      var img = pr.image ? '<img loading="lazy" src="'+esc(pr.image)+'" alt="">' : '<span class="ph"></span>';
+      var pack = pr.pack ? ('Carton of '+(+pr.pack)+'pc') : (pr.unit ? esc(pr.unit) : '');
+      return '<div class="ccline">'
+        + '<div class="ccimg">'+img+'</div>'
+        + '<div class="ccmid"><b>'+esc(i.display||i.name)+'</b>'
+        + (pack ? '<span class="ccpack">'+pack+'</span>' : '')
+        + '<div class="ccqty">'
+        +   '<button aria-label="Less" onclick="bump('+jk(i.name)+',-1)">−</button>'
+        +   '<span>'+(+i.qty)+'</span>'
+        +   '<button aria-label="More" onclick="bump('+jk(i.name)+',1)">+</button>'
+        + '</div></div>'
+        + '<div class="ccamt">'+ugx(i.price*i.qty)+'</div>'
+        + '</div>';
+    }).join('');
+
+    /* DELIVERY — read from the storefront's own rule (activeFreeRule/_freeOver/freeQualified), never
+       hardcoded here. If the shop has no rule configured we say nothing rather than invent one; the
+       delivery contradiction is a business decision, not something a cart panel should settle. */
+    var del = '';
+    try{
+      var fo = (typeof _freeOver === 'function') ? _freeOver() : 0;
+      if(fo > 0){
+        del = (typeof freeQualified === 'function' && freeQualified(sub))
+          ? '<div class="ccdel"><span>Delivery</span><b class="ok">FREE</b></div>'
+          : '<div class="ccdel"><span>Delivery</span><b>'+ugx(fo-sub)+' more to qualify</b></div>';
+      } else {
+        del = '<div class="ccdel"><span>Delivery</span><b class="mut">confirmed by our team</b></div>';
+      }
+    }catch(e){ del = ''; }
+
+    return '<div class="cch">Your Cart <span>('+cartCount()+')</span>'
+         + '<button class="ccclr" onclick="if(typeof clearCart===\'function\'){clearCart()}else{CART={};saveCart();render();bar();}">Clear</button></div>'
+         + '<div class="cclines">'+rows+'</div>'
+         + '<div class="ccsum"><div class="ccrow"><span>Subtotal</span><b>'+ugx(sub)+'</b></div>'
+         + del
+         + '<div class="ccrow tot"><span>Total</span><b>'+ugx(sub)+'</b></div></div>'
+         + '<button class="ccgo" onclick="openCart()">View Cart &amp; Checkout</button>';
+  }
+  function coCartRender(){
+    var el = document.getElementById('coCart');
+    if(!el || !document.body.classList.contains('chat-only')) return;
+    try{ el.innerHTML = coCartHTML(); }catch(e){}
+  }
+  /* Re-render whenever the cart changes. bar() is called by every existing mutation path
+     (cartAdd, bump, clear, sheet edits), so wrapping it catches all of them without touching one. */
+  function coHookCart(){
+    if(window.__coHooked) return; window.__coHooked = true;
+    try{
+      var _bar = window.bar;
+      if(typeof _bar === 'function'){
+        window.bar = function(){ var r = _bar.apply(this, arguments); try{ coCartRender(); }catch(e){} return r; };
+      }
     }catch(e){}
   }
 
@@ -4693,6 +4833,13 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
     try{ whChatShow(); }catch(e){ return; }
     try{ chatOnlyRewire(); }catch(e){}
     try{ chatOnlyDesk(); }catch(e){}
+    try{
+      if(!document.getElementById('coCart')){
+        var cc = document.createElement('aside'); cc.id='coCart'; cc.className='co-cart2';
+        document.body.appendChild(cc);
+      }
+      coHookCart(); coCartRender();
+    }catch(e){}
     try{
       var seed = '';
       if(ctx.product)  seed = 'I am looking for product ' + ctx.product;
