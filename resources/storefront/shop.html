@@ -1421,10 +1421,30 @@ body.chat-only #whChat .qa{ display:none !important; }
 /* DESKTOP (>=1024): three columns — 250 / flexible / 320. */
 @media (min-width:1024px){
   body.chat-only #coRail{
-    display:block; position:fixed; left:0; top:0; bottom:0; width:250px; overflow:auto;
-    padding:18px 14px; background:#fff; border-right:1px solid #e5e7eb; z-index:9998;
+    display:flex; flex-direction:column; position:fixed; left:0; top:0; bottom:0; width:272px;
+    overflow:hidden; padding:0; background:#fff; border-right:1px solid #e5e7eb; z-index:9998;
   }
+  /* v4.99 — the reference runs ONE green bar across the rail and the conversation. Without this the
+     top-left 272px was blank white beside a green header, which is what made the page read as
+     unfinished. Its height is --co-hd, measured from the chat header itself at runtime, so the two
+     halves of the bar line up exactly instead of relying on a guessed number. */
+  body.chat-only #coRail .co-brand{
+    flex:0 0 auto; height:var(--co-hd, 64px); display:flex; align-items:center; gap:10px;
+    padding:0 14px; background:var(--green); color:#fff; position:relative; z-index:2;
+    box-shadow:0 2px 8px rgba(16,24,40,.10);
+  }
+  body.chat-only #coRail .co-brand .lg{
+    width:34px; height:34px; flex:none; border-radius:50%; background:#fff; color:var(--green);
+    display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; overflow:hidden;
+  }
+  body.chat-only #coRail .co-brand .lg img{ width:100%; height:100%; object-fit:cover; }
+  body.chat-only #coRail .co-brand .t{ min-width:0; }
+  body.chat-only #coRail .co-brand b{ display:block; font-size:14px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body.chat-only #coRail .co-brand span{ display:block; font-size:11.5px; opacity:.88; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body.chat-only #coRail .co-railb{ flex:1 1 auto; min-height:0; overflow:auto; padding:16px 14px; }
   body.chat-only #coRail .co-railh{ font-weight:700; font-size:14px; margin:2px 4px 12px; color:#111827; }
+  body.chat-only #coRail button .ch{ margin-left:auto; color:#9ca3af; font-size:16px; line-height:1; }
+  body.chat-only #coRail button.on .ch{ color:var(--green, #16a34a); }
   body.chat-only #coRail button{
     display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
     background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:11px 12px; margin-bottom:8px;
@@ -1441,13 +1461,17 @@ body.chat-only #whChat .qa{ display:none !important; }
   }
   body.chat-only #coRail .ic svg{ width:18px; height:18px; }
   body.chat-only #coRail .ic img{ width:100%; height:100%; object-fit:cover; background:#f3f4f6; }
-  body.chat-only #coRail .co-bens{ margin-top:16px; border-top:1px solid #eef0f2; padding-top:14px; }
-  body.chat-only #coRail .co-ben{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; font-size:13px; }
-  body.chat-only #coRail .co-ben b{ display:block; font-size:13px; color:#111827; }
-  body.chat-only #coRail .co-ben span{ color:#6b7280; }
+  /* the benefits the shop already publishes, as a card rather than loose text. Same words, same
+     source (SHOP.home.benefits) — this block adds no claim of its own. */
+  body.chat-only #coRail .co-bens{
+    margin-top:18px; padding:12px 12px 2px; background:#f0fdf4; border:1px solid #dcfce7; border-radius:12px;
+  }
+  body.chat-only #coRail .co-ben{ display:flex; gap:10px; align-items:flex-start; margin-bottom:12px; font-size:13px; }
+  body.chat-only #coRail .co-ben b{ display:block; font-size:12.5px; color:#14532d; letter-spacing:.2px; }
+  body.chat-only #coRail .co-ben span{ display:block; color:#4b5563; font-size:12px; line-height:1.4; }
 
   body.chat-only #coCart{
-    display:block; position:fixed; right:0; top:0; bottom:0; width:320px; overflow:auto;
+    display:block; position:fixed; right:0; top:0; bottom:0; width:340px; overflow:auto;
     padding:18px 14px; background:#fff; border-left:1px solid #e5e7eb; z-index:9998;
   }
   body.chat-only #coCart .cch{ display:flex; align-items:center; gap:6px; font-weight:700; font-size:15px; margin-bottom:12px; }
@@ -1476,12 +1500,34 @@ body.chat-only #whChat .qa{ display:none !important; }
   /* the conversation sits between the two rails */
   /* v4.96 — offsets are driven by what actually rendered. co-wide is added only when the rail is
      really in the DOM, so an empty business list collapses to two columns instead of leaving a
-     250px hole. */
+     272px hole.
+     v4.99 — 272 / flexible / 340, closer to the reference's proportions. Keep these three numbers
+     in step: the rail's width, the cart's width, and the two offsets below. */
   body.chat-only #whChat{
-    left:0 !important; right:320px !important; width:auto !important;
+    left:0 !important; right:340px !important; width:auto !important;
     border-right:1px solid #e5e7eb;
   }
-  body.chat-only.co-wide #whChat{ left:250px !important; border-left:1px solid #e5e7eb; }
+  body.chat-only.co-wide #whChat{ left:272px !important; border-left:1px solid #e5e7eb; }
+  /* 1024–1279: both rails stay — nothing disappears — but they give the conversation room back
+     rather than squeezing it to 412px. Same four numbers, kept in step. */
+  @media (max-width:1279px){
+    body.chat-only #coRail{ width:220px; }
+    body.chat-only #coCart{ width:300px; }
+    body.chat-only #whChat{ right:300px !important; }
+    body.chat-only.co-wide #whChat{ left:220px !important; }
+  }
+
+  /* v4.99 — NOTHING MAY LOOK LIKE IT IS UNDER THE HEADER. A scroll container clips its content at
+     the top of the viewport — that is what scrolling is — but with the header flush against that
+     clip line a half-visible card read as wedged underneath it. This 18px strip fades the
+     conversation's own background into the content just below the header, so a message scrolling
+     past dissolves instead of being sliced. It is painted OVER the scroll area, not masked into it,
+     so no text is composited through a gradient. */
+  body.chat-only #whChat .co-fade{
+    position:absolute; left:0; right:0; top:var(--co-hd, 64px); height:18px; z-index:1;
+    pointer-events:none;
+    background:linear-gradient(to bottom, #F6F7F9 0%, rgba(246,247,249,.92) 45%, rgba(246,247,249,0) 100%);
+  }
 
   /* v4.96 — reading widths. Full-bleed bubbles across a 900px column read as a document, not a
      conversation; these are the proportions a messaging app uses. */
@@ -1503,15 +1549,45 @@ body.chat-only #whChat .qa{ display:none !important; }
   body.chat-only #whChatBd .row.bot .bub.im img{ max-width:100%; border-radius:10px; }
   body.chat-only #whChatBd .row.bot .bub.im span{ font-size:13px; padding:8px 2px 2px; }
 
-  /* three product cards across, degrading 3 → 2 → 1 with the column width */
+  /* v5.00 — A GRID, NOT A CAP. v4.97 set `width:auto; max-width:33.333%`, which is not a column: an
+     inline-flex box with auto width shrinks to its CONTENT and only stops at the cap. So a long
+     product name took the full third and a short one took half of it, the widths came out ragged,
+     and once two wide cards had eaten the line the third wrapped. Every card is now exactly one
+     third (minus the gutter) whatever its name, so three fit and their edges line up.
+     3 × (33.333% - 12px) + 3 × 10px gutter = 100% - 6px. The slack is deliberate: at 100% exactly,
+     sub-pixel rounding drops the third card to the next line. */
   body.chat-only #whChatBd .row.cardrow{
-    display:inline-flex; width:auto; vertical-align:top; margin:0 10px 10px 0;
-    max-width:calc(33.333% - 10px); min-width:210px;
+    display:inline-flex; vertical-align:top; margin:0 10px 10px 0;
+    width:calc(33.333% - 12px); max-width:none; min-width:0;
   }
   body.chat-only #whChatBd .row.cardrow .av{ display:none; }
-  body.chat-only #whChatBd .row.cardrow .bub.card{ width:100%; max-width:none; height:100%; }
-  @media (max-width:1399px){ body.chat-only #whChatBd .row.cardrow{ max-width:calc(50% - 10px); } }
-  @media (max-width:1150px){ body.chat-only #whChatBd .row.cardrow{ max-width:100%; } }
+
+  /* v5.00 — the card stands up. Side-by-side image and text is right for a wide bubble and wrong
+     for a 240px column: the photo got 84px and the name got 140px. Photo on top, text under it,
+     as the reference shows. Same markup, same prices, same Add — CSS only, desktop chat only. */
+  body.chat-only #whChatBd .row.cardrow .bub.card{
+    display:flex; flex-direction:column; gap:9px; width:100%; max-width:none;
+    min-height:308px; padding:12px;
+  }
+  body.chat-only #whChatBd .row.cardrow .bub.card img{
+    width:100%; height:124px; flex:none; object-fit:contain;
+    background:#f8fafc; border-radius:10px; padding:6px;
+  }
+  body.chat-only #whChatBd .row.cardrow .bub.card .ci{ flex:1 1 auto; gap:4px; }
+  /* long wholesale names ("CLING FILM 45CM (CARTON OF 6PC, MIN 5 CARTON)") must not set the card's
+     height — the full name is in the reply above and in the cart. */
+  body.chat-only #whChatBd .row.cardrow .bub.card b{
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  /* the button sits on the floor of the card, so the buttons line up across a row */
+  body.chat-only #whChatBd .row.cardrow .bub.card .add{ margin-top:auto; }
+
+  @media (max-width:1399px){
+    body.chat-only #whChatBd .row.cardrow{ width:calc(50% - 12px); }
+  }
+  @media (max-width:1150px){
+    body.chat-only #whChatBd .row.cardrow{ width:100%; margin-right:0; }
+  }
 }
 
   /* the two action buttons, now living in the header */
@@ -4820,12 +4896,31 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       if(!items.length) return;
       var r = document.createElement('aside');
       r.id='coRail'; r.className='co-rail';
-      r.innerHTML = '<div class="co-railh">'+esc(head)+'</div>' + items.map(function(b){
+      /* v4.99 — the green bar continues across the rail, carrying the shop's own identity. Logo and
+         name are SHOP data; the sub-line is the shop's REAL branch names, or its city, or nothing.
+         BRANCHES is not used here: it substitutes a placeholder ("Our store") when none are
+         configured, and a placeholder is exactly what must not appear on a brand bar. */
+      var sub = '';
+      try{
+        var bs2 = (SHOP.branches && SHOP.branches.length)
+          ? SHOP.branches.map(function(x){ return String((x&&x.name)||'').trim(); }).filter(Boolean) : [];
+        sub = bs2.length ? bs2.slice(0,3).join(' · ') : String(SHOP.city||'');
+      }catch(e){}
+      var brand = '<div class="co-brand">'
+        + '<span class="lg">' + (SHOP.logo
+            ? '<img src="'+esc(SHOP.logo)+'" alt="">'
+            : esc(String(SHOP.initials||(SHOP.name||'S').charAt(0)).slice(0,2))) + '</span>'
+        + '<div class="t"><b>'+esc(SHOP.name||'Shop')+'</b>'
+        + (sub ? '<span>'+esc(sub)+'</span>' : '') + '</div></div>';
+
+      r.innerHTML = brand + '<div class="co-railb"><div class="co-railh">'+esc(head)+'</div>'
+        + items.map(function(b){
         var ic = b.icon ? b.icon : (b.img ? '<img loading="lazy" src="'+esc(b.img)+'" alt="">' : '');
         return '<button onclick="'+(b.id?('WHCHAT.biz='+jk(b.id)+';'):'')+'whChatSend('+jk('Show me '+b.label)+')">'
              + '<span class="ic">'+ic+'</span>'
-             + '<span>'+esc(b.label)+'</span></button>';
-      }).join('');
+             + '<span>'+esc(b.label)+'</span>'
+             + '<span class="ch">&rsaquo;</span></button>';
+      }).join('') + '</div>';
       /* the tapped tile stays marked, so the rail shows where the conversation is */
       r.addEventListener('click', function(ev){
         var t = ev.target, b = (t && t.closest) ? t.closest('button') : null;
@@ -4847,11 +4942,26 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
                  + (b.s2 ? '<span>'+esc(b.s2)+'</span>' : '')
                  + '</div></div>';
           }).join('') + '</div>';
-          r.insertAdjacentHTML('beforeend', bh);
+          var rb = r.querySelector('.co-railb');
+          (rb || r).insertAdjacentHTML('beforeend', bh);   // inside the scrolling body, under the tiles
         }
       }catch(e){}
       document.body.appendChild(r);
       document.body.classList.add('co-wide');
+      coHeadVar();
+    }catch(e){}
+  }
+
+  /* v4.99 — the one measured number in this layout. The chat header's height is content-driven (its
+     buttons wrap on narrower laptops), and two things must line up with it: the rail's green brand
+     block and the fade strip below the header. Measuring beats guessing, and it re-measures on
+     resize so a wrapped header does not leave a seam. */
+  function coHeadVar(){
+    try{
+      var hd = document.querySelector('#whChat > .hd');
+      if(!hd) return;
+      var h = Math.round(hd.getBoundingClientRect().height);
+      if(h > 0) document.body.style.setProperty('--co-hd', h + 'px');
     }catch(e){}
   }
 
@@ -4938,6 +5048,20 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
   function openIt(){
     try{ whChatShow(); }catch(e){ return; }
     try{ chatOnlyRewire(); }catch(e){}
+    /* the header's measured height, and the strip that stops a scrolled message looking wedged
+       under it. Both are inert on mobile — the CSS for .co-fade lives in the desktop query. */
+    try{
+      coHeadVar();
+      var p = document.getElementById('whChat');
+      if(p && !p.querySelector('.co-fade')){
+        var fz = document.createElement('div'); fz.className = 'co-fade';
+        p.appendChild(fz);
+      }
+      if(!window.__coHdHooked){
+        window.__coHdHooked = true;
+        window.addEventListener('resize', function(){ try{ coHeadVar(); }catch(e){} });
+      }
+    }catch(e){}
     try{ chatOnlyDesk(); }catch(e){}
     try{
       if(!document.getElementById('coCart')){
@@ -4952,7 +5076,8 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       var iv = setInterval(function(){
         tries++;
         try{ chatOnlyDesk(); }catch(e){}
-        if(document.getElementById('coRail') || tries > 20) clearInterval(iv);
+        try{ coHeadVar(); }catch(e){}   /* header height settles as the logo and web fonts land */
+        if((document.getElementById('coRail') && tries > 3) || tries > 20) clearInterval(iv);
       }, 400);
       if(!window.__coRenderHooked){
         window.__coRenderHooked = true;
