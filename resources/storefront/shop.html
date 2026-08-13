@@ -1416,7 +1416,16 @@ body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
 /* v4.96 — the .qa bar is hidden in chat-only mode (its buttons live in the header now, and the
    right rail is the cart). The earlier `order:-1` floated it ABOVE the header, which is the stray
    "View Cart" in the screenshot. */
-body.chat-only #whChat .qa{ display:none !important; }
+/* v5.03 — SCOPED TO DESKTOP, AND THIS IS A BUG FIX, NOT A TIDY-UP.
+   The v4.96 rule had no media query. Below 1024px there is no #coCart rail and no header actions
+   (.co-acts was hidden under 768px), #cartbar is hidden by the chat-only body rule, and .qa held
+   the only remaining View Cart — so a phone customer could fill a cart at /chat and then had no way
+   to open it, no checkout, and no "Talk to a person". On the channel this page exists to serve.
+   The bar stays hidden on desktop, where the header carries the actions and the right rail IS the
+   cart, and comes back everywhere else. */
+@media (min-width:1024px){
+  body.chat-only #whChat .qa{ display:none !important; }
+}
 
 /* DESKTOP (>=1024): three columns — 250 / flexible / 320. */
 @media (min-width:1024px){
@@ -1619,7 +1628,15 @@ body.chat-only #whChat .qa{ display:none !important; }
     border-radius:999px; padding:7px 12px; font:inherit; font-size:12.5px; text-decoration:none; cursor:pointer;
   }
   body.chat-only #whChat .hd .co-acts svg{ width:15px; height:15px; }
-  @media (max-width:767px){ body.chat-only #whChat .hd .co-acts{ display:none; } }
+  /* v5.03 — no longer hidden on a phone. The move into the header only happens on desktop now, so
+     .co-acts exists on a narrow screen ONLY when the window was resized down after loading wide —
+     and in that case hiding it would take away WhatsApp and "Talk to a person" with nothing behind
+     them. Compact instead of absent. */
+  @media (max-width:767px){
+    body.chat-only #whChat .hd .co-acts{ gap:6px; margin-left:6px; }
+    body.chat-only #whChat .hd .co-acts button,
+    body.chat-only #whChat .hd .co-acts a{ padding:6px 9px; font-size:11.5px; }
+  }
 </style>
 </head>
 <body>
@@ -4857,8 +4874,14 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
     /* v4.95 — "Talk to a person" and "Continue on WhatsApp" belong in the header on a page where the
        chat IS the page (the reference puts them top-right). Same elements, same handlers — MOVED,
        not rebuilt, so nothing about what they do changes. */
+    /* v5.03 — DESKTOP ONLY. Moving these into the header is right for a page with a 272px rail and
+       a 340px cart beside it. On a phone the header has no room, .co-acts was hidden under 768px,
+       and the move left the action bar with nothing but a View Cart that the v4.96 CSS then hid —
+       so the phone had no cart, no checkout and no human. The bar stays exactly as it was, and as
+       it was tested, below 1024px. */
     try{
-      var qaEl = p.querySelector('.qa');
+      var wide = !!(window.matchMedia && window.matchMedia('(min-width:1024px)').matches);
+      var qaEl = wide ? p.querySelector('.qa') : null;
       if(qaEl && !hd.querySelector('.co-acts')){
         var box = document.createElement('div'); box.className='co-acts';
         Array.prototype.slice.call(qaEl.children).forEach(function(el){
