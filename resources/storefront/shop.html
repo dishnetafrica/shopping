@@ -1393,11 +1393,40 @@ body.chat-only #whChat .wh-in, body.chat-only #whChat .whin, body.chat-only #whC
 }
 /* the cart sheet must sit ON TOP of a full-screen chat, not behind it */
 body.chat-only #sheet{ z-index:10000 !important; }
+/* the way out, and the two desktop rails */
+body.chat-only #whChat .hd .co-shop{
+  margin-left:auto; margin-right:8px; color:#fff; opacity:.92; font-size:13px;
+  text-decoration:none; white-space:nowrap; border-bottom:1px solid rgba(255,255,255,.45);
+}
+body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
+body.chat-only .co-rail, body.chat-only #dcart.co-cart{ display:none !important; }
+@media (min-width:1024px){
+  body.chat-only .co-rail{
+    display:block !important; position:fixed; left:0; top:0; bottom:0; width:250px;
+    overflow:auto; padding:16px 12px; border-right:1px solid #e5e7eb; background:#fff; z-index:9998;
+  }
+  body.chat-only .co-rail .co-railh{ font-weight:700; font-size:13px; margin:4px 6px 10px; color:#374151; }
+  body.chat-only .co-rail button{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
+    background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; margin-bottom:8px;
+    font:inherit; font-size:14px;
+  }
+  body.chat-only .co-rail button:hover{ background:#f9fafb; }
+  body.chat-only .co-rail .ic svg, body.chat-only .co-rail .ic img{ width:18px; height:18px; }
+  body.chat-only #dcart.co-cart{
+    display:block !important; position:fixed; right:0; top:0; bottom:0; width:320px;
+    overflow:auto; padding:16px 12px; border-left:1px solid #e5e7eb; background:#fff; z-index:9998;
+  }
+}
 @media (min-width:900px){
   body.chat-only #whChat{
     inset:0 !important; left:50% !important; transform:translateX(-50%);
     width:min(560px, 100%) !important;
     border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb;
+  }
+  /* leave room for whichever rails actually rendered */
+  @media (min-width:1024px){
+    body.chat-only.co-wide #whChat{ left:calc(250px + (100% - 250px - 320px)/2 + 0px); }
   }
 }
 </style>
@@ -4602,8 +4631,68 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
   if(!SHOP || !SHOP.chatOnly) return;
   document.body.classList.add('chat-only');
   var ctx = SHOP.chatCtx || {};
+  /* Rewire the panel for a page where the chat IS the page. Done AFTER whChatBuild() rather than
+     inside it, so the ordinary storefront chat keeps exactly the markup and behaviour it has today. */
+  function chatOnlyRewire(){
+    var p = document.getElementById('whChat'); if(!p) return;
+    var hd = p.querySelector('.hd'); if(!hd) return;
+    if(hd.dataset.coDone) return; hd.dataset.coDone = '1';
+
+    /* THE WAY OUT. Full-screen with everything else hidden, minimize and close left the visitor on a
+       blank page — there was no route back to the shop at all. Close now goes to the storefront and
+       minimize goes with it, because there is nothing to minimize to. */
+    var x = hd.querySelector('.x');
+    if(x){ x.setAttribute('aria-label','Go to the full shop'); x.title='Full shop';
+           x.onclick = function(){ location.href = (SHOP.base || '') + '/'; }; }
+    var mn = hd.querySelector('.mn'); if(mn) mn.style.display='none';
+    /* and an explicit one, because an ✕ that navigates is not obvious */
+    if(!document.getElementById('coShopLink')){
+      var a = document.createElement('a');
+      a.id='coShopLink'; a.className='co-shop'; a.href=(SHOP.base || '') + '/';
+      a.textContent='Browse full shop';
+      hd.insertBefore(a, x || null);
+    }
+
+    /* View Cart called whChatHide() first — correct on the storefront, wrong here: it would hide the
+       chat and reveal the blank page behind it. Open the sheet over the chat instead. */
+    var qa = p.querySelector('.qa');
+    if(qa){ var b = qa.querySelector('button'); if(b && /view cart/i.test(b.textContent||'')){
+      b.onclick = function(){ try{ openCart(); }catch(e){} }; } }
+  }
+
+  /* Desktop only: the shop's OWN sticky cart panel (#dcart), moved out of the hidden grid and parked
+     beside the conversation. Not a second cart — the same element the storefront renders, so it stays
+     in step with CART/saveCart() for free. Below 1024px it stays hidden and View Cart opens the sheet,
+     exactly as on a phone. */
+  function chatOnlyDesk(){
+    if(!window.matchMedia || !window.matchMedia('(min-width:1024px)').matches) return;
+    try{
+      var dc = document.getElementById('dcart');
+      if(dc && dc.parentNode !== document.body){ document.body.appendChild(dc); dc.classList.add('co-cart'); }
+    }catch(e){}
+    /* Left rail from the shop's REAL business list (settings.business_banners → activeBiz()). No
+       hardcoded categories: if the setting is empty the rail simply does not render. Clicking one
+       sends an ordinary chat message, the same path the launcher chips use. */
+    try{
+      if(document.getElementById('coRail')) return;
+      var list = (typeof activeBiz === 'function') ? activeBiz() : [];
+      if(!list || !list.length) return;
+      var r = document.createElement('aside');
+      r.id='coRail'; r.className='co-rail';
+      r.innerHTML = '<div class="co-railh">Shop by Business</div>' + list.map(function(b){
+        return '<button onclick="whChatSend('+jk('Show me '+(b.label||b.id))+')">'
+             + '<span class="ic">'+((typeof bizIcon==='function')?bizIcon(b.icon||b.id):'')+'</span>'
+             + '<span>'+esc(b.label||b.id)+'</span></button>';
+      }).join('');
+      document.body.appendChild(r);
+      document.body.classList.add('co-wide');
+    }catch(e){}
+  }
+
   function openIt(){
     try{ whChatShow(); }catch(e){ return; }
+    try{ chatOnlyRewire(); }catch(e){}
+    try{ chatOnlyDesk(); }catch(e){}
     try{
       var seed = '';
       if(ctx.product)  seed = 'I am looking for product ' + ctx.product;
