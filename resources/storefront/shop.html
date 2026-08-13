@@ -1243,6 +1243,13 @@ button{ -webkit-tap-highlight-color:transparent }
 .whchat .bub.card .cq{font-size:11.5px;color:#667085}
 .whchat .bub.card .add{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;margin-top:6px;border:0;background:var(--green);color:#fff;font-weight:800;font-size:12.5px;border-radius:9px;padding:9px 12px;cursor:pointer}
 .whchat .bub.card .add svg{width:15px;height:15px}
+/* v5.05 — the quantity stepper that replaces Add once the line exists. Deliberately outside the
+   chat-only stylesheet: the small widget on the storefront shows the same cards and deserves it. */
+.whchat .bub.card .cstp{display:flex;align-items:center;margin-top:6px;border:1px solid #e5e7eb;border-radius:9px;overflow:hidden;background:#fff}
+.whchat .bub.card .cstp button{width:40px;height:36px;flex:none;background:#fff;border:0;cursor:pointer;
+  font-size:19px;line-height:1;color:var(--green-d,#15803d);font-weight:700}
+.whchat .bub.card .cstp button:active{background:#f3f4f6}
+.whchat .bub.card .cstp span{flex:1;text-align:center;font-size:14.5px;font-weight:800;color:#111827}
 /* v4.84 — persistent quick actions: every button is a REAL pre-existing path */
 .whchat .qa{display:flex;gap:7px;padding:9px 12px 0;background:#fff;border-top:1px solid #ececf0;flex-wrap:wrap}
 .whchat .qa button,.whchat .qa a{display:inline-flex;align-items:center;gap:6px;border:1px solid #e4e7ec;background:#fff;border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;color:#344054;cursor:pointer;text-decoration:none}
@@ -1427,6 +1434,8 @@ body.chat-only #whChat > .in, body.chat-only #whChat > .wh-in, body.chat-only #w
 body.chat-only #whChat > .ft, body.chat-only #whChat > .foot{ flex:0 0 auto; }
 body.chat-only #sheet{ z-index:10000 !important; }
 body.chat-only #coRail, body.chat-only #coCart{ display:none; }
+/* the header's scroll shadow is a desktop refinement; on a phone it has nothing to sit over */
+body.chat-only #whChat .co-fade{ display:none; }
 
 /* the way out, in the header */
 body.chat-only #whChat .hd .co-shop{
@@ -1555,7 +1564,7 @@ body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
      past dissolves instead of being sliced. It is painted OVER the scroll area, not masked into it,
      so no text is composited through a gradient. */
   body.chat-only #whChat .co-fade{
-    position:absolute; left:0; right:0; top:var(--co-hd, 64px); height:18px; z-index:1;
+    display:block; position:absolute; left:0; right:0; top:var(--co-hd, 64px); height:18px; z-index:1;
     pointer-events:none;
     background:linear-gradient(to bottom, #F6F7F9 0%, rgba(246,247,249,.92) 45%, rgba(246,247,249,0) 100%);
   }
@@ -1623,26 +1632,50 @@ body.chat-only #whChat .hd .co-shop:hover{ opacity:1; }
     body.chat-only #whChatBd .row.cardrow{ width:100%; margin-right:0; }
   }
 
-  /* v5.02 — collection chips and the pager for the browse view. Both are inert unless a rail tile
-     has been opened, and the chips only exist when the owner configured collections. */
-  body.chat-only #whChatBd .co-chips{
-    display:flex; gap:8px; overflow-x:auto; padding:2px 2px 12px; scrollbar-width:thin;
-  }
-  body.chat-only #whChatBd .co-chips button{
-    flex:0 0 auto; background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:8px 14px;
-    font:inherit; font-size:13px; color:#374151; cursor:pointer; white-space:nowrap;
-  }
-  body.chat-only #whChatBd .co-chips button:hover{ border-color:#d1d5db; }
-  body.chat-only #whChatBd .co-chips button.on{
-    background:var(--green, #16a34a); border-color:var(--green, #16a34a); color:#fff; font-weight:600;
-  }
-  body.chat-only #whChatBd .co-more{ display:block; clear:both; margin:2px 0 12px; }
-  body.chat-only #whChatBd .co-more button{
-    background:#fff; border:1px solid #d1d5db; border-radius:10px; padding:9px 16px;
-    font:inherit; font-size:13px; color:#111827; cursor:pointer;
-  }
-  body.chat-only #whChatBd .co-more button:hover{ background:#f9fafb; }
 }
+
+/* v5.02 — collection chips and the pager for the browse view. v5.05 moved them OUT of the desktop
+   query: a phone browses the same collections through the strip below the header, and inside the
+   desktop block these were dead styling on the device that needs them most. Inert unless a tile has
+   been opened; the chips exist only when the owner configured collections. */
+body.chat-only #whChatBd .co-chips{
+  display:flex; gap:8px; overflow-x:auto; padding:2px 2px 12px; scrollbar-width:thin;
+  -webkit-overflow-scrolling:touch;
+}
+body.chat-only #whChatBd .co-chips button{
+  flex:0 0 auto; background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:8px 14px;
+  font:inherit; font-size:13px; color:#374151; cursor:pointer; white-space:nowrap;
+}
+body.chat-only #whChatBd .co-chips button:hover{ border-color:#d1d5db; }
+body.chat-only #whChatBd .co-chips button.on{
+  background:var(--green, #16a34a); border-color:var(--green, #16a34a); color:#fff; font-weight:600;
+}
+body.chat-only #whChatBd .co-more{ display:block; clear:both; margin:2px 0 12px; }
+body.chat-only #whChatBd .co-more button{
+  background:#fff; border:1px solid #d1d5db; border-radius:10px; padding:9px 16px;
+  font:inherit; font-size:13px; color:#111827; cursor:pointer;
+}
+body.chat-only #whChatBd .co-more button:hover{ background:#f9fafb; }
+
+/* v5.05 — the mobile navigation strip: the rail's list, laid on its side under the header. Built
+   only below 1024px, and hidden outright at desktop widths in case the window was resized up. */
+body.chat-only #whChat #coNav{
+  flex:0 0 auto; display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+  padding:10px 12px; background:#fff; border-bottom:1px solid #ececf0; position:relative; z-index:2;
+  scrollbar-width:none;
+}
+body.chat-only #whChat #coNav::-webkit-scrollbar{ display:none; }
+body.chat-only #whChat #coNav button{
+  flex:0 0 auto; background:#f6f7f9; border:1px solid #e5e7eb; border-radius:999px; padding:8px 14px;
+  font:inherit; font-size:13px; color:#374151; cursor:pointer; white-space:nowrap;
+}
+body.chat-only #whChat #coNav button.on{
+  background:var(--green, #16a34a); border-color:var(--green, #16a34a); color:#fff; font-weight:700;
+}
+@media (min-width:1024px){ body.chat-only #whChat #coNav{ display:none; } }
+
+/* the live cart figures on the mobile View Cart button */
+body.chat-only #whChat .qa #coCartBtn .colbl{ font-weight:800; }
 
   /* the two action buttons, now living in the header */
   body.chat-only #whChat .hd .co-acts{ display:flex; gap:8px; margin-left:12px; }
@@ -3886,7 +3919,7 @@ function whChatPaint(m,save){
     +(m.p.pack?'<span class="cm">Carton of '+(+m.p.pack)+' pcs</span>':'')
     +'<span class="cp">'+esc(m.p.price!=null?(((m.p.currency||'')+' ').replace(/^ $/,'')+Number(m.p.price).toLocaleString()+(m.p.unit?' / '+m.p.unit:'')):'Price on request')+'</span>'
     +(m.p.moq?'<span class="cq">MOQ: '+(+m.p.moq)+(m.p.unit?(' '+esc(m.p.unit)):'')+'</span>':'')
-    +'<button class="add" onclick="whChatAdd('+jk(m.p.name||'')+',this,'+(+m.p.id||0)+')">'+WH_CARTSVG+'<span>Add to Cart</span></button>'
+    +'<div class="cctl" data-cq="'+esc(m.p.name||'')+'" data-cid="'+(+m.p.id||0)+'">'+whChatCtl(m.p.name||'',+m.p.id||0)+'</div>'
     +'</div></div></div>';
   else h='<div class="row bot">'+whChatAva()+'<div class="bub">'+whChatFmt(m.text||'')+ts+'</div></div>';
   bd.insertAdjacentHTML('beforeend',h);
@@ -4031,6 +4064,39 @@ function whChatRetry(btn){
 }
 /* v4.80 — ADD inside a chat card feeds the REAL storefront cart (same cartAdd the product grid
    uses), so chat → cart → checkout is one system, not two. */
+/* v5.05 — Add, and then the quantity, in the same place.
+   This is the storefront's OWN pattern (variantCard, shop.html:2991): a line already in the cart
+   shows a stepper, everything else shows Add. Copying it means there is no second idea of quantity
+   anywhere — the number on the card IS the line in the cart, so the two cannot drift, and "−" below
+   the MOQ removes the line exactly as it does on the shop. A pre-add quantity picker would have
+   introduced a quantity that exists nowhere yet; this does not.
+   Both input styles still work: tap +, or say "I need 20 cartons" and let the brain do it. */
+function whChatCtl(name,id){
+  var q = (typeof CART !== 'undefined' && CART[name]) ? (+CART[name].qty||0) : 0;
+  if(q > 0){
+    return '<div class="cstp"><button aria-label="Fewer" onclick="whChatQty('+jk(name)+',-1)">−</button>'
+         + '<span>'+q+'</span>'
+         + '<button aria-label="More" onclick="whChatQty('+jk(name)+',1)">+</button></div>';
+  }
+  return '<button class="add" onclick="whChatAdd('+jk(name)+',this,'+(+id||0)+')">'+WH_CARTSVG+'<span>Add to Cart</span></button>';
+}
+function whChatQty(name,d){
+  try{
+    if(d > 0){ if(typeof inc === 'function') inc(name); }
+    else     { if(typeof dec === 'function') dec(name); }   /* dec() drops the line below the MOQ — the shop's rule */
+  }catch(e){}
+  whChatCtlSync();
+}
+/* Repaint every card control from CART. Cheap, idempotent, and driven by the same bar() every
+   existing mutation already calls — so a change made in the cart sheet reaches the cards too. */
+function whChatCtlSync(){
+  try{
+    var els = document.querySelectorAll('#whChatBd .cctl');
+    for(var i=0;i<els.length;i++){
+      els[i].innerHTML = whChatCtl(els[i].getAttribute('data-cq')||'', +els[i].getAttribute('data-cid')||0);
+    }
+  }catch(e){}
+}
 function whChatAdd(name,btn,id){
   try{
     /* v5.04 — OPENS AT THE MOQ, like the storefront's own grid. The chat used cartAdd(), which
@@ -4040,7 +4106,10 @@ function whChatAdd(name,btn,id){
        (Whether the ORDER ENGINE should refuse a below-MOQ quantity is a separate, unmade decision:
        moq_mode is still 'off', so it allows them and annotates "(min order 5)".) */
     if(typeof inc === 'function') inc(name); else cartAdd(name);
-    if(btn){ var sp=btn.querySelector('span')||btn; var was=sp.textContent; sp.textContent='Added ✓'; setTimeout(function(){ sp.textContent=was; },1200); }
+    /* v5.05 — the "Added ✓" flash is gone, and deliberately: the button is replaced by the quantity
+       stepper showing the real cart line, which is a better confirmation because it is the truth.
+       The old flash would also have lied on an out-of-stock line, where inc() returns without adding. */
+    whChatCtlSync();
     sTrack('chat_add',{product_id:(+id||0)});
     // v4.81 — remember that chat touched this cart, so the eventual order is attributable.
     try{ localStorage.setItem('cb_chat_attr_'+(SHOP.slug||'shop'),'1'); }catch(e){}
@@ -4965,7 +5034,9 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
        chat and reveal the blank page behind it. Open the sheet over the chat instead. */
     var qa = p.querySelector('.qa');
     if(qa){ var b = qa.querySelector('button'); if(b && /view cart/i.test(b.textContent||'')){
-      b.onclick = function(){ try{ openCart(); }catch(e){} }; } }
+      b.onclick = function(){ try{ openCart(); }catch(e){} };
+      b.id = 'coCartBtn';          /* v5.05 — so the live count and total can be kept on it */
+    } }
   }
 
   /* Desktop only: the shop's OWN sticky cart panel (#dcart), moved out of the hidden grid and parked
@@ -4991,20 +5062,8 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
          shop's OWN category list (CATS — built from the live catalogue in the same fetch, sorted by
          the tenant's category_order). Both are real data; nothing here is hardcoded, and an empty
          catalogue still renders no rail. */
-      var list = (typeof activeBiz === 'function') ? activeBiz() : [];
-      var head = '', items = [];
-      if(list && list.length){
-        head = 'Shop by Business';
-        items = list.map(function(b){
-          return { id:(b.id||''), label:(b.label||b.id),
-                   icon:((typeof bizIcon==='function')?bizIcon(b.icon||b.id):''), img:'' };
-        });
-      } else if(typeof CATS !== 'undefined' && CATS && CATS.length){
-        head = 'Shop by Category';
-        /* No id here on purpose: a category IS a catalogue category, so the brain already knows it
-           and needs no translation. Only the business tiles carry one. */
-        items = CATS.slice(0,10).map(function(c){ return { id:'', label:c.name, icon:'', img:(c.img||'') }; });
-      }
+      var nav = coItems();
+      var head = nav.head, items = nav.items;
       if(!items.length) return;
       var r = document.createElement('aside');
       r.id='coRail'; r.className='co-rail';
@@ -5072,6 +5131,64 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       if(!hd) return;
       var h = Math.round(hd.getBoundingClientRect().height);
       if(h > 0) document.body.style.setProperty('--co-hd', h + 'px');
+    }catch(e){}
+  }
+
+  /* v5.05 — ONE source for the navigation list, because there are now two places that draw it: the
+     desktop rail and the mobile strip. Businesses when the owner configured them, the shop's own
+     categories otherwise. Categories carry no id on purpose — a category IS a catalogue category,
+     so the brain needs no translation for it; only business tiles do. */
+  function coItems(){
+    var list = (typeof activeBiz === 'function') ? activeBiz() : [];
+    if(list && list.length){
+      return { head:'Shop by Business', items: list.map(function(b){
+        return { id:(b.id||''), label:(b.label||b.id),
+                 icon:((typeof bizIcon==='function')?bizIcon(b.icon||b.id):''), img:'' };
+      })};
+    }
+    if(typeof CATS !== 'undefined' && CATS && CATS.length){
+      return { head:'Shop by Category', items: CATS.slice(0,10).map(function(c){
+        return { id:'', label:c.name, icon:'', img:(c.img||'') };
+      })};
+    }
+    return { head:'', items:[] };
+  }
+
+  /* v5.05 — MOBILE PARITY, part 1. Below 1024px there is no rail, so the same navigation becomes a
+     horizontal strip under the header — same list, same ids, same coBizOpen/coCatOpen handlers, so
+     a phone gets the identical browse the desktop rail gives and nothing new was invented for it. */
+  function coNavBuild(){
+    try{
+      /* Built at every width and hidden by CSS above 1024px, rather than gated in JS. A desktop
+         session narrowed to phone width then has the strip already there — no reload needed. */
+      var p = document.getElementById('whChat'); if(!p) return;
+      if(document.getElementById('coNav')) return;
+      var nav = coItems(); if(!nav.items.length) return;
+      var n = document.createElement('div');
+      n.id = 'coNav'; n.className = 'co-nav';
+      n.innerHTML = nav.items.map(function(b){
+        var act = b.id ? ('coBizOpen('+jk(b.id)+')') : ('coCatOpen('+jk(b.label)+')');
+        var tag = b.id ? (' data-biz="'+esc(b.id)+'"') : (' data-cat="'+esc(b.label)+'"');
+        return '<button'+tag+' onclick="'+act+'">'+esc(b.label)+'</button>';
+      }).join('');
+      var hd = p.querySelector('.hd');
+      if(hd && hd.nextSibling) p.insertBefore(n, hd.nextSibling); else p.appendChild(n);
+    }catch(e){}
+  }
+
+  /* v5.05 — MOBILE PARITY, part 2. The desktop cart rail shows the count and the total at all times;
+     on a phone the only cart affordance is the View Cart button, which said nothing about what was
+     in it. It now carries the live figures — from cartCount()/cartTotal()/ugx(), the storefront's
+     own functions — refreshed by the same bar() wrapper everything else uses. */
+  function coCartBtnSync(){
+    try{
+      var b = document.getElementById('coCartBtn'); if(!b) return;
+      var n = (typeof cartCount === 'function') ? cartCount() : 0;
+      var lbl = b.querySelector('.colbl');
+      if(!lbl){ lbl = document.createElement('span'); lbl.className = 'colbl'; b.appendChild(lbl); }
+      lbl.textContent = n > 0
+        ? (' · ' + n + ' · ' + ((typeof ugx === 'function') ? ugx(cartTotal()) : ''))
+        : '';
     }catch(e){}
   }
 
@@ -5183,14 +5300,15 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
     try{ whChatScroll(); }catch(e){}
   }
 
+  /* marks whichever navigation is on screen — the desktop rail, the mobile strip, or both */
   function coRailMark(id, label){
     try{
-      var r = document.getElementById('coRail'); if(!r) return;
-      var bs = r.querySelectorAll('button');
+      var bs = document.querySelectorAll('#coRail button, #coNav button');
       for(var i=0;i<bs.length;i++){
         var on = (id && bs[i].getAttribute('data-biz') === String(id))
               || (!id && label && bs[i].getAttribute('data-cat') === String(label));
         bs[i].classList.toggle('on', !!on);
+        if(on && bs[i].scrollIntoView){ try{ bs[i].scrollIntoView({block:'nearest', inline:'center'}); }catch(e){} }
       }
     }catch(e){}
   }
@@ -5309,7 +5427,16 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
     try{
       var _bar = window.bar;
       if(typeof _bar === 'function'){
-        window.bar = function(){ var r = _bar.apply(this, arguments); try{ coCartRender(); }catch(e){} return r; };
+        /* one wrapper, three consumers: the desktop cart rail, the mobile View Cart figures, and the
+           quantity on every product card in the thread. bar() is called by cartAdd, inc, dec, clear
+           and the sheet's own edits, so nothing has to know about anything else. */
+        window.bar = function(){
+          var r = _bar.apply(this, arguments);
+          try{ coCartRender(); }catch(e){}
+          try{ coCartBtnSync(); }catch(e){}
+          try{ whChatCtlSync(); }catch(e){}
+          return r;
+        };
       }
     }catch(e){}
   }
@@ -5332,6 +5459,7 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       }
     }catch(e){}
     try{ chatOnlyDesk(); }catch(e){}
+    try{ coNavBuild(); coCartBtnSync(); }catch(e){}
     try{
       if(!document.getElementById('coCart')){
         var cc = document.createElement('aside'); cc.id='coCart'; cc.className='co-cart2';
@@ -5345,8 +5473,9 @@ loadCart(); loadCust(); loadWish(); loadRSearch(); try{whChrome();whNav();whPopC
       var iv = setInterval(function(){
         tries++;
         try{ chatOnlyDesk(); }catch(e){}
+        try{ coNavBuild(); }catch(e){}  /* the mobile strip waits on the same catalogue feed */
         try{ coHeadVar(); }catch(e){}   /* header height settles as the logo and web fonts land */
-        if((document.getElementById('coRail') && tries > 3) || tries > 20) clearInterval(iv);
+        if(((document.getElementById('coRail') || document.getElementById('coNav')) && tries > 3) || tries > 20) clearInterval(iv);
       }, 400);
       if(!window.__coRenderHooked){
         window.__coRenderHooked = true;
