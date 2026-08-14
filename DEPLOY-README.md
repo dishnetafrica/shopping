@@ -1,82 +1,92 @@
-# CloudBSS — WhatsApp watchdog, verifier, and the order-ack fix
+# Deploy this — one upload, everything outstanding
 
-Three files. Your Dockerfile does `COPY app/` and `COPY database/`, so all three ship with a normal rebuild.
-
-```
-app/Console/Commands/WaWatchdogCommand.php   ← REPLACES the existing file
-app/Console/Commands/WaVerifyCommand.php     ← new
-database/migrations/2026_08_11_000001_fix_order_notification_sends_recipient_fk.php   ← new
-```
-
-Upload keeping the paths, commit, press **Deploy**. The migration runs automatically (your entrypoint does `php artisan migrate --force`).
+Upload the folders in this zip to GitHub (they keep their paths, so they overwrite in place), then
+deploy on EasyPanel. **This supersedes every zip I sent you earlier today** — `shop.html` in here is
+newer than the one in `family-shoppers-v5.05.1.zip`, so deploying the old one now would undo the
+fix that makes your solar products clickable.
 
 ---
 
-## 1 & 2 — the watchdog and the verifier
+## What is in it
 
-```bash
-php artisan wa:verify                        # is this shop delivering right now?
-php artisan wa:verify --hours=2              # narrow the window while watching a recovery
-php artisan wa:verify --send=2119xxxxxxxx    # LIVE test against ONE contact
-php artisan wa:watchdog                      # runs every 5 min anyway
-```
+### 1. The launch-audit fixes (v5.05) — Family Shoppers
 
-Exit code 0 = delivering or partly, 1 = not.
-
-`--send` tests **one contact**. Error 463 is per-contact, so a single rejection is not a verdict — it now sharpens the ratio rather than overriding it. That was another way the first version misled: three rejected test messages looked like a dead number when seven customers in ten were being answered fine.
-
-### The verdict is a ratio, not a timestamp — and three states, not two
-
-Both commands judge delivery on **how many distinct customers were refused, out of how many we tried to reach**, over the last 6 hours. Measured on this shop: an ordinary day refuses 3-5% (wrong numbers, blocks, deleted accounts); the real outage refused **9 of 30, 30%**. No ambiguity between those.
-
-| | |
+| File | What it fixes |
 |---|---|
-| under 12% refused | **DELIVERING** |
-| 12-25% | **PARTLY DELIVERING** |
-| over 25% | **NOT DELIVERING** |
-| fewer than 8 customers | **too quiet to judge** — a quiet shop is not a broken one |
+| `app/Http/Controllers/Storefront/StorefrontController.php` | **The customer can no longer set the price.** Every cart line is re-read from `products`; the posted `price` and `total` decide nothing. Also: one order per submission (idempotency), order + line items in one transaction, MOQ enforced server-side, availability no longer published from `products.stock`, branches read from the `branches` table |
+| `app/Http/Controllers/Storefront/StorefrontProductController.php` | `/product/{id}` no longer serves another shop's product; price precedence matches the catalogue |
+| `app/Services/WhatsApp/EvolutionGateway.php`, `CloudApiGateway.php` | A send the API **rejects** is no longer recorded as delivered |
+| `app/Jobs/NotifyOwnerNewOrder.php`, `NotifyCustomerOrderReceived.php` | …and a failed send keeps its ledger row instead of deleting the evidence |
+| `app/Models/OrderNotificationSend.php` | `markFailed()`; `claim()` can re-take a stale unsent row so retry still works |
+| `app/Filament/Auth/OtpLogin.php` | Login throttled — 5 attempts per IP **and** per account |
+| `app/Http/Middleware/RequireSameOrigin.php` | Cross-site writes to `papi/*` refused. **Corrected** since the first version, which broke the CI suite |
+| `app/Services/Storefront/WholesaleHome.php`, `app/Services/Bot/AiBrain.php` | No more unconditional "FREE DELIVERY" the shop never configured |
+| `routes/web.php` | `throttle:3,60` on the quotation share endpoint; the same-origin gate on `papi` |
+| `database/migrations/2026_08_05_000001_unique_quote_no_on_quotations.php` | `HAVING "n"` → `HAVING COUNT(*)`; the de-duplication silently did nothing on PostgreSQL |
+| `app/Http/Controllers/Panel/AccountingControlsController.php` | Same bug, worse: **"Ledger journals balanced" was reporting a pass without ever running** |
+| `tests/Feature/Security/RequireSameOriginTest.php` | 9 tests pinning the middleware's decisions |
 
-**Why not `wa_send_ok_at`?** Because it lies. It froze on 18 July while this shop delivered ~1,000 messages a day for three more weeks: Evolution's SUCCESS callbacks stopped matching the `in_array($status, ['DELIVERY_ACK','READ','PLAYED'])` check in `WebhookController`, while the ERROR branch kept matching. Refusals record perfectly; successes silently stopped. A tool built on that stamp reported a three-week total outage that had never happened — and would have gone on reporting one forever after the real problem was fixed.
+### 2. The GSL solar fixes
 
-The stamp is still shown, labelled unreliable. It is not the verdict.
+| File | What it fixes |
+|---|---|
+| `resources/storefront/shop.html` | **Quote-only products open their page.** `poaCard` built a bare `<div>` where every other card is a real `<a href>` — so with every GSL price blank, all 32 descriptions and photo galleries were unreachable. Plus the v5.05 cart fixes (`+` no longer deletes a line, Add opens at MOQ) |
+| `app/Services/Catalogue/ProductImporter.php` | Truncates `unit_size`/`origin_country` — one 46-character Size cell was killing the whole import with a 500. Also fills `gallery_1..3`, which no importer could ever do |
 
-**Three states, not two,** because "70% working" is a real and common condition. During the actual outage 21 of 30 customers *were* being answered while a boolean verdict shouted NOT WORKING at them.
 
-Alerts go via `PLATFORM_WA_INSTANCE`, never the shop's own number, because that is the one failing. **If that env var is unset the alert cannot be sent** — it logs `wa.no_ops_instance` and gives up. The alert message also tells the operator **not to delete and recreate the WhatsApp connection**, because that is what caused this outage in the first place.
+> **The 72 GSL product photos are NOT in this zip** — they are 5.7 MB of JPEG and this is a code
+> deploy. They ship separately as `gsl-photos-only.zip` (`public/img/gsl/`). Until you upload those,
+> the solar product images stay 404 and every card shows its category icon instead. Everything else
+> in here works without them.
+
+### 3. New — record a physical count
+
+`app/Console/Commands/StockCountCommand.php`
 
 ---
 
-## 3 — the order-acknowledgement fix (separate bug, found today)
+## After deploying
 
-`order_notification_sends.recipient_id` was a strict foreign key into `order_notification_recipients`. But two callers pass **0** as a sentinel meaning "this went to the customer, not to a staff member":
+**1. Re-import the GSL catalogue** (admin → Businesses → GSL → Import products), with *Replace the
+whole catalogue* **OFF**. Use `gsl-catalogue-WITH-PHOTOS.csv` — it carries the image paths that
+match the photos now in `public/img/gsl/`.
 
-- `NotifyCustomerOrderReceived` — the "we've received your order" WhatsApp
-- `CreditReminderCommand` — the reminders that chase money owed
-
-`order_notification_recipients.id` is a bigserial starting at 1, so **no row can ever have id 0**. Every claim violated the constraint and threw. `insertOrIgnore` does not help: on Postgres it is `ON CONFLICT DO NOTHING`, which swallows unique conflicts, not foreign-key violations.
-
-**Neither feature has ever worked.** Not intermittently — structurally impossible since June. Ten failures are still in `failed_jobs` from July; the rest aged out.
-
-Confirm it on your own data before and after:
+**2. Record Ashish's count.** Dry run first — it writes nothing without `--write`:
 
 ```bash
-php artisan tinker --execute="
-  echo DB::table('order_notification_sends')->selectRaw('event_type, count(*) n')
-        ->groupBy('event_type')->get()->toJson(JSON_PRETTY_PRINT).\"\n\";
-  echo 'customer-sentinel rows: '.DB::table('order_notification_sends')->where('recipient_id',0)->count().\"\n\";
-"
+php artisan stock:count --tenant=17 --by="Ashish Kareliya" \
+  "cling film=115" "aluminium foil=53" "food container=34" "scrub sponge=15" "wheat flour=3"
 ```
 
-Before the fix that count is **0** and no `web_customer_ack` or `credit_reminder_*` rows exist at all. After the fix, place a website order and it becomes 1.
+It prints purchased, sold, what the documents say, the count and the variance. Two lines will come
+back **refused rather than guessed**: "scrub sponge" matches no product, and "wheat flour" matches
+three. The output gives you the exact `"#id=qty"` form to re-run with once Ashish says which.
 
-The migration drops the constraint, because the column is not a pure foreign key — it holds "a recipient id, OR 0 meaning the customer", which a FK cannot express. Idempotency is untouched: the unique index on `(order_id, recipient_id, event_type)` still does the deduplication.
+When the numbers look right:
 
-**Rejected alternative:** inserting a fake recipient row with id 0. It would satisfy the constraint, but that row needs a `tenant_id` and the FK carries `cascadeOnDelete` — so deleting whichever tenant happened to own the fake row would cascade away every customer acknowledgement ever recorded, for every shop. A landmine in exchange for tidiness.
+```bash
+php artisan stock:count --tenant=17 --by="Ashish Kareliya" "cling film=115" ... --write
+```
 
-**Deliberate side effect:** deleting a staff recipient no longer erases the record that they were notified. The send ledger is history; that it outlives the person is correct.
+The count lands as a `trust_count` movement plus `products.stock` stamped with today's date and
+"count" as its source. **No purchase, invoice or order is touched**, so Juba Stock goes on reporting
+Purchased − Sold. When the two disagree that is the finding, not something to smooth over.
+
+**3. Run the nine checks** (`ops/runtime-checks.php` in this zip, so no pasting):
+
+```bash
+php artisan tinker --execute='require base_path("ops/runtime-checks.php");'
+```
+
+**Check 5 is the one that can still stop the launch**: if no queue worker is running, no WhatsApp
+notification has ever been sent.
 
 ---
 
-## Priority
+## What is NOT tested
 
-The outage is still the headline. This migration does not affect it — it is safe to ship in the same deploy, and it will not change delivery one way or the other. Do the Evolution image upgrade regardless.
+There is no PHPUnit in my environment — Packagist is blocked — so `php -l` and reading are the
+ceiling for the PHP. What *is* tested: the storefront JavaScript, by harnesses that cut each
+function out of the shipped `shop.html` at run time and exercise it (31 assertions across the
+customer journey), and the order-pricing rules (28 assertions). `stock:count` has **not been run**
+anywhere. Its dry run is the safety: it writes nothing until you add `--write`.
