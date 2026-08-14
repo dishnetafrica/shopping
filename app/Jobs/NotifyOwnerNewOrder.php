@@ -70,12 +70,24 @@ class NotifyOwnerNewOrder implements ShouldQueue
             }
             try {
                 $res = $gateway->sendText($inst, $r->phone, $msg);
+                // v5.05 (audit P1-2) — the gateway returns a body whether the API accepted the
+                // message or rejected it. Recording a rejection as a delivered send is how a shop
+                // ends up with an order nobody was told about and a transcript that says otherwise.
+                if (is_array($res) && ($res['_ok'] ?? true) === false) {
+                    throw new \RuntimeException('whatsapp api rejected the send (HTTP ' . ($res['_status'] ?? '?') . ')');
+                }
                 $messageId = is_array($res) ? ($res['key']['id'] ?? ($res['id'] ?? null)) : null;
                 OrderNotificationSend::markSent($o->id, $r->id, self::EVENT, $messageId);
                 MessageLog::record($t->id, $r->phone, $inst, 'out', 'system', $msg);
             } catch (\Throwable $e) {
-                // Release the claim so a retry can attempt again — no duplicate, never stuck.
-                OrderNotificationSend::releaseClaim($o->id, $r->id, self::EVENT);
+                // v5.05 (audit P1-3) — this used to DELETE the ledger row, so after a failed send
+                // there was no evidence a notification had ever been attempted: nothing to query,
+                // nothing to alert on, and the job swallowed the throwable so the queue never
+                // retried either. The row now STAYS with sent_at NULL, which makes
+                // "select * from order_notification_sends where sent_at is null" the answer to
+                // "which orders did nobody hear about". claim() re-takes a stale unsent row, so a
+                // retry is still possible — visibility and retry, instead of one or the other.
+                OrderNotificationSend::markFailed($o->id, $r->id, self::EVENT);
                 Log::warning('order_notify.send_failed', [
                     'tenant' => $t->id, 'order' => $o->id, 'recipient' => $r->id, 'err' => $e->getMessage(),
                 ]);

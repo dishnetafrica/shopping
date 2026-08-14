@@ -249,8 +249,16 @@ class ChatController extends Controller
             try {
                 $names = \App\Services\Bot\ChatCards::starredNames($msgs);
                 if ($names !== []) {
+                    // v5.05 (launch audit P1-14, and this one was mine) — filtered neither
+                    // `active` nor `archived_at`, so an archived product rendered a full card with
+                    // a price and an Add button that did nothing at all: whChatAdd -> inc() ->
+                    // prod() misses, because the product is not in the customer's feed, and inc()
+                    // returns silently. A card that advertises something unsellable and a button
+                    // that lies, in one component.
                     $rows = \App\Models\Product::withoutGlobalScopes()
-                        ->where('tenant_id', $tenant->id)->whereIn('name', $names)->get()->keyBy('name');
+                        ->where('tenant_id', $tenant->id)
+                        ->where('active', true)->whereNull('archived_at')
+                        ->whereIn('name', $names)->get()->keyBy('name');
                     // v4.82 — second pass for the misses: candidates fetched by the name's
                     // longest token, then accepted ONLY on normalized equality (case/suffix
                     // drift). Ambiguity or spelling drift → no card, never a guessed product.
@@ -260,8 +268,17 @@ class ChatController extends Controller
                             usort($tokens, fn ($a, $b) => mb_strlen($b) <=> mb_strlen($a));
                             $tok = (string) ($tokens[0] ?? '');
                             if (mb_strlen($tok) >= 4) {
-                                $cands = \App\Models\Product::withoutGlobalScopes()
-                                    ->where('tenant_id', $tenant->id)
+                                // Same filter on the second pass. This one also SEARCHES by token
+                                // rather than answering a name, so it additionally applies the
+                                // hidden-product rule: Visibility's contract is that an unlisted
+                                // product is served to a customer who NAMES it, which is the exact
+                                // pass above — not to one who half-matched a word.
+                                $cands = \App\Services\Catalog\Visibility::scope(
+                                        \App\Models\Product::withoutGlobalScopes()
+                                            ->where('tenant_id', $tenant->id)
+                                            ->where('active', true)->whereNull('archived_at'),
+                                        $tenant
+                                    )
                                     ->where('name', 'like', '%' . $tok . '%')->limit(12)->get();
                                 $want = \App\Services\Bot\ChatCards::normalize($n);
                                 $hit = null;

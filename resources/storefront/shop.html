@@ -1885,7 +1885,12 @@ function wsBar(){
   var cr=BUYER.credit,credit='';
   if(cr&&cr.limit){credit=' &middot; Credit '+esc(cr.currency||'')+' '+(Number(cr.available||0)).toLocaleString('en-US')+'/'+(Number(cr.limit||0)).toLocaleString('en-US')+(cr.canSell===false?' <b style="color:#ffd2cc">(over limit)</b>':'');}
   return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:'+(WMODE?'#0C2C6B':'#eef2fb')+';color:'+(WMODE?'#fff':'#103A8C')+';border-radius:12px;padding:9px 12px;margin:4px 0 10px;font-size:13px">'+
-    '<div><b>'+(WMODE?'Wholesale / carton pricing':'Retail pricing')+'</b>'+(BUYER.segment?(' &middot; '+esc(BUYER.segment)):'')+credit+'</div>'+
+    /* v5.05 (launch audit P1-15) — this said "Wholesale / carton pricing" vs "Retail pricing" on a
+       shop with ONE price list: BuyerContext sets mode/segment/credit and nothing adjusts price by
+       mode, so unticking the box changed the words and not a single number. The toggle does change
+       the VIEW (carton phrasing, per-piece maths, pack lines), so it stays — described as what it
+       is. The real tier engine is PriceResolver, reachable only with a dealer token. */
+    '<div><b>'+(WMODE?'Carton view':'Single-unit view')+'</b>'+(BUYER.segment?(' &middot; '+esc(BUYER.segment)):'')+credit+'</div>'+
     '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600"><input type="checkbox"'+(WMODE?' checked':'')+' onchange="setWMode(this.checked)" style="width:16px;height:16px"> Wholesale</label>'+
     '</div>';
 }
@@ -2452,7 +2457,9 @@ function smartSearch(q,limit){
 function sTrack(ev,data){ try{ if(!EVENT_URL)return; var body={ev:ev,ts:Date.now()}; if(data){for(var k in data){if(data.hasOwnProperty(k))body[k]=data[k];}}
   fetch(EVENT_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true}).catch(function(){}); }catch(e){} }
 
-function _srow(p,reasons){ var add=oosOf(p)?'':('<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>');
+/* v5.05 — guarded on out-of-stock but not on price-on-request, so a POA product appeared in the
+   search dropdown priced "0" with a working Add. The grid renders those as poaCard with no Add. */
+function _srow(p,reasons){ var add=(oosOf(p)||p.poa)?'':('<button class="sadd" onclick="event.stopPropagation();cartAdd('+jk(p.name)+')">Add</button>');
   var sub=reasons&&reasons.length?(esc(reasons[0])+' · '+ugx(p.price)):ugx(p.price);
   return '<div class="srow" onclick="searchOpenProduct('+(p.id||0)+','+jk(p.name)+')"><div class="sthumb">'+(p.image?'<img alt="" src="'+esc(p.image)+'" loading="lazy">':catIcon(p.category))+'</div><div class="smeta"><div class="st">'+esc(p.name)+'</div><div class="ss">'+sub+'</div></div>'+add+'</div>'; }
 function _seeAllRow(q){ return '<div class="srow" onclick="searchSubmit('+jk(q)+')" style="color:var(--green-d);font-weight:700"><div class="sthumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div><div class="smeta"><div class="st">See all results for “'+esc(q)+'”</div></div></div>'; }
@@ -2804,7 +2811,11 @@ function variantCard(grp){
     :(totalInCart
       ?'<button class="add" onclick="openVariantPicker('+jk(key)+')">'+totalInCart+' in cart \u00b7 Edit</button>'
       :'<button class="add opt" onclick="openVariantPicker('+jk(key)+')">Add<span>'+inv.length+' option'+(inv.length>1?'s':'')+'</span></button>');
-  return '<div class="pc'+(allOos?' pcoos':'')+'">'+img+'<div class="bd"><div class="nm">'+esc(grp.base)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+'<div class="vsize">'+esc(def.size)+'</div><div class="pr">'+ugx(p.price)+'</div>'+unit+ctrl+'</div></div>';
+  /* v5.05 (launch audit P1-13) — the grouped "N sizes" card dropped pack size, MOQ and per-piece
+     price, all of which prodCard renders. Every category page and every search results page goes
+     through this card, so on a wholesale shop the terms of sale were invisible on the main listing
+     and appeared only after opening the product. Same three lines as prodCard, same helpers. */
+  return '<div class="pc'+(allOos?' pcoos':'')+'">'+img+'<div class="bd"><div class="nm">'+esc(grp.base)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+'<div class="vsize">'+esc(def.size)+'</div><div class="pr">'+ugx(p.price)+'</div>'+packLine(p)+perPiece(p)+moqLine(p)+unit+ctrl+'</div></div>';
 }
 function openVariantPicker(key){
   var grp=GROUPS[key];if(!grp)return;
@@ -2822,7 +2833,12 @@ function openVariantPicker(key){
   $('sheet').classList.add('show');
 }
 function vpStep(name,key,d){if(d>0)cartAdd(name);else cartSub(name);openVariantPicker(key);}
-function cartAdd(name){var p=prod(name);if(!p||oosOf(p))return;flyToCart();if(!CART[name]){CART[name]={name:p.name,price:p.price,qty:0};track('add',p.id);}CART[name].qty++;saveCart();render();bar();}
+/* v5.05 (launch audit P0-3) — opened the line at 1 while the grid's own inc() opened it at minq(p),
+   so every Add reached from search, the size picker, compare, Saved items and the cart cross-sell
+   started below the shop's minimum. Those lines then hit bump() and vanished. One rule now: a line
+   opens at the minimum, wherever the Add was pressed. A price-on-request product is refused here
+   too — it has no price to put in the cart. */
+function cartAdd(name){var p=prod(name);if(!p||oosOf(p)||p.poa)return;flyToCart();if(!CART[name]){CART[name]={name:p.name,price:p.price,qty:minq(p)};track('add',p.id);}else{CART[name].qty++;}saveCart();render();bar();}
 function cartSub(name){if(!CART[name])return;CART[name].qty--;if(CART[name].qty<=0)delete CART[name];saveCart();render();bar();}
 function vpick(key,i){VSEL[key]=i;render();}
 function gridG(list){
@@ -3431,8 +3447,14 @@ function setPmax(v){ FPMAX=(FPMAX===v?0:v); _catShown=24; render(); }
 function freeRules(){
   var d=DELV_CFG||{}, rs=(d.free_rules&&d.free_rules.length)?d.free_rules:null;
   if(!rs){ var g=Number(d.free_over||d.freeOver||0)||0;
+    /* v5.05 (launch audit P1-6) — this used to fall back to [{Juba,50},{Kampala,20}] "until
+       configured", so a shop that had never set a delivery policy still promised free delivery in
+       the cart, in the bill row and in the quotation remarks the customer keeps. The numbers also
+       carried no currency, so on a UGX shop it read "free over UGX 50". A delivery rule the owner
+       has not agreed to is not a default, it is an invention. No rules unless configured; the cart
+       then says delivery is confirmed on WhatsApp, which is what actually happens. */
     if(g>0){ rs=(BRANCHES||[]).map(function(b){return {city:b.name,free_over:g};}); }
-    else { rs=[{city:'Juba',free_over:50},{city:'Kampala',free_over:20}]; }   // seeded default until configured
+    else { rs=[]; }
   }
   return rs.map(function(r){return {city:String(r.city||'').trim(),free_over:Number(r.free_over)||0};})
            .filter(function(r){return r.city && r.free_over>0;});
@@ -4644,7 +4666,9 @@ function detailStepper(p){
 }
 function refreshDetailStepper(){ if(CUR_DETAIL&&$('dstepwrap')) $('dstepwrap').innerHTML=detailStepper(CUR_DETAIL); }
 function detailInc(name,price,moq){ if(!CART[name])CART[name]={name:name,price:price,qty:0}; CART[name].qty += (CART[name].qty===0?Math.max(1,moq||1):1); saveCart(); bar(); refreshDetailStepper(); render(); }
-function detailDec(name){ if(!CART[name])return; CART[name].qty--; if(CART[name].qty<=0)delete CART[name]; saveCart(); bar(); refreshDetailStepper(); render(); }
+/* v5.05 — floored at 0 instead of at the MOQ, so the product page walked a line down to 1 under a
+   label still reading "Min order: 12". Same rule as dec() now. */
+function detailDec(name){ if(!CART[name])return; var m=minq(prod(name)); CART[name].qty--; if(CART[name].qty<m)delete CART[name]; saveCart(); bar(); refreshDetailStepper(); render(); }
 function dswap(u,el){ var m=$('dmain'); if(m)m.src=u; document.querySelectorAll('.dth').forEach(function(t){t.classList.remove('on');}); if(el)el.classList.add('on'); }
 function recoRail(title,items){
   if(!items||!items.length)return '';
@@ -4717,7 +4741,14 @@ function bar(){var n=cartCount();$('cartbar').classList.toggle('show',n>0);$('ca
   if(typeof syncDesktopCart==='function') syncDesktopCart();}
 function saveCart(){try{localStorage.setItem(STORE_KEY,JSON.stringify(CART));}catch(e){}}
 function loadCart(){try{CART=JSON.parse(localStorage.getItem(STORE_KEY)||'{}')||{};}catch(e){CART={};}}
-function bump(key,d){if(!CART[key])return;var p=prod(key);CART[key].qty+=d;if(CART[key].qty<minq(p)){delete CART[key];}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
+/* v5.05 (launch audit P0-3) — the MOQ floor applied after ANY delta, so pressing + on a line that
+   sat below the minimum DELETED it: qty 1 -> 2, still under a min of 5, line gone, no message. The
+   floor belongs on the way DOWN only. Going up from below the minimum now jumps straight to it,
+   which is what the customer meant by pressing +. */
+function bump(key,d){if(!CART[key])return;var p=prod(key),m=minq(p);
+  if(d>0){ CART[key].qty = (CART[key].qty<m) ? m : (CART[key].qty+d); }
+  else { CART[key].qty+=d; if(CART[key].qty<m){delete CART[key];} }
+  saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
 var MOD_CTX=null;
 function customize(name){var p=prod(name);if(!p||oosOf(p))return;var g=p.modifiers||[];if(!g.length){inc(name);return;}MOD_CTX={name:name,base:p.price,groups:g,sel:{}};$('sheetTitle').textContent=name;drawModSheet();$('sheet').classList.add('show');}
 function modPrice(){var s=MOD_CTX.base;MOD_CTX.groups.forEach(function(g){var i=MOD_CTX.sel[g.id];if(i!=null)s+=(+(g.options[i].delta)||0);});return s;}

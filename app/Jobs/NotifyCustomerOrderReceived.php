@@ -58,11 +58,16 @@ class NotifyCustomerOrderReceived implements ShouldQueue
         try {
             $inst = $t->sendInstance();
             $res = $wa->forTenant($t)->sendText($inst, $o->customer_phone, $msg);
+            // v5.05 (audit P1-2) — same as the owner alert: a body came back whether the API
+            // accepted the message or refused it, and the refusal was recorded as delivered.
+            if (is_array($res) && ($res['_ok'] ?? true) === false) {
+                throw new \RuntimeException('whatsapp api rejected the send (HTTP ' . ($res['_status'] ?? '?') . ')');
+            }
             $messageId = is_array($res) ? ($res['key']['id'] ?? ($res['id'] ?? null)) : null;
             OrderNotificationSend::markSent($o->id, 0, self::EVENT, $messageId);
             MessageLog::record($t->id, $o->customer_phone, $inst, 'out', 'system', $msg);
         } catch (\Throwable $e) {
-            OrderNotificationSend::releaseClaim($o->id, 0, self::EVENT);
+            OrderNotificationSend::markFailed($o->id, 0, self::EVENT);   // v5.05 — keep the evidence
             Log::warning('order_customer_ack.send_failed', [
                 'tenant' => $t->id, 'order' => $o->id, 'err' => $e->getMessage(),
             ]);

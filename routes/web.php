@@ -240,7 +240,12 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
 
     // JSON API the panel calls. GET for everything (the panel uses query-string
     // writes); upload-image is POST. Tenant scoping is automatic.
-    Route::prefix('papi')->group(function () {
+    //
+    // v5.05 (launch audit P1-5) — papi/* is CSRF-exempt in bootstrap/app.php while ~40 of its
+    // WRITE endpoints are registered as GET, and a SameSite=Lax cookie rides a top-level GET
+    // navigation. RequireSameOrigin refuses state-changing requests that did not come from this
+    // site; safe reads are untouched, so nothing in the panel changes.
+    Route::prefix('papi')->middleware(\App\Http\Middleware\RequireSameOrigin::class)->group(function () {
         // Project Advisor (Slice 2 — Discovery): questionnaire schema, deterministic compute, projects.
         Route::prefix('advisor')->group(function () {
             Route::get('schema', [\App\Http\Controllers\Advisor\AdvisorController::class, 'schema']);
@@ -863,7 +868,11 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::get('/q/{token}',         [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'show'])->where('token', $qToken);
     Route::get('/q/{token}/data',    [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'data'])->where('token', $qToken);
     Route::get('/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('token', $qToken);
-    Route::post('/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('token', $qToken);
+    // v5.05 (audit P0-4) — share sends WhatsApp AND email from the shop's own instance to any
+    // number the caller names, and a token is one /quote call away. It was the only public POST in
+    // this file with no throttle. 3 per hour per IP: enough for a customer forwarding their own
+    // quotation, useless as a relay.
+    Route::post('/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('token', $qToken)->middleware('throttle:3,60');
     Route::post('/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('token', $qToken);
     Route::post('/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('token', $qToken);
     Route::post('/event',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent']);
@@ -908,7 +917,7 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/q/{token}',         [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'show'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::get('/{shop}/q/{token}/data',    [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'data'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::get('/{shop}/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('shop', $shopSlug)->where('token', $qToken);
-    Route::post('/{shop}/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('shop', $shopSlug)->where('token', $qToken);
+    Route::post('/{shop}/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('shop', $shopSlug)->where('token', $qToken)->middleware('throttle:3,60');   // v5.05 audit P0-4
     Route::post('/{shop}/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::post('/{shop}/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::post('/{shop}/event',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent'])->where('shop', $shopSlug);

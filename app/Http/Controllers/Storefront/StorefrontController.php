@@ -283,8 +283,13 @@ class StorefrontController extends Controller
                 'countryOfOrigin' => trim((string) ($seoProduct->origin_country ?? '')) ?: null,
                 'offers'      => $price > 0 ? [
                     '@type' => 'Offer', 'price' => (string) $price, 'priceCurrency' => $cur,
+                    // v5.05 — do not tell Google a product is out of stock on the strength of a
+                    // column no sale decrements (audit P0-2). Stated only when the shop has turned
+                    // stock display on; otherwise InStock, which is what an order-to-confirm
+                    // wholesale shop actually means.
                     'availability' => 'https://schema.org/'
-                        . (($seoProduct->stock === null || (int) $seoProduct->stock > 0) ? 'InStock' : 'OutOfStock'),
+                        . (((bool) $tenant->setting('storefront_show_stock', false) === false
+                            || $seoProduct->stock === null || (int) $seoProduct->stock > 0) ? 'InStock' : 'OutOfStock'),
                     'url' => $canonUrl,
                     'seller' => ['@type' => 'Organization', 'name' => (string) $tenant->name],
                 ] : null,
@@ -651,7 +656,8 @@ class StorefrontController extends Controller
                     'brand' => (string) ($pp->brand ?? '') !== '' ? ['@type' => 'Brand', 'name' => (string) $pp->brand] : null,
                     'offers' => ((float) ($pp->price ?? 0) > 0) ? [
                         '@type' => 'Offer', 'price' => (string) (float) $pp->price, 'priceCurrency' => $cur ?: 'UGX',
-                        'availability' => 'https://schema.org/' . (($pp->stock === null || (int) $pp->stock > 0) ? 'InStock' : 'OutOfStock'),
+                        'availability' => 'https://schema.org/' . (((bool) $tenant->setting('storefront_show_stock', false) === false
+                            || $pp->stock === null || (int) $pp->stock > 0) ? 'InStock' : 'OutOfStock'),   // v5.05 — see audit P0-2
                         'url' => $pageCanon,
                     ] : null,
                 ]);
@@ -1010,6 +1016,10 @@ class StorefrontController extends Controller
                 $specMap = [];
             }
 
+            // v5.05 — availability is stated only if the shop has said its stock figures can be
+            // trusted. Default OFF: see the note on 'Stock' below for why.
+            $showStock = (bool) $tenant->setting('storefront_show_stock', false);
+
             // v4.54 — hidden products never enter the public feed. This one query feeds the
             // product grid, the storefront's own search box and the category tiles, so filtering
             // here covers all three; anything added downstream inherits it for free.
@@ -1022,7 +1032,7 @@ class StorefrontController extends Controller
                     // v4.7.7 column — guarded so the feed keeps serving if the migration hasn't run yet.
                     \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number') ? ['oem_number'] : []
                 ))
-                ->map(function ($p) use ($mods, $specMap) {
+                ->map(function ($p) use ($mods, $specMap, $showStock) {
                     return [
                         'Product Name' => (string) $p->name,
                         'Variant'      => '',
@@ -1033,7 +1043,21 @@ class StorefrontController extends Controller
                         'OEM'          => (string) ($p->oem_number ?? ''),   // v4.7.7 — real part-number chip + diagram cross-links
                         'SKU'          => (string) ($p->sku ?? ''),          // v4.8 — searchable + shown on cards
                         'Price_UGX'    => (float) ($p->price ?? $p->base_price ?? 0),   // price = selling truth (price-drift fix 2026-07-18)
-                        'Stock'        => $p->stock === null ? null : (int) $p->stock,
+                        // v5.05 (launch audit P0-2) — `products.stock` is a TYPED column that no sale
+                        // decrements. Nothing on the order path writes it; new products are seeded at
+                        // 100. The shop's own Juba Stock screen derives real stock from purchase and
+                        // sales documents and disagrees with it — popcorn reads 150 here against 50
+                        // bought and 50 sold. This column drove "Only N left", the Add button, the
+                        // home rails and the InStock flag handed to Google.
+                        //
+                        // A number you cannot vouch for is worse than no number: it either sells goods
+                        // you do not have or hides goods you do. Availability is therefore OFF unless
+                        // the shop turns it on. Null means "not stated" everywhere downstream — oosOf()
+                        // reads null as in-stock, so nothing is hidden and nothing is disabled.
+                        //
+                        // To show it again once the two screens agree:
+                        //   Tenant::find(17)->update(['settings' => [...$s, 'storefront_show_stock' => true]])
+                        'Stock'        => $showStock ? ($p->stock === null ? null : (int) $p->stock) : null,
                         'Image'        => $this->imageUrl($p->image_url),
                         'Modifiers'    => $mods[$p->id] ?? [],
                         'MOQ'          => $p->moq === null ? null : (int) $p->moq,
@@ -1169,6 +1193,94 @@ class StorefrontController extends Controller
         return null;
     }
 
+    /**
+     * v5.05 — price a posted cart from the CATALOGUE, not from the browser.
+     *
+     * The launch audit's first P0: `$price = (float) ($it['price'] ?? 0)` took the money straight
+     * off the wire. A curl with `"price":1` bought fifty cartons for fifty. This is the fix, and it
+     * is deliberately the dullest possible one — look the name up, use the shop's own number.
+     *
+     * Matching is EXACT on the case-folded, whitespace-collapsed name. Not fuzzy, not partial: the
+     * same rule `OrderItemSync` and `PurchaseNameMatch` already use, for the same reason — fifty
+     * cartons priced off the wrong product is worse than fifty priced off nothing, because the
+     * second one refuses to save and the first one looks fine.
+     *
+     * The price column follows the catalogue feed (`price ?? base_price`, line ~1035) so what the
+     * customer was shown is what they are charged. Quantity is floored at the product's MOQ — a
+     * wholesale shop's minimum is not advisory, and the browser now opens every Add at that number
+     * anyway, so a lower quantity can only arrive from a crafted request. Modifier deltas are
+     * clamped at zero so they cannot be used to discount a line.
+     *
+     * @param  array<int,mixed> $items
+     * @return array{0:array<int,array>,1:array<int,string>,2:float,3:array<int,string>}
+     *         [clean lines, text parts, total, names that matched no live product]
+     */
+    private function repriceCart(Tenant $tenant, array $items): array
+    {
+        $wanted = [];
+        foreach ($items as $it) {
+            if (! is_array($it)) continue;
+            $n = $this->cartKey((string) ($it['name'] ?? ''));
+            if ($n !== '') $wanted[$n] = true;
+        }
+
+        $byName = [];
+        if ($wanted !== []) {
+            $rows = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)
+                ->where('active', true)->whereNull('archived_at')
+                ->get(['id', 'name', 'price', 'base_price', 'moq']);
+            foreach ($rows as $p) {
+                $k = $this->cartKey((string) $p->name);
+                if ($k === '' || isset($byName[$k])) continue;      // first wins; duplicates are a data fault
+                $byName[$k] = $p;
+            }
+        }
+
+        $clean = []; $textParts = []; $total = 0.0; $unpriced = [];
+        foreach ($items as $it) {
+            if (! is_array($it)) continue;
+            $pname = trim((string) ($it['name'] ?? ''));
+            if ($pname === '') continue;
+
+            // The cart stores "Product + Modifier A, Modifier B" in one string; the product is the
+            // part before the first " + ". Same split the line-item writer below already does.
+            $base = trim((string) preg_replace('/\s+\+\s+.*$/', '', $pname));
+            $p    = $byName[$this->cartKey($base)] ?? null;
+            if (! $p) { $unpriced[] = $base !== '' ? $base : $pname; continue; }
+
+            $price = (float) ($p->price ?? $p->base_price ?? 0);
+            $qty   = max(1, (int) ($it['qty'] ?? 1));
+            $moq   = (int) ($p->moq ?? 0);
+            if ($moq > 1 && $qty < $moq) $qty = $moq;
+
+            $mods = [];
+            if (! empty($it['modifiers']) && is_array($it['modifiers'])) {
+                foreach ($it['modifiers'] as $m) {
+                    if (! is_array($m)) continue;
+                    $mn = trim((string) ($m['name'] ?? ''));
+                    if ($mn === '') continue;
+                    $delta = max(0.0, (float) ($m['price_delta'] ?? 0));
+                    $mods[] = ['group' => (string) ($m['group'] ?? ''), 'name' => $mn, 'price_delta' => $delta];
+                    $price += $delta;
+                }
+            }
+
+            $display = (string) $p->name . ($mods ? ' + ' . implode(', ', array_map(fn ($m) => $m['name'], $mods)) : '');
+            $clean[]     = ['name' => $display, 'qty' => $qty, 'price' => $price, 'modifiers' => $mods, 'product_id' => (int) $p->id];
+            $textParts[] = $qty . 'x ' . $display;
+            $total      += $qty * $price;
+        }
+
+        return [$clean, $textParts, round($total, 2), array_values(array_unique($unpriced))];
+    }
+
+    /** The one normalisation for cart-name matching: case-folded, inner whitespace collapsed. */
+    private function cartKey(string $n): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', mb_strtolower(trim($n))));
+    }
+
     /** Create a real order from the web cart. */
     public function placeOrder(Request $r, ?string $shop = null)
     {
@@ -1186,27 +1298,21 @@ class StorefrontController extends Controller
             return response()->json(['ok' => false, 'error' => 'Please add items and your name + WhatsApp number.'], 422);
         }
 
-        $clean = [];
-        $textParts = [];
-        $calcTotal = 0.0;
-        foreach ($items as $it) {
-            $pname = trim((string) ($it['name'] ?? ''));
-            if ($pname === '') continue;
-            $qty   = max(1, (int) ($it['qty'] ?? 1));
-            $price = (float) ($it['price'] ?? 0);
-            $mods  = [];
-            if (! empty($it['modifiers']) && is_array($it['modifiers'])) {
-                foreach ($it['modifiers'] as $m) {
-                    $mn = trim((string) ($m['name'] ?? ''));
-                    if ($mn !== '') {
-                        $mods[] = ['group' => (string) ($m['group'] ?? ''), 'name' => $mn, 'price_delta' => (float) ($m['price_delta'] ?? 0)];
-                    }
-                }
-            }
-            $display = $pname . ($mods ? ' + ' . implode(', ', array_map(fn ($m) => $m['name'], $mods)) : '');
-            $clean[] = ['name' => $display, 'qty' => $qty, 'price' => $price, 'modifiers' => $mods];
-            $textParts[] = $qty . 'x ' . $display;
-            $calcTotal += $qty * $price;
+        // v5.05 — THE SERVER PRICES THE CART. Until now `price` and `total` came from the POST body
+        // and were never checked against the catalogue, so anybody could order at a price they chose
+        // (launch audit P0-1). Every line is now re-read from `products` by exact, case-folded name —
+        // the same match `OrderItemSync` uses — and the client's numbers decide nothing.
+        [$clean, $textParts, $calcTotal, $unpriced] = $this->repriceCart($tenant, $items);
+
+        if ($unpriced !== []) {
+            // A line matching no live product cannot be priced, and guessing a price is exactly the
+            // hole this closes. Ask for a refresh instead of inventing a number.
+            return response()->json([
+                'ok' => false, 'error' => 'stale_cart',
+                'message' => 'Some items are no longer available: ' . implode(', ', array_slice($unpriced, 0, 3))
+                    . (count($unpriced) > 3 ? ' and ' . (count($unpriced) - 3) . ' more' : '')
+                    . '. Please refresh the page and try again.',
+            ], 422);
         }
         if (! count($clean)) {
             return response()->json(['ok' => false, 'error' => 'Your cart is empty.'], 422);
@@ -1218,7 +1324,7 @@ class StorefrontController extends Controller
         // CustomerInsight); an order that would merely push over the limit is allowed but flagged
         // for staff. Anything uncertain or erroring → allow the order (fail open): a wrongly blocked
         // sale is worse than one that staff review in the panel, where they have full control.
-        $orderTotal = $r->filled('total') ? (float) $r->input('total') : $calcTotal;
+        $orderTotal = $calcTotal;                        // v5.05 — server-computed; `total` is ignored
         $onCredit = filter_var($r->input('on_credit', false), FILTER_VALIDATE_BOOLEAN)
             || stripos((string) $r->input('payment', ''), 'credit') !== false;
         $creditNote = '';
@@ -1285,21 +1391,41 @@ class StorefrontController extends Controller
         $o->items_json     = $clean;
         $o->items_text     = $itemsText;
         if ($note !== '') $o->notes = $note;             // shows on the Kitchen Board ticket
-        $o->total          = $r->filled('total') ? (float) $r->input('total') : $calcTotal;
+        $o->total          = $calcTotal;                 // v5.05 — never the client's `total`
         if ($pay = trim((string) $r->input('payment', ''))) $o->payment = $pay;
         elseif ($onCredit) $o->payment = 'Credit';
         if ($location !== '') $o->location = $location;
-        $o->save(); // OrderObserver: assigns order_no + track_token, dispatches NotifyOwnerNewOrder
 
-        // Create line rows so the order shows its items on the Kitchen Board / panel — web orders
-        // previously stored only items_json, which left the KOT ticket empty. Best-effort product_id.
-        if ($o->wasRecentlyCreated) {
+        // v5.05 — one order per submission (audit P1-1). `orders.idempotency_key` has carried a
+        // UNIQUE index since June and POS has used it since; the public storefront — the one path
+        // where the customer is on a Juba mobile connection that times out after the order has
+        // already committed — was the path that skipped it. The key is the cart itself, so a
+        // genuine second order of the same goods a minute later is a different key and still saves.
+        $idem = 'web:' . $tenant->id . ':' . substr(sha1($phone . '|' . $itemsText . '|' . $calcTotal
+                 . '|' . now()->format('Y-m-d H:i')), 0, 40);
+        $existing = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)
+            ->where('idempotency_key', $idem)->first();
+        if ($existing) {
+            return response()->json([
+                'ok' => true, 'order_no' => (string) $existing->order_no, 'duplicate' => true,
+                'track_url' => $existing->track_token ? url('/papi/track?id=' . $existing->id . '&t=' . $existing->track_token) : null,
+            ]);
+        }
+        $o->idempotency_key = $idem;
+
+        // The order and its line rows commit together, or neither does. Before this the order was
+        // saved (and staff notified by the observer) and only THEN were the lines written outside
+        // any transaction — so a failure in the loop left a committed, notified, item-less order
+        // while the customer read "Network error, please try again" (audit P1-10).
+        \Illuminate\Support\Facades\DB::transaction(function () use ($o, $clean) {
+            $o->save(); // OrderObserver: assigns order_no + track_token, dispatches the notifications
+            if (! $o->wasRecentlyCreated) return;
             foreach ($clean as $cl) {
-                $base = preg_replace('/\s+\+\s+.*$/', '', (string) $cl['name']);
-                $pid  = Product::where('name', $base)->value('id');
                 \App\Models\OrderItem::create([
                     'order_id'   => $o->id,
-                    'product_id' => $pid ?: null,
+                    // resolved in repriceCart() by the same case-folded match, so a name whose case
+                    // was edited in the panel no longer silently loses its product link
+                    'product_id' => ($cl['product_id'] ?? 0) ?: null,
                     'name'       => $cl['name'],
                     'price'      => $cl['price'],
                     'qty'        => $cl['qty'],
@@ -1307,7 +1433,7 @@ class StorefrontController extends Controller
                     'modifiers'  => ! empty($cl['modifiers']) ? $cl['modifiers'] : null,
                 ]);
             }
-        }
+        });
 
         return response()->json([
             'ok'        => true,
@@ -1363,9 +1489,22 @@ class StorefrontController extends Controller
             }
         }
 
+        // v5.05 — the catalogue prices this cart, exactly as it prices an order (audit P0-1). The
+        // quote path was the worse half of that defect: a crafted price became a NUMBERED, PDF'd
+        // quotation the portal can approve into a real sales order. `$repriced` is keyed by the
+        // display name repriceCart() returns, which is the catalogue's own spelling.
+        [$repricedLines, , , $quoteUnpriced] = $this->repriceCart($tenant, $items);
+        if ($quoteUnpriced !== []) {
+            return response()->json([
+                'ok' => false, 'error' => 'stale_cart',
+                'message' => 'Some items are no longer available: ' . implode(', ', array_slice($quoteUnpriced, 0, 3))
+                    . '. Please refresh the page and try again.',
+            ], 422);
+        }
+
         // Map the storefront cart to the line shape the frozen engine expects ({name, qty, price}).
         $lines = [];
-        foreach ($items as $it) {
+        foreach ($repricedLines as $it) {
             $pname = trim((string) ($it['name'] ?? ''));
             if ($pname === '') {
                 continue;
@@ -1643,6 +1782,23 @@ class StorefrontController extends Controller
     private function branches(Tenant $tenant): array
     {
         $raw = $tenant->setting('branches', []);
+
+        // v5.05 (launch audit P1-7) — NOTHING writes settings['branches']. The panel's branch CRUD
+        // writes the `branches` TABLE, and there is no such key in SettingsSchema, so this returned
+        // [] on every shop and shop.html fell back to a single invented branch at Kampala's
+        // coordinates. On a two-city shop that means the second city can never be chosen and a real
+        // Juba customer who shares their location is measured ~1,000 km from "the store" and told
+        // to message us about delivery. Read the table the panel actually writes.
+        if (! is_array($raw) || $raw === []) {
+            try {
+                $raw = \App\Models\Branch::where('tenant_id', $tenant->id)
+                    ->orderBy('name')->get(['name', 'lat', 'lng'])
+                    ->map(fn ($b) => ['name' => (string) $b->name, 'lat' => $b->lat, 'lng' => $b->lng])
+                    ->all();
+            } catch (\Throwable $e) {
+                $raw = [];      // a missing column or table must never take the storefront down
+            }
+        }
         if (! is_array($raw)) return [];
         $out = [];
         foreach ($raw as $b) {

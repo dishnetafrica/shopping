@@ -34,7 +34,26 @@ class EvolutionGateway implements WhatsAppGateway
         if ($quoted) {
             $payload['quoted'] = $quoted;   // e.g. ['key' => ['id' => '<wa msg id>']]
         }
-        return $this->http()->post("/message/sendText/{$instance}", $payload)->json() ?? [];
+
+        // v5.05 (audit P1-2) — http() is built without ->throw(), and Laravel does not throw on
+        // 4xx/5xx. So "instance not connected", a bad apikey and an unknown instance all returned
+        // an error BODY, no exception was raised, and NotifyOwnerNewOrder recorded the send as
+        // delivered. The status is now reported alongside the body instead of being discarded.
+        //
+        // Additive on purpose: callers reading $res['key']['id'] are unaffected and callers that
+        // ignore the return value are unchanged. Only a caller that ASKS is told.
+        $resp = $this->http()->post("/message/sendText/{$instance}", $payload);
+        $body = $resp->json() ?? [];
+        if (! $resp->successful()) {
+            \Illuminate\Support\Facades\Log::warning('evolution.sendText http', [
+                'instance' => $instance, 'status' => $resp->status(),
+                'body' => mb_substr((string) $resp->body(), 0, 300),
+            ]);
+            $body['_ok']     = false;
+            $body['_status'] = $resp->status();
+        }
+
+        return $body;
     }
 
     public function sendImage(string $instance, string $to, string $media, string $caption = ''): array

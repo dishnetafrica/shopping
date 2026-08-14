@@ -1745,9 +1745,16 @@ class AiBrain
             } else {
                 $freeTowns = array_values(array_filter(array_map('trim', explode(',', (string) $tenant->setting('free_delivery_towns',
                     'Juba, Konyo Konyo, Custom, Jebel, Munuki, Gudele, Hai, Malakia, Gumbo, Sherikat, Thongping, Nimra Talata, Suk')))));
-                $p .= "- DELIVERY & PRICING POLICY: listed prices ALREADY INCLUDE free delivery within {$fromCity} and our free-delivery areas ("
+                // v5.05 (launch audit P1-12) — this fallback stated free delivery with NO order
+                // value, while the storefront's own cart states a threshold. Two surfaces of one
+                // shop contradicting each other about money is worse than either being silent, and
+                // the customer keeps whichever one suits them. The claim is now conditional and
+                // defers to the team, which is what the storefront says too. Set `delivery_note` in
+                // Settings to state a real policy — that branch is above and is preferred.
+                $p .= "- DELIVERY & PRICING POLICY: we deliver within {$fromCity} and our usual areas ("
                     . implode(', ', array_slice($freeTowns, 0, 6)) . (count($freeTowns) > 6 ? ', …' : '') . "). "
-                    . "NEVER say prices exclude shipping or delivery. For destinations outside the free-delivery areas, our team confirms the transport cost separately at order time — never invent or estimate a freight price yourself, "
+                    . "Delivery terms and any transport cost are confirmed by our team when the order is placed. "
+                    . "NEVER promise free delivery, a delivery price, or a minimum order for free delivery — never invent or estimate a freight price yourself, "
                     . "and always mention they can collect from our {$fromCity} store instead.\n"
                     // v4.38 — the model was asserting coverage for places it had never heard of.
                     . "- IF YOU DO NOT RECOGNISE THE PLACE the customer names — it may be their own shop name, a person, or a typo — do NOT say it is outside the free-delivery area and do NOT say delivery is free. Ask which town or area it is in. Never state a fact about our delivery coverage for a place you cannot identify.\n";

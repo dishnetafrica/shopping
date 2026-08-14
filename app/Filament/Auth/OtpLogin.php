@@ -82,10 +82,16 @@ class OtpLogin extends BaseLogin
     {
         $this->validate(['code' => 'required|string|min:4'], [], ['code' => 'code']);
 
+        // v5.05 — the same throttle as the password path. OtpService has its own per-code attempt
+        // limit; this bounds guessing across codes, which that limit does not see.
+        $this->guardAttempts((string) $this->phone, 'code');
+
         $res = $otp->verify((string) $this->phone, (string) $this->code);
         if (! $res['ok']) {
+            $this->recordFailure((string) $this->phone);
             throw ValidationException::withMessages(['code' => $res['error']]);
         }
+        $this->clearAttempts((string) $this->phone);
 
         $user = User::find($res['user_id']);
         if (! $user || ! $user->canAccessPanel(Filament::getCurrentPanel())) {
@@ -104,6 +110,45 @@ class OtpLogin extends BaseLogin
         $this->code = null;
     }
 
+    /**
+     * v5.05 (launch audit P1-4) — throttle credential attempts.
+     *
+     * This page replaces Filament's stock Login, whose authenticate() opens with $this->rateLimit(5).
+     * Replacing the page dropped that call, so email+password sign-in to the tenant panel — the one
+     * every shop owner and staff member uses — took unlimited guesses. /admin kept the stock login
+     * and was throttled; this was the gap. Keyed on IP AND on the account being targeted, so one
+     * attacker cannot lock every owner out by hammering a shared IP.
+     */
+    private function throttleKeys(string $id): array
+    {
+        return ['auth:ip:' . request()->ip(), 'auth:id:' . sha1(mb_strtolower(trim($id)))];
+    }
+
+    private function guardAttempts(string $id, string $field): void
+    {
+        foreach ($this->throttleKeys($id) as $key) {
+            if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($key, 5)) {
+                $secs = \Illuminate\Support\Facades\RateLimiter::availableIn($key);
+                throw ValidationException::withMessages([$field => 'Too many attempts. Try again in '
+                    . max(1, (int) ceil($secs / 60)) . ' minute(s).']);
+            }
+        }
+    }
+
+    private function recordFailure(string $id): void
+    {
+        foreach ($this->throttleKeys($id) as $key) {
+            \Illuminate\Support\Facades\RateLimiter::hit($key, 900);   // 15-minute decay
+        }
+    }
+
+    private function clearAttempts(string $id): void
+    {
+        foreach ($this->throttleKeys($id) as $key) {
+            \Illuminate\Support\Facades\RateLimiter::clear($key);
+        }
+    }
+
     /** Email + password sign-in. */
     public function loginWithEmail()
     {
@@ -113,9 +158,13 @@ class OtpLogin extends BaseLogin
             ['email' => 'email', 'password' => 'password']
         );
 
+        $this->guardAttempts((string) $this->email, 'email');
+
         if (! Filament::auth()->attempt(['email' => $this->email, 'password' => $this->password], true)) {
+            $this->recordFailure((string) $this->email);
             throw ValidationException::withMessages(['email' => 'These credentials do not match our records.']);
         }
+        $this->clearAttempts((string) $this->email);
 
         $user = Filament::auth()->user();
         if (! $user || ! $user->canAccessPanel(Filament::getCurrentPanel())) {

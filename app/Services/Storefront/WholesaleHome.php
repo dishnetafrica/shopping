@@ -146,8 +146,14 @@ final class WholesaleHome
     /** @return array<int,array{t:string,s:string,s2:string}> */
     private static function defaultBenefits(string $city): array
     {
+        // v5.05 (launch audit P1-11) — the first chip used to read "FREE DELIVERY · in {city}",
+        // unconditionally, whenever home_benefits was unset OR malformed. The hero therefore
+        // promised free delivery with no minimum while the cart three taps later said "add $47 more
+        // for free delivery" — and it named one city on a two-city shop. A default that states a
+        // commercial term the owner never configured is the same defect as the cart's invented
+        // free-delivery rule; both are gone. Delivery is stated where it is actually known.
         return [
-            ['t' => 'FREE DELIVERY',    's' => $city !== '' ? 'in ' . $city : 'to your business', 's2' => ''],
+            ['t' => 'DELIVERY',         's' => $city !== '' ? 'to ' . $city . ' — confirmed on WhatsApp' : 'confirmed on WhatsApp', 's2' => ''],
             ['t' => 'WHOLESALE PRICES', 's' => 'Best deals for your business',                    's2' => ''],
             ['t' => 'TRUSTED QUALITY',  's' => 'Original products from trusted brands',           's2' => ''],
         ];

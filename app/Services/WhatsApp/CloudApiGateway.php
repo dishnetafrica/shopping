@@ -18,12 +18,25 @@ class CloudApiGateway implements WhatsAppGateway
     public function sendText(string $instance, string $to, string $message, ?array $quoted = null): array
     {
         // $instance == Cloud phone number id
-        return Http::withToken($this->token)->post("{$this->baseUrl}/{$instance}/messages", [
+        // v5.05 (audit P1-2) — same shape as EvolutionGateway::sendText: report the HTTP status
+        // instead of discarding it, so a rejected send is not recorded as a delivered one.
+        $resp = Http::withToken($this->token)->post("{$this->baseUrl}/{$instance}/messages", [
             'messaging_product' => 'whatsapp',
             'to' => preg_replace('/[^0-9]/', '', $to),
             'type' => 'text',
             'text' => ['body' => $message],
-        ])->json() ?? [];
+        ]);
+        $body = $resp->json() ?? [];
+        if (! $resp->successful()) {
+            \Illuminate\Support\Facades\Log::warning('cloudapi.sendText http', [
+                'instance' => $instance, 'status' => $resp->status(),
+                'body' => mb_substr((string) $resp->body(), 0, 300),
+            ]);
+            $body['_ok']     = false;
+            $body['_status'] = $resp->status();
+        }
+
+        return $body;
     }
 
     public function sendImage(string $instance, string $to, string $media, string $caption = ''): array

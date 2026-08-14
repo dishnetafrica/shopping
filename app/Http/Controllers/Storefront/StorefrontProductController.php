@@ -23,13 +23,46 @@ use Illuminate\Support\Str;
  */
 class StorefrontProductController extends Controller
 {
-    /** Find a live product across all tenants. Returns null if missing or inactive.
-     *  Matches the catalogue, which lists active products (it doesn't exclude archived),
-     *  so anything visible in the grid will also open here. */
+    /**
+     * The shop this request is for: the {shop} slug, else the custom domain. Null when neither
+     * resolves, which is the platform host with no slug — and on that host this endpoint has no
+     * shop to answer for, so it must not answer at all.
+     */
+    private function shopTenant(): ?Tenant
+    {
+        $slug = trim((string) request()->route('shop'));
+        if ($slug !== '') {
+            $t = Tenant::where('slug', strtolower($slug))->first();
+            return ($t && ($t->status ?? 'active') !== 'suspended') ? $t : null;
+        }
+        $t = Tenant::byCustomDomain(request()->getHost());
+
+        return ($t && ($t->status ?? 'active') !== 'suspended') ? $t : null;
+    }
+
+    /**
+     * Find a live product BELONGING TO THIS SHOP. Returns null if missing, inactive, or another
+     * tenant's.
+     *
+     * v5.05 (launch audit P0-5). This used to be `Product::withoutGlobalScopes()->find($id)` with
+     * only an `active` check and the docblock "find a live product across all tenants" — which is
+     * exactly what it did: any shop's storefront served any other shop's product by integer id,
+     * with price, stock and SKU, and the recommendation rails then returned more of that other
+     * shop's catalogue. Product ids are sequential, so the whole platform was walkable from any
+     * storefront. The scope is now pinned to the shop the URL resolved to.
+     *
+     * `withoutGlobalScopes()` is kept because this public route has no TenantContext when it starts
+     * — the explicit tenant_id below is the guard, not the ambient one.
+     */
     private function resolve(int $id): ?Product
     {
-        $product = Product::withoutGlobalScopes()->find($id);
+        $tenant = $this->shopTenant();
+        if (! $tenant) return null;
+
+        $product = Product::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)->whereKey($id)->first();
         if (! $product || ! $product->active) return null;
+
         return $product;
     }
 
@@ -55,11 +88,15 @@ class StorefrontProductController extends Controller
         $id      = (int) request()->route('product');
         $product = $this->resolve($id);
         if (! $product) {
-            if (request()->boolean('debug')) {
-                $row = Product::withoutGlobalScopes()->find($id);
+            // v5.05 — the ?debug branch used to look the id up across ALL tenants, which handed the
+            // same cross-tenant oracle back to anyone who added &debug=1 after the fix above. Scoped
+            // to this shop, so it can only ever describe a product this shop owns.
+            if (request()->boolean('debug') && ($dbgTenant = $this->shopTenant())) {
+                $row = Product::withoutGlobalScopes()
+                    ->where('tenant_id', $dbgTenant->id)->whereKey($id)->first();
                 return response()->json(['ok' => false, '_error' => $row
                     ? ('product ' . $id . ' is inactive (active=' . var_export((bool) $row->active, true) . ', archived=' . ($row->archived_at ?: 'null') . ')')
-                    : ('no product row for id ' . $id)], 404);
+                    : ('no product row for id ' . $id . ' in this shop')], 404);
             }
             abort(404);
         }
@@ -82,7 +119,11 @@ class StorefrontProductController extends Controller
                 // The old (int) cast truncated decimals ($2.74 -> $2.00) and ignored
                 // base_price, so the detail page disagreed with the listing/cart. Do NOT
                 // cast prices to int, and do NOT read a different field here.
-                'price'       => (float) ($product->base_price ?? $product->price ?? 0),
+                // v5.05 — the comment above claimed to mirror the catalogue and had the precedence
+                // BACKWARDS: the catalogue is `price ?? base_price` (StorefrontController ~1035).
+                // On a row with price=0 and base_price=45000 the grid showed "Price on request"
+                // while this endpoint showed 45,000 with a working Add button (audit P1-8).
+                'price'       => (float) ($product->price ?? $product->base_price ?? 0),
                 'mrp'         => (float) ($product->base_price ?? $product->price ?? 0),
                 'image'       => $images[0] ?? '',
                 'images'      => $images,
