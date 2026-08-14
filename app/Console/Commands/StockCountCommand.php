@@ -56,6 +56,7 @@ final class StockCountCommand extends Command
         {--category=Uncategorised : category for products created by --create}
         {--unit= : unit label for products created by --create, e.g. carton}
         {--pack= : pieces per pack for products created by --create}
+        {--recount : count it AGAIN on a day it was already counted, replacing that count}
         {--write : actually record it (default is a dry run)}';
 
     protected $description = 'Record a physical stock count against products, without touching any document.';
@@ -75,7 +76,8 @@ final class StockCountCommand extends Command
         if (! $tenant) { $this->error('No tenant ' . $tid); return self::FAILURE; }
         $ctx->set($tid);
 
-        $write = (bool) $this->option('write');
+        $write   = (bool) $this->option('write');
+        $recount = (bool) $this->option('recount');
         $by    = trim((string) $this->option('by')) ?: 'Stock count';
         $date  = trim((string) ($this->option('date') ?: now()->format('Y-m-d')));
 
@@ -259,10 +261,30 @@ final class StockCountCommand extends Command
         $done = 0; $skipped = 0;
         foreach ($plan as $row) {
             $p = $row['p'];
+            // The same-day guard: without it, re-running the command re-records the same count and
+            // the ledger takes two adjustments for one walk of the shelf.
+            //
+            // v5.14 — but a SECOND count on the same day is a real thing, and refusing it left no way
+            // to correct a number at all. Ashish counts 53 cartons of foil, orders raised later that
+            // evening take it to 33, and he confirms 53 is still what is on the shelf: the only honest
+            // answer is another count, today. --recount says "I mean it" and the newest count wins.
+            //
+            // Safe by construction, not by luck: the adjustment below is a DELTA computed against the
+            // book quantity at this instant, so a recount that agrees with the book writes zero
+            // movement, and one that disagrees writes exactly the difference. It cannot double up.
             $already = DB::table('stock_movements')->where('tenant_id', $tid)
                 ->where('product_id', $p->id)->where('ref_type', 'trust_count')
                 ->whereDate('created_at', $date)->exists();
-            if ($already) { $skipped++; $this->line('  SKIP (already counted on ' . $date . '): ' . $p->name); continue; }
+            if ($already && ! $recount) {
+                $skipped++;
+                $this->line('  SKIP (already counted on ' . $date . '): ' . $p->name);
+                $this->line('        add --recount to count it again today and replace that count.');
+                continue;
+            }
+            if ($already) {
+                $this->line('  RECOUNT   ' . mb_substr((string) $p->name, 0, 46)
+                    . '  — replacing the count already recorded on ' . $date);
+            }
 
             $onHand = ($onLedger || ! $atHome)
                 ? (float) DB::table('stock_movements')->where('tenant_id', $tid)
