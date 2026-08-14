@@ -162,6 +162,7 @@ final class StockCountCommand extends Command
             $this->table(['Product', 'Purchased', 'Sold', 'Documents', 'Counted', 'Variance', 'products.stock'], $rows);
         }
         $this->line('resolved ' . count($plan) . ' of ' . count($lines) . ' line(s)'
+            . ($toCreate ? ('   ' . count($toCreate) . ' to be created') : '')
             . ($blocked ? ('   ' . $blocked . ' need you to pick the product') : ''));
 
         if ($toCreate) {
@@ -175,9 +176,14 @@ final class StockCountCommand extends Command
 
         if (! $write) {
             $this->line('');
-            $this->comment('Dry run — nothing written. A large variance is a question about the paperwork,');
-            $this->comment('not something to smooth over. Juba Stock will NOT change: it reports the documents,');
-            $this->comment('and having both numbers is the point. Re-run with --write to record the count.');
+            // v5.09 — this used to end "Juba Stock will NOT change: it reports the documents".
+            // True under the old all-time rule; false since v5.08, where the count IS the anchor.
+            // A message that misdescribes what the next command does is worse than no message.
+            $this->comment('Dry run — nothing written. Re-run with --write to record it.');
+            $this->comment('What --write does: each count becomes the OPENING for that product, and Juba Stock');
+            $this->comment('reads it as counted + bought since - sold since. Everything before the count is');
+            $this->comment('closed off. A large variance against the old derived figure is a question about the');
+            $this->comment('paperwork worth asking, but it does not stop the count being the better number.');
 
             return self::SUCCESS;
         }
