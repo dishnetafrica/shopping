@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\TenantContext;
 use Illuminate\Console\Command;
 
 /**
@@ -21,9 +22,18 @@ final class ShopChecksCommand extends Command
 
     protected $description = 'The nine launch-readiness checks that source code alone cannot answer.';
 
-    public function handle(): int
+    public function handle(TenantContext $ctx): int
     {
         $T = (int) $this->option('tenant');
+
+        // v5.07.2 - THE ZERO-ROWS TRAP, and I walked straight into it.
+        //
+        // Product and Branch carry the BelongsToTenant global scope, which filters on TenantContext.
+        // A console command starts with NO context, and the scope fails CLOSED - so every count came
+        // back 0 and the first run of this command reported "active products: 0" on a shop with
+        // hundreds. Not an empty catalogue: an unset context. StockCountCommand got this right and
+        // this one did not, which is exactly why claude/TINKER-TENANT-SCOPE-TRAP.md exists.
+        $ctx->set($T);
 
 
 $line = fn ($s = '') => $this->line((string) $s);
@@ -93,6 +103,15 @@ $line('   ...never sent (sent_at NULL) : ' . (clone $sends)->whereNull('sent_at'
 $last = (clone $sends)->whereNotNull('sent_at')->max('sent_at');
 $line('   last successful send   : ' . ($last ?: 'NEVER'));
 $line('   ALSO RUN IN THE SHELL  : supervisorctl status queue');
+
+/* --- guard: prove the scope is open before believing any count below ---------------------- */
+$reachable = \App\Models\Product::where('tenant_id', $T)->count();
+if ($reachable === 0) {
+    $this->error('   Product query returns 0 rows for tenant ' . $T . '. That is almost certainly the');
+    $this->error('   tenant scope, not an empty catalogue. Checks 6, 7 and 9 below would be FALSE ZEROS.');
+} else {
+    $line('   (scope check: ' . number_format($reachable) . ' products reachable, so the counts below are real)');
+}
 
 /* 6 ------------------------------------------------------------------------------------ */
 $hd('CHECK 6', 'How far has products.stock drifted from the documents?  (P0-2)');
