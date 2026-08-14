@@ -67,6 +67,12 @@ final class JubaStockCapability implements ProcessCapability
     /** Purchase lines since the count that carry no product_id, so they moved no stock. */
     private array $unlinkedBuys = ['lines' => 0, 'units' => 0.0, 'names' => []];
 
+    /** Units purchased BEFORE the cutoff, per product — history that makes a count necessary. */
+    private array $preBuys = [];
+
+    /** Units sold BEFORE the cutoff for products with no count of their own. */
+    private array $preSold = [];
+
     public function key(): string { return 'juba.stock'; }
 
     public function permission(): string { return 'menu:products'; }
@@ -92,6 +98,24 @@ final class JubaStockCapability implements ProcessCapability
         $bought = $this->purchasedMap($t, $open, $firstOpen);
         [$sold, $unmatched, $unmatchedQty, $detail] = $this->soldMap($t, $open, $firstOpen);
 
+        // v5.11 — BOUGHT SINCE THE COUNT, NEVER TRADED BEFORE IT.
+        //
+        // "If I buy something new today does it appear?" It should. A product with no purchase and
+        // no sale before the cutoff had nothing on the shelf to count, so its opening is zero and
+        // its first delivery is the whole of its stock. Nothing is being assumed about a shelf
+        // nobody looked at — there was no shelf.
+        //
+        // A product that WAS trading before the cutoff is left out, because that is precisely the
+        // history the counts exist to close off.
+        if ($firstOpen !== null) {
+            foreach ($bought as $pid => $b) {
+                if (isset($open[$pid])) { continue; }
+                if (($this->preBuys[$pid] ?? 0) > 0) { continue; }   // bought before: needs counting
+                if (($this->preSold[$pid] ?? 0) > 0) { continue; }   // sold before: needs counting
+                $open[$pid] = ['qty' => 0.0, 'at' => $firstOpen, 'by' => '', 'new' => true];
+            }
+        }
+
         $names = [];
         if ($open) {
             $names = Product::where('tenant_id', $t)->whereIn('id', array_keys($open))->pluck('name', 'id')->all();
@@ -113,7 +137,9 @@ final class JubaStockCapability implements ProcessCapability
             else              { $soldOut++; }
 
             $when = substr((string) $o['at'], 0, 10);
-            $sub  = 'counted ' . $when . ($o['by'] !== '' ? (' by ' . $o['by']) : '');
+            $sub  = ! empty($o['new'])
+                ? 'new line — nothing before the count, so every carton bought is stock'
+                : ('counted ' . $when . ($o['by'] !== '' ? (' by ' . $o['by']) : ''));
             $lines = (int) ($bought[$pid]['lines'] ?? 0);
             if ($lines > 0) {
                 $sub .= ' · ' . $lines . ' purchase' . ($lines === 1 ? '' : 's') . ' since';
@@ -306,7 +332,6 @@ final class JubaStockCapability implements ProcessCapability
             $rows = DB::table('order_costs')
                 ->where('tenant_id', $tid)->where('stage', 'purchase')->whereNull('voided_at')
                 ->whereNotNull('product_id')->where('qty', '>', 0)
-                ->whereIn('product_id', array_keys($since) ?: [0])
                 ->orderBy('product_id')->orderByDesc('created_at')->orderByDesc('id')
                 ->get(['product_id', 'qty', 'supplier_name', 'created_at']);
         } catch (\Throwable $e) {
@@ -337,13 +362,21 @@ final class JubaStockCapability implements ProcessCapability
             }
         }
 
+        // v5.11 — a product with NO count is not automatically unknowable. If it has no history at
+        // all before the cutoff, it had nothing, and its first purchase IS its opening. That is the
+        // difference between "we cannot trust the paperwork" (a product trading since before the
+        // system) and "there is no paperwork to distrust" (something bought for the first time last
+        // Tuesday). preBuys records which products fall on the wrong side of that line.
+        $this->preBuys = [];
         $map = [];
         foreach ($rows as $r) {
             $pid = (int) $r->product_id;
-            if (! isset($since[$pid])) { continue; }
-            // Strictly AFTER the count. A delivery booked the same day the shelf was counted is
-            // assumed to be part of what was counted — the count is the later fact.
-            if ((string) $r->created_at <= $since[$pid]['at']) { continue; }
+            $cut = $since[$pid]['at'] ?? $firstOpen;
+            if ($cut === null) { continue; }                 // no counts on this shop at all
+            if ((string) $r->created_at <= $cut) {
+                $this->preBuys[$pid] = ($this->preBuys[$pid] ?? 0) + (float) $r->qty;
+                continue;
+            }
 
             if (! isset($map[$pid])) { $map[$pid] = ['qty' => 0.0, 'lines' => 0, 'supplier' => '']; }
             $map[$pid]['qty'] += (float) $r->qty;
@@ -492,6 +525,10 @@ final class JubaStockCapability implements ProcessCapability
                     $unmatched++; $unmatchedQty += $q;
                     $d['miss'][] = ['doc' => (string) ($r->invoice_no ?: 'invoice'), 'src' => 'invoice',
                                     'name' => trim($raw), 'qty' => $q];
+                    continue;
+                }
+                if (! isset($since[$pid]) && $firstOpen !== null && $when !== '' && $when <= $firstOpen) {
+                    $this->preSold[$pid] = ($this->preSold[$pid] ?? 0) + $q;   // history, not current
                     continue;
                 }
                 $d['invLines']++; $d['invUnits'] += $q;
