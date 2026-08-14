@@ -69,8 +69,23 @@ final class StockValueCommand extends Command
         $line('   settings.currency (base)     : ' . $base);
         $line('   settings.currency_basis      : ' . ($basis !== '' ? $basis : '(unset)'));
         $line('   settings.report_currency_mode: ' . $mode);
-        $line('   Fx UGX per 1 USD             : ' . number_format($rate, 2)
-            . (((float) $t->setting('rate_ugx_per_usd', 0)) > 0 ? '  (from settings)' : '  (DEFAULT - no rate configured)'));
+        // WHERE the rate came from, checked in the order Fx::loadSchedule actually checks it.
+        // The first version of this line tested only `rate_ugx_per_usd` and printed "no rate
+        // configured" for any tenant using the effective-dated `fx_rates` schedule - which is the
+        // newer mechanism and the one this shop uses. It reported a correctly configured rate of
+        // 3,710 as a fallback default. A diagnostic that misreports the configuration is worse than
+        // no diagnostic, because it sends you looking for a problem that is not there.
+        $sched  = $t->setting('fx_rates', null);
+        $legacy = (float) $t->setting('rate_ugx_per_usd', 0);
+        if (is_array($sched) && $sched) {
+            $src = '  (from the fx_rates schedule, ' . count($sched) . ' dated '
+                 . (count($sched) === 1 ? 'entry' : 'entries') . ')';
+        } elseif ($legacy > 0) {
+            $src = '  (from settings.rate_ugx_per_usd)';
+        } else {
+            $src = '  (FRAMEWORK DEFAULT - no rate configured anywhere)';
+        }
+        $line('   Fx UGX per 1 USD             : ' . number_format($rate, 2) . $src);
         $line('');
         $line('   CapabilityContext::nativeCurrency() would return: '
             . (strtolower($basis) === 'native' ? $base : ($base === 'USD' ? 'USD' : $base)));
@@ -187,7 +202,7 @@ final class StockValueCommand extends Command
                          'c' => $c['currency'], 'v' => $usdUnit * $qty];
         }
 
-        $line('   products with a count on hand        : ' . number_format($onHand));
+        $line('   products with a COUNT above zero     : ' . number_format($onHand));
         $line('      priced from a bill                : ' . number_format($fromBill));
         $line('      priced from products.cost_price   : ' . number_format($fromCat) . '  (read as UGX)');
         $line('      no cost anywhere, EXCLUDED        : ' . number_format($noCost));
@@ -214,8 +229,14 @@ final class StockValueCommand extends Command
             $line('   excluded, no cost     : ' . (string) ($v['noCost'] ?? '?'));
             $line('   rows on screen        : ' . count($screen['table']['rows'] ?? []));
             $line('');
-            $line('   The tile INCLUDES purchases and sales since each count; the two totals above do');
-            $line('   not. They should be the same order of magnitude, not identical.');
+            $line('   Two reasons the screen is HIGHER than the block above, both correct:');
+            $line('     - the tile includes purchases and sales since each count; that block does not.');
+            $adopted = (int) ($v['fromPurchase'] ?? 0) + (int) ($v['fromCatalogue'] ?? 0) - ($fromBill + $fromCat);
+            if ($adopted > 0) {
+                $line('     - ' . $adopted . ' product' . ($adopted === 1 ? '' : 's')
+                    . ' had nothing before the count and were adopted automatically from their');
+                $line('       first purchase, so they have no counted quantity for that block to use.');
+            }
             if (! empty($v['error'])) {
                 $line('   *** the screen could not read purchase prices - every cost there is the catalogue figure.');
             }
