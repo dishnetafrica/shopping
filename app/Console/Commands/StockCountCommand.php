@@ -292,7 +292,10 @@ final class StockCountCommand extends Command
                 : (float) ($p->stock ?? 0);
             $diff = round($row['counted'] - $onHand, 3);
 
-            DB::transaction(function () use ($ledger, $p, $loc, $diff, $row, $onHand, $by, $tid, $onLedger, $atHome) {
+            // $countedAt IS USED INSIDE — a closure captures nothing by default, and `php -l` cannot
+            // see the difference between a variable that is missing from this list and one that is
+            // simply null. It passed the lint and died on the live server at the insert.
+            DB::transaction(function () use ($ledger, $p, $loc, $diff, $row, $onHand, $by, $tid, $onLedger, $atHome, $countedAt) {
                 if (abs($diff) > 0.0005) {
                     $ledger->adjust([
                         'product_id' => (int) $p->id, 'location' => $loc, 'qty' => $diff,
