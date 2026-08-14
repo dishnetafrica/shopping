@@ -165,7 +165,23 @@
   ((ct && ct.by_partner) ? Object.entries(ct.by_partner) : []).forEach(([n, v]) => { if (!LENDER.test(n)) eq[n] = (eq[n] || 0) + (+v || 0); });
   const equityContributed = Object.values(eq).reduce((a, b) => a + b, 0);
   const eqSrv = (pnl && pnl.equity) || {};
-  const capIn = +eqSrv.capital_introduced || 0, draws = +eqSrv.drawings || 0;
+  /* v5.16 — CAPITAL PUT IN, with the lender taken out.
+     `equityContributed` above is built from by_partner with the lender excluded, which is the whole
+     guard that stops the director's money counting as equity AND as a loan. It was computed and then
+     never read: this row took `eqSrv.capital_introduced`, the raw server figure, lender included.
+     Same class of defect v4.36 fixed for equity itself — an independently-computed figure sitting in
+     a variable nobody used.
+     The arithmetic settles which is right. Cash on hand is $1,986.00.
+       capital_introduced $2,591  ->  cash books say equity $4,423.92   $2,437.92 MORE than the cash
+       lender excluded      $153  ->  cash books say equity $1,985.92   8 cents, i.e. rounding
+     $2,437.92 is the director's repaid loan to the dollar. With it removed the cash books tie to the
+     cash, and the last line of the reconciliation stops being a plug and becomes exactly
+     stock + owed to us − bills not yet paid.
+     Falls back to the server figure only if capital-trace did not load, and says so rather than
+     silently reporting $0 of capital. */
+  const capTraceOk = !!(ct && ct.by_partner && Object.keys(ct.by_partner).length);
+  const capIn = capTraceOk ? equityContributed : (+eqSrv.capital_introduced || 0);
+  const draws = +eqSrv.drawings || 0;
   const opAllTime = +eqSrv.operating_profit_all_time || 0;
   const retained = opAllTime - loanI;                  // every dollar of profit ever kept in the business
 
@@ -222,26 +238,50 @@
 
   const balanceChart = () => {
     const W = 520, H = 300, padT = 20, padB = 70, colW = 120, gap = 150, plotH = H - padT - padB;
-    const x1 = 70, x2 = x1 + gap + colW, scale = plotH / assets;
+    const x1 = 70, x2 = x1 + gap + colW;
+
+    /* v5.16 — DRAW THE NEGATIVE EQUITY. The old seg() opened with `if (s.v <= 0) return`, and equity
+       is the one segment that can go negative. On a shop financed by supplier credit it IS negative,
+       so the liabilities column drew Payables alone, scaled against assets: a $7,327 block on a
+       $5,940 axis — standing TALLER than the assets beside it and captioned with a total it did not
+       equal. The single most important fact on the page was the one thing the picture refused to
+       show, and what it drew instead was arithmetically impossible.
+       A deficit now hangs BELOW the zero line, which is what it is: the part of the assets that the
+       owners do not own. The scale accounts for both directions so nothing overflows. */
+    const posA = Math.max(0, cash) + Math.max(0, STOCK_USD) + Math.max(0, recv);
+    const posL = Math.max(0, pay) + Math.max(0, loanOwed) + Math.max(0, equity);
+    const negL = Math.max(0, -equity);
+    const span = (Math.max(posA, posL) + negL) || 1;
+    const scale = plotH / span;
+    const foot = padT + plotH;                 // bottom of the plot area — captions sit here
+    const base = foot - negL * scale;          // the zero line lifts to leave room for the deficit
+
     const seg = (segs, x) => {
-      let yy = padT + plotH, out = '';
-      segs.forEach(s => { if (s.v <= 0) return; const h = s.v * scale; yy -= h;
-        out += `<rect x="${x}" y="${yy + 1}" width="${colW}" height="${Math.max(1, h - 2)}" fill="${s.c}"/>`;
+      let up = base, down = base, out = '';
+      segs.forEach(s => {
+        const v = +s.v || 0;
+        if (!v) return;
+        const h = Math.abs(v) * scale;
+        let y0;
+        if (v > 0) { up -= h; y0 = up; } else { y0 = down; down += h; }
+        out += `<rect x="${x}" y="${y0 + 1}" width="${colW}" height="${Math.max(1, h - 2)}" fill="${s.c}"/>`;
+        const lab = `${esc(s.l)} ${v < 0 ? '−' : ''}${k(Math.abs(v))}`;
         /* v4.36 — a segment too thin for a label inside it gets one OUTSIDE it instead. Receivables
            drew as an unnamed sliver of colour: a real asset on the balance sheet with no name on it. */
-        if (h > 18) out += `<text x="${x + colW / 2}" y="${yy + h / 2 + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">${esc(s.l)} ${k(s.v)}</text>`;
-        else out += `<text x="${x + colW + 6}" y="${yy + h / 2 + 4}" font-size="10" font-weight="600" fill="${s.c}">${esc(s.l)} ${k(s.v)}</text>`; });
+        if (h > 18) out += `<text x="${x + colW / 2}" y="${y0 + h / 2 + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">${lab}</text>`;
+        else out += `<text x="${x + colW + 6}" y="${y0 + h / 2 + 4}" font-size="10" font-weight="600" fill="${s.c}">${lab}</text>`;
+      });
       return out;
     };
     const A = seg([{ l: 'Cash', v: cash, c: 'var(--s1)' }, { l: 'Stock', v: STOCK_USD, c: 'var(--s2)' }, ...(recv > 0.005 ? [{ l: 'Owed to us', v: recv, c: 'var(--s3)' }] : [])], x1);
-    const L = seg([{ l: 'Payables', v: pay, c: 'var(--s4)' }, { l: 'Loan', v: loanOwed, c: 'var(--s5)' }, { l: 'Equity', v: equity, c: 'var(--s6)' }], x2);
-    const base = padT + plotH;
+    const L = seg([{ l: 'Payables', v: pay, c: 'var(--s4)' }, { l: 'Loan', v: loanOwed, c: 'var(--s5)' },
+                   { l: 'Equity', v: equity, c: equity < 0 ? 'var(--crit)' : 'var(--s6)' }], x2);
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Balance sheet">${A}${L}
       <line x1="40" y1="${base}" x2="${W - 20}" y2="${base}" stroke="var(--baseline)" stroke-width="1.5"/>
-      <text x="${x1 + colW / 2}" y="${base + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">ASSETS</text>
-      <text x="${x1 + colW / 2}" y="${base + 36}" text-anchor="middle" font-size="12" fill="var(--ink2)">${k(assets)}</text>
-      <text x="${x2 + colW / 2}" y="${base + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">LIABILITIES + EQUITY</text>
-      <text x="${x2 + colW / 2}" y="${base + 36}" text-anchor="middle" font-size="12" fill="var(--ink2)">${k(liab + equity)}</text></svg>`;
+      <text x="${x1 + colW / 2}" y="${foot + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">ASSETS</text>
+      <text x="${x1 + colW / 2}" y="${foot + 36}" text-anchor="middle" font-size="12" fill="var(--ink2)">${k(assets)}</text>
+      <text x="${x2 + colW / 2}" y="${foot + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">LIABILITIES + EQUITY</text>
+      <text x="${x2 + colW / 2}" y="${foot + 36}" text-anchor="middle" font-size="12" fill="var(--ink2)">${k(liab + equity)}</text></svg>`;
   };
 
   const cashChart = () => {
@@ -307,7 +347,17 @@
           <tr class="tot"><td>Owners' equity</td><td>${money(equity)}</td></tr></table>
         <p class="cap" style="margin-top:8px">The last line before the total is the part the cash books have not
           recognised yet — goods on the shelf and money customers owe you are not cash, and unpaid supplier bills
-          are not yet a cost. ${Math.abs(unrecognised) > Math.abs(net) ? '<b>It is currently larger than the profit figure</b>, so read that figure with care.' : ''}</p></div>
+          are not yet a cost. ${Math.abs(unrecognised) > Math.abs(net) ? '<b>It is currently larger than the profit figure</b>, so read that figure with care.' : ''}</p>
+        ${!capTraceOk ? `<p class="cap"><b>Capital could not be read per partner</b>, so the figure above still includes any director loan. Refresh, and if it persists the capital-trace endpoint is failing.</p>` : ''}
+        ${/* v5.16 — say plainly who is funding the business. A shop run on trade credit has negative
+              equity by construction, and that is a fact to manage rather than a fault to hide. The
+              numbers here are the same ones in the chart above, restated as the sentence an owner
+              would say out loud. */ equity < 0 ? `<p class="cap" style="margin-top:8px"><b>This business is funded by its suppliers.</b>
+          Suppliers are owed ${money(liab)}. Everything the business holds — cash, stock and money customers owe —
+          comes to ${money(assets)}. The ${money(Math.abs(equity))} difference is the negative equity: supplier credit is
+          not only financing the stock, ${money(Math.abs(equity))} of it has already been spent on something that is no
+          longer on the shelf. That is workable while suppliers keep extending terms and dangerous the week they stop.
+          ${STOCK_USD > 0 ? `Note this rests on a stock figure of ${money(STOCK_USD)} that is typed in by hand, not counted.` : ''}</p>` : ''}</div>
       <div class="card"><h2>Where the cash sits</h2>
         <p class="cap">Cash on hand by currency, valued in USD.</p><div>${cashChart()}</div>
         <h2 style="margin-top:18px">Loan — ${esc(String(CFG.lenders || 'Bhavin'))}</h2>
