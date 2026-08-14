@@ -52,6 +52,7 @@ final class StockCountCommand extends Command
         {--date= : the count date, defaults to today}
         {--location= : stock location; defaults to the shop home. Juba goods need juba-consignment}
         {--create : create a product for any line that matches nothing, then count it}
+        {--force-create : create even when a similar product exists (use only after checking)}
         {--category=Uncategorised : category for products created by --create}
         {--unit= : unit label for products created by --create, e.g. carton}
         {--pack= : pieces per pack for products created by --create}
@@ -114,7 +115,8 @@ final class StockCountCommand extends Command
         }
         $this->line('');
 
-        $create = (bool) $this->option('create');
+        $create = (bool) $this->option('create') || (bool) $this->option('force-create');
+        $force  = (bool) $this->option('force-create');
         $rows = []; $plan = []; $blocked = 0; $toCreate = [];
         foreach ($lines as [$needle, $qty]) {
             $cands = $this->resolve($tid, $needle);
@@ -129,8 +131,24 @@ final class StockCountCommand extends Command
             // renders as "Price on request" to customers. Hidden keeps it off the shelf front while
             // staff can still see and sell it — which is exactly what Visibility means by unlisted.
             if ($create && $cands->isEmpty() && ! str_starts_with($needle, '#')) {
+                // Before creating anything, look for something close. Creating a duplicate of a
+                // product the shop already sells is worse than refusing: two rows for one shelf,
+                // two stock figures, and the sales split between them for ever.
+                $near = $this->nearby($tid, $needle);
+                $strong = $force ? [] : array_values(array_filter($near, fn ($n) => $n[0] >= 45));
+                if ($strong) {
+                    $blocked++;
+                    $this->line('<fg=yellow>' . '"' . $needle . '" counted ' . $this->q($qty)
+                        . '  - NOT CREATED: the catalogue already has something very like it</>');
+                    foreach (array_slice($strong, 0, 6) as [$score, $p]) {
+                        $this->line('      ' . str_pad($score . '% ', 6) . 'count it with  "#' . $p->id . '=' . $this->q($qty) . '"   '
+                            . mb_substr((string) $p->name, 0, 60));
+                    }
+                    $this->line('      if none of these is it, re-run that line with --force-create');
+                    continue;
+                }
                 $toCreate[] = [$needle, $qty];
-                $this->line('<fg=cyan>' . str_pad('"' . $needle . '"', 26) . ' counted ' . $this->q($qty)
+                $this->line('<fg=cyan>' . '"' . $needle . '" counted ' . $this->q($qty)
                     . '  - WILL BE CREATED as a new product (hidden, no price)</>');
                 continue;
             }
@@ -143,6 +161,12 @@ final class StockCountCommand extends Command
                     $this->line('      re-run with  "#' . $c->id . '=' . $this->q($qty) . '"   '
                         . str_pad(mb_substr((string) $c->name, 0, 46), 48)
                         . ' documents say ' . $this->q((float) ($bought[$c->id] ?? 0) - (float) ($sold[$c->id] ?? 0)));
+                }
+                if ($cands->isEmpty()) {
+                    foreach (array_slice($this->nearby($tid, $needle), 0, 6) as [$score, $p]) {
+                        $this->line('      closest: ' . str_pad($score . '%', 5) . '  "#' . $p->id . '=' . $this->q($qty) . '"   '
+                            . mb_substr((string) $p->name, 0, 56));
+                    }
                 }
                 continue;
             }
@@ -288,11 +312,105 @@ final class StockCountCommand extends Command
             return Product::where('tenant_id', $tid)->where('id', (int) ltrim($needle, '#'))->get(['id', 'name', 'stock']);
         }
 
-        return Product::where('tenant_id', $tid)->where('active', true)
-            ->where(function ($w) use ($needle) {
-                $w->where('name', 'ilike', '%' . $needle . '%')
-                  ->orWhere('keywords', 'ilike', '%' . $needle . '%');
-            })->orderBy('name')->get(['id', 'name', 'stock']);
+        $base = Product::where('tenant_id', $tid)->where('active', true);
+
+        // v5.09.1 — TIERED, because a single LIKE '%needle%' is brittle in exactly the way that
+        // matters here. Passing a full product name — "Galaxy Pack Disposable Glasses 500ml with
+        // cap (Carton of 1000PC)" — demanded that the stored name CONTAIN that entire 63-character
+        // phrase. One different space, one different bracket, and it matched nothing. Short
+        // fragments like "cling film" worked, which is why the flaw hid: the failure only appears
+        // when you type the whole name, which is the natural thing to do.
+        //
+        // Worse, --create then read "no match" as "not in the catalogue" and would have made a
+        // SECOND copy of a product the shop already has.
+
+        // 1. the whole name, normalised for case and repeated spaces.
+        $exact = (clone $base)->whereRaw('lower(regexp_replace(trim(name), \'\\s+\', \' \', \'g\')) = ?',
+            [$this->norm($needle)])->get(['id', 'name', 'stock']);
+        if ($exact->count() === 1) {
+            return $exact;
+        }
+
+        // 2. the whole name with EVERY separator stripped. This is the tier that actually caught the
+        // Galaxy Pack case: typed "(Carton of 1000PC)", stored "(Carton of 1000 PC)". One space.
+        // Squashing both sides to letters and digits makes spacing, punctuation and bracket style
+        // irrelevant while every character that carries meaning still has to be there — so it is an
+        // exact match on content, not a fuzzy one. 1000 and 500 still differ; "with cap" still
+        // differs from without.
+        $sq = (clone $base)->whereRaw("lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = ?",
+            [$this->squash($needle)])->get(['id', 'name', 'stock']);
+        if ($sq->count() === 1) {
+            return $sq;
+        }
+
+        // 3. substring, as before — how a short fragment finds its product.
+        $contains = (clone $base)->where(function ($w) use ($needle) {
+            $w->where('name', 'ilike', '%' . $needle . '%')
+              ->orWhere('keywords', 'ilike', '%' . $needle . '%')
+              ->orWhere('sku', 'ilike', '%' . $needle . '%');
+        })->orderBy('name')->get(['id', 'name', 'stock']);
+        if ($contains->isNotEmpty()) {
+            return $contains;
+        }
+
+        // 4. every significant word present, in any order, compared squashed so "1000PC" finds
+        // "1000 PC". Still not a guess: EVERY word must be there, and more than one hit is
+        // reported rather than chosen.
+        $words = array_values(array_filter(
+            preg_split('/[^a-z0-9]+/i', mb_strtolower($needle)) ?: [],
+            fn ($w) => mb_strlen($w) >= 3
+        ));
+        if (! $words) {
+            return $contains;
+        }
+        $all = (clone $base);
+        foreach ($words as $w) {
+            $all->whereRaw("lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) like ?", ['%' . $w . '%']);
+        }
+
+        return $all->orderBy('name')->get(['id', 'name', 'stock']);
+    }
+
+    /**
+     * Products that LOOK like the search text, for a person to read. Never used to choose anything.
+     *
+     * This is the one place a similarity score is allowed, and only because PurchaseNameMatch says
+     * exactly when it is: "for SUGGESTING a match to a person; nothing here ever links on a guess".
+     */
+    private function nearby(int $tid, string $needle, int $limit = 8): array
+    {
+        $words = array_values(array_filter(
+            preg_split('/[^a-z0-9]+/i', mb_strtolower($needle)) ?: [],
+            fn ($w) => mb_strlen($w) >= 4
+        ));
+        usort($words, fn ($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+        $words = array_slice($words, 0, 4);
+        if (! $words) {
+            return [];
+        }
+
+        $q = Product::where('tenant_id', $tid)->where('active', true)->where(function ($w) use ($words) {
+            foreach ($words as $word) { $w->orWhere('name', 'ilike', '%' . $word . '%'); }
+        })->limit(300)->get(['id', 'name', 'stock']);
+
+        $scored = [];
+        foreach ($q as $p) {
+            $scored[] = [PurchaseNameMatch::similarity($needle, (string) $p->name), $p];
+        }
+        usort($scored, fn ($a, $b) => $b[0] <=> $a[0]);
+
+        return array_slice($scored, 0, $limit);
+    }
+
+    private function norm(string $n): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', mb_strtolower(trim($n))));
+    }
+
+    /** Letters and digits only: spacing, punctuation and bracket style stop mattering. */
+    private function squash(string $n): string
+    {
+        return (string) preg_replace('/[^a-z0-9]/', '', mb_strtolower($n));
     }
 
     /**
