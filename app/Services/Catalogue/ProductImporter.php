@@ -108,9 +108,20 @@ class ProductImporter
             if (! \Illuminate\Support\Facades\Schema::hasColumn('products', 'cost_price')) {
                 unset($row['cost_price']);
             }
-            foreach (['unit_size', 'origin_country'] as $newCol) {
+            // v5.06 — TRUNCATE, like name (255) and description (1000) above.
+            //
+            // These two are the narrowest columns the importer writes — unit_size is varchar(40)
+            // and origin_country varchar(60) — and they were the only ones written raw. A supplier
+            // sheet with a Size cell of "3500W inverter + 25.6V 120Ah / 3.07kWh battery" (46) made
+            // Postgres refuse the row, and because a bulk insert() is one statement the WHOLE
+            // import died with an uncaught 500 and no clue on screen. One long cell in one row of
+            // thirty-two took the lot down. Cutting the value keeps the other 31 products and the
+            // rest of that one; the alternative — losing the import — helps nobody.
+            $widths = ['unit_size' => 40, 'origin_country' => 60];
+            foreach ($widths as $newCol => $max) {
                 if (\Illuminate\Support\Facades\Schema::hasColumn('products', $newCol)) {
-                    $row[$newCol] = $get($newCol) ?: null;
+                    $v = $get($newCol);
+                    $row[$newCol] = $v !== '' ? mb_substr($v, 0, $max) : null;
                 }
             }
 
