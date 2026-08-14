@@ -176,6 +176,18 @@ final class StockCountCommand extends Command
                         'created_by' => $by,
                     ]);
                 }
+                // v5.08 — THE OPENING. This is the row Juba Stock anchors on: an absolute
+                // statement with a date, not a delta. Written for every count regardless of
+                // location, because the shelf it describes is real wherever the config says home is.
+                if (\Illuminate\Support\Facades\Schema::hasTable('stock_openings')) {
+                    DB::table('stock_openings')->insert([
+                        'tenant_id' => $tid, 'product_id' => (int) $p->id, 'location' => $loc,
+                        'qty' => $row['counted'], 'counted_at' => now(), 'counted_by' => $by,
+                        'note' => 'documents said ' . $row['doc'] . ' at the time of the count',
+                        'created_at' => now(), 'updated_at' => now(),
+                    ]);
+                }
+
                 if (! $atHome) {
                     return;                      // the ledger holds it; products.stock is home's
                 }
@@ -197,12 +209,12 @@ final class StockCountCommand extends Command
 
             $done++;
             $this->line('  RECORDED  ' . str_pad(mb_substr((string) $p->name, 0, 46), 48)
-                . ' count ' . $this->q($row['counted']) . '  ledger ' . ($diff > 0 ? '+' : '') . $this->q($diff));
+                . ' opening ' . $this->q($row['counted']) . '  ledger ' . ($diff > 0 ? '+' : '') . $this->q($diff));
         }
 
         $this->line('');
         $this->info($done . ' recorded' . ($skipped ? (', ' . $skipped . ' skipped as already counted') : '')
-            . '. Juba Stock is unchanged and still reports Purchased − Sold.');
+            . '. Juba Stock now anchors on these counts: opening + bought since - sold since.');
 
         return self::SUCCESS;
     }

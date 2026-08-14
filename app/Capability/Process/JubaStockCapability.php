@@ -72,33 +72,50 @@ final class JubaStockCapability implements ProcessCapability
     {
         $t = $ctx->tenantId();
 
-        $bought = $this->purchasedMap($t);
-        [$sold, $unmatched, $unmatchedQty, $detail] = $this->soldMap($t);
+        // v5.08 — THE OPENING IS THE ANCHOR.
+        //
+        //     Current = counted on date D  +  purchases after D  -  sales after D
+        //
+        // The old rule was Purchased - Sold across all time, and it demanded that every document
+        // since the shop opened be present and correctly spelled. It is not: 303 units of sales
+        // carry invoice wordings matching no product, and 60 products read as sold more than
+        // bought. Anchoring on a physical count closes all of that off — the history is inside the
+        // count — and leaves a short, checkable tail.
+        $open   = $this->openingsMap($t);
+        $bought = $this->purchasedMap($t, $open);
+        [$sold, $unmatched, $unmatchedQty, $detail] = $this->soldMap($t, $open);
 
-        // Names for everything that was bought OR sold — the sold-only ones never get a row, but the
-        // reconciliation block below names them, and a number you cannot name is not evidence.
-        $allPids = array_values(array_unique(array_merge(array_keys($bought), array_keys($sold))));
         $names = [];
-        if ($allPids) {
-            $names = Product::where('tenant_id', $t)->whereIn('id', $allPids)->pluck('name', 'id')->all();
+        if ($open) {
+            $names = Product::where('tenant_id', $t)->whereIn('id', array_keys($open))->pluck('name', 'id')->all();
         }
+        $counted = 0;
+        try { $counted = (int) Product::where('tenant_id', $t)->where('active', true)->count(); }
+        catch (\Throwable $e) { $counted = 0; }
 
         $inStock = 0; $soldOut = 0; $over = 0; $units = 0.0;
         $rows = [];
-        foreach ($bought as $pid => $b) {
-            $bq  = round((float) $b['qty'], 3);
+        foreach ($open as $pid => $o) {
+            $oq  = round((float) $o['qty'], 3);
+            $bq  = round((float) ($bought[$pid]['qty'] ?? 0), 3);
             $sq  = round((float) ($sold[$pid] ?? 0), 3);
-            $cur = round($bq - $sq, 3);
+            $cur = round($oq + $bq - $sq, 3);
 
             if ($cur > 0)     { $inStock++; $units += $cur; }
             elseif ($cur < 0) { $over++; }
             else              { $soldOut++; }
 
-            $sub = $b['lines'] . ' purchase' . ($b['lines'] === 1 ? '' : 's');
-            if ($b['supplier'] !== '') { $sub .= ' · last from ' . $b['supplier']; }
+            $when = substr((string) $o['at'], 0, 10);
+            $sub  = 'counted ' . $when . ($o['by'] !== '' ? (' by ' . $o['by']) : '');
+            $lines = (int) ($bought[$pid]['lines'] ?? 0);
+            if ($lines > 0) {
+                $sub .= ' · ' . $lines . ' purchase' . ($lines === 1 ? '' : 's') . ' since';
+                if (($bought[$pid]['supplier'] ?? '') !== '') { $sub .= ' · last from ' . $bought[$pid]['supplier']; }
+            }
 
             $rows[] = [
                 'product' => ['value' => (string) ($names[$pid] ?? ('#' . $pid)), 'sub' => $sub, 'avatar' => false],
+                'opening' => ['value' => $this->qty($oq), 'sort' => $oq],
                 'bought'  => ['value' => $this->qty($bq), 'sort' => $bq],
                 'sold'    => ['value' => $this->qty($sq), 'sort' => $sq],
                 'current' => [
@@ -110,30 +127,34 @@ final class JubaStockCapability implements ProcessCapability
 
         usort($rows, fn ($a, $b) => $b['current']['sort'] <=> $a['current']['sort']);
 
+        // Sales since the count against a product nobody has counted. Not shown as a row — there is
+        // no shelf figure to show — but counted, because it is the size of the job still to do.
         $ghosts = 0;
-        foreach ($sold as $pid => $q) { if ($q > 0 && ! isset($bought[$pid])) { $ghosts++; } }
+        foreach ($sold as $pid => $q) { if ($q > 0 && ! isset($open[$pid])) { $ghosts++; } }
 
         $columns = [
             ['key' => 'product', 'label' => 'Product', 'type' => 'avatar', 'sortable' => true],
-            ['key' => 'bought',  'label' => 'Purchased', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'sold',    'label' => 'Sold', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'opening', 'label' => 'Counted', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'bought',  'label' => 'Bought since', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'sold',    'label' => 'Sold since', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'current', 'label' => 'Current stock', 'align' => 'right', 'type' => 'num', 'sortable' => true],
         ];
 
-        $sub = 'Current stock = Purchased − Sold. Purchased is every supplier purchase line; Sold is every '
-             . 'invoice that is not void, plus orders that were never invoiced. Cash, credit and unpaid all '
-             . 'count — payment status never changes stock.';
+        $notCounted = max(0, $counted - count($open));
+
+        $sub = 'Current stock = what Juba counted, plus everything bought since, less everything sold since. '
+             . 'Cash, credit and unpaid all count — payment status never changes stock.';
+        if ($notCounted > 0) {
+            $sub .= ' ' . number_format($notCounted) . ' active product'
+                 . ($notCounted === 1 ? ' has' : 's have') . ' never been counted and '
+                 . ($notCounted === 1 ? 'is' : 'are') . ' NOT listed — a number nobody has stood in '
+                 . 'front of is not stock. Count them with: php artisan stock:count';
+        }
         if (($detail['ordUnits'] ?? 0) > 0) {
-            // Which half of Sold came from where, in plain sight. Written because the first attempt to
-            // verify this screen from the browser summed only the invoices, found less than the screen
-            // said, and reported a fault that was not there — the missing units were the orders.
-            $sub .= ' ' . $this->qty($detail['invUnits']) . ' units came off invoices and '
+            $sub .= ' Of what has sold since, ' . $this->qty($detail['invUnits']) . ' units came off invoices and '
                  . $this->qty($detail['ordUnits']) . ' off orders that were never invoiced.';
         }
         if ($unmatched > 0) {
-            // "invoice line" was wrong here and the verification run proved it: of 27, nine were
-            // invoice lines and eighteen were order lines. A subtitle that misnames where the
-            // problem is sends somebody to the wrong screen to fix it.
             $mi = $this->missTotals($detail['miss'], 'invoice');
             $mo = $this->missTotals($detail['miss'], 'order');
             $where = [];
@@ -147,12 +168,15 @@ final class JubaStockCapability implements ProcessCapability
         return (new WorkspacePayload)
             ->object(['type' => 'process:juba.stock', 'title' => 'Juba Stock', 'subtitle' => $sub])
             ->financials([
-                ['key' => 'instock', 'label' => 'In stock', 'value' => $inStock, 'tone' => 'ok', 'foot' => 'purchased items still on hand'],
+                ['key' => 'instock', 'label' => 'In stock', 'value' => $inStock, 'tone' => 'ok', 'foot' => 'counted items still on hand'],
                 ['key' => 'units', 'label' => 'Units on hand', 'value' => $this->qty(round($units, 3)), 'tone' => 'ok', 'foot' => 'total across those items'],
-                ['key' => 'soldout', 'label' => 'Sold out', 'value' => $soldOut, 'tone' => $soldOut > 0 ? 'warn' : 'ok', 'foot' => 'purchased, all sold'],
-                ['key' => 'over', 'label' => 'Sold more than bought', 'value' => $over + $ghosts,
-                 'tone' => ($over + $ghosts) > 0 ? 'danger' : 'ok',
-                 'foot' => $ghosts > 0 ? ($over . ' listed · ' . $ghosts . ' with no purchase line') : 'no purchase record for the difference'],
+                ['key' => 'soldout', 'label' => 'Sold out', 'value' => $soldOut, 'tone' => $soldOut > 0 ? 'warn' : 'ok', 'foot' => 'counted, all sold since'],
+                ['key' => 'over', 'label' => 'Sold more than we had', 'value' => $over,
+                 'tone' => $over > 0 ? 'danger' : 'ok',
+                 'foot' => 'sold more since the count than the count plus purchases allows'],
+                ['key' => 'uncounted', 'label' => 'Never counted', 'value' => number_format($notCounted),
+                 'tone' => $notCounted > 0 ? 'warn' : 'ok',
+                 'foot' => $ghosts > 0 ? ($ghosts . ' of them have sold since') : 'not listed until somebody counts them'],
             ])
             ->table($columns, $rows)
             ->meta([
@@ -224,11 +248,12 @@ final class JubaStockCapability implements ProcessCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
-        $bought = $this->purchasedMap($ctx->tenantId());
-        [$sold] = $this->soldMap($ctx->tenantId());   // list() takes the first; the rest is for the screen
+        $open   = $this->openingsMap($ctx->tenantId());
+        $bought = $this->purchasedMap($ctx->tenantId(), $open);
+        [$sold] = $this->soldMap($ctx->tenantId(), $open);   // list() takes the first
         $units = 0.0;
-        foreach ($bought as $pid => $b) {
-            $c = (float) $b['qty'] - (float) ($sold[$pid] ?? 0);
+        foreach ($open as $pid => $o) {
+            $c = (float) $o['qty'] + (float) ($bought[$pid]['qty'] ?? 0) - (float) ($sold[$pid] ?? 0);
             if ($c > 0) { $units += $c; }
         }
 
@@ -240,41 +265,81 @@ final class JubaStockCapability implements ProcessCapability
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 
-    /** @return array<int,array{qty:float,lines:int,supplier:string}> */
-    private function purchasedMap(int $tid): array
+    /**
+     * Units PURCHASED SINCE each product's opening count.
+     *
+     * v5.08 — this used to sum every purchase line ever recorded. It no longer does, and that is
+     * the whole point of the opening: goods bought before the count are already standing on the
+     * shelf that was counted, so adding them again would double them.
+     *
+     * @param  array<int,array{qty:float,at:string}> $since  opening per product id
+     * @return array<int,array{qty:float,lines:int,supplier:string}>
+     */
+    private function purchasedMap(int $tid, array $since): array
     {
         try {
             $rows = DB::table('order_costs')
                 ->where('tenant_id', $tid)->where('stage', 'purchase')->whereNull('voided_at')
                 ->whereNotNull('product_id')->where('qty', '>', 0)
-                ->select('product_id', DB::raw('SUM(qty) as qty'), DB::raw('COUNT(*) as lines'))
-                ->groupBy('product_id')->get();
+                ->whereIn('product_id', array_keys($since) ?: [0])
+                ->orderBy('product_id')->orderByDesc('created_at')->orderByDesc('id')
+                ->get(['product_id', 'qty', 'supplier_name', 'created_at']);
         } catch (\Throwable $e) {
             return [];
         }
 
         $map = [];
         foreach ($rows as $r) {
-            $map[(int) $r->product_id] = ['qty' => (float) $r->qty, 'lines' => (int) $r->lines, 'supplier' => ''];
-        }
-        if ($map === []) { return $map; }
+            $pid = (int) $r->product_id;
+            if (! isset($since[$pid])) { continue; }
+            // Strictly AFTER the count. A delivery booked the same day the shelf was counted is
+            // assumed to be part of what was counted — the count is the later fact.
+            if ((string) $r->created_at <= $since[$pid]['at']) { continue; }
 
-        try {
-            foreach (DB::table('order_costs')
-                ->where('tenant_id', $tid)->where('stage', 'purchase')->whereNull('voided_at')
-                ->whereIn('product_id', array_keys($map))
-                ->orderBy('product_id')->orderByDesc('created_at')->orderByDesc('id')
-                ->get(['product_id', 'supplier_name']) as $r) {
-                $pid = (int) $r->product_id;
-                if (isset($map[$pid]) && $map[$pid]['supplier'] === '') {
-                    $map[$pid]['supplier'] = trim((string) ($r->supplier_name ?? ''));
-                }
+            if (! isset($map[$pid])) { $map[$pid] = ['qty' => 0.0, 'lines' => 0, 'supplier' => '']; }
+            $map[$pid]['qty'] += (float) $r->qty;
+            $map[$pid]['lines']++;
+            if ($map[$pid]['supplier'] === '') {
+                $map[$pid]['supplier'] = trim((string) ($r->supplier_name ?? ''));
             }
-        } catch (\Throwable $e) {
-            // a courtesy on the row; the quantities stand without it
         }
 
         return $map;
+    }
+
+    /**
+     * The anchor: the most recent physical count per product, at the shop's stock home.
+     *
+     * Written by `php artisan stock:count --write`. A product with no row here is NOT GUESSED AT —
+     * it does not appear on the screen at all, because nobody has established what is on its shelf
+     * and a derived figure has already been shown, on this shop, to be wrong on 445 products out
+     * of 449.
+     *
+     * @return array<int,array{qty:float,at:string,by:string}>
+     */
+    private function openingsMap(int $tid): array
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('stock_openings')) { return []; }
+            $rows = DB::table('stock_openings')->where('tenant_id', $tid)
+                ->orderBy('product_id')->orderBy('counted_at')->orderBy('id')
+                ->get(['product_id', 'qty', 'counted_at', 'counted_by']);
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        // Ordered oldest-first, so the last write per product wins: a re-count REPLACES, it does
+        // not adjust. Earlier rows stay in the table because how the number moved is worth keeping.
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r->product_id] = [
+                'qty' => (float) $r->qty,
+                'at'  => (string) $r->counted_at,
+                'by'  => (string) ($r->counted_by ?? ''),
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -285,7 +350,7 @@ final class JubaStockCapability implements ProcessCapability
      *
      * @return array{0:array<int,float>,1:int,2:float,3:array<string,mixed>}
      */
-    private function soldMap(int $tid): array
+    private function soldMap(int $tid, array $since = []): array
     {
         $sold = []; $unmatched = 0; $unmatchedQty = 0.0; $fromJson = [];
         $d = ['inv' => [], 'ord' => [], 'miss' => [], 'lineMap' => [], 'ordNos' => [],
@@ -354,14 +419,21 @@ final class JubaStockCapability implements ProcessCapability
                 ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
                 ->where('invoice_items.tenant_id', $tid)
                 ->where('invoices.status', '!=', 'void')
-                ->get(['invoice_items.name', 'invoice_items.qty', 'invoices.order_id', 'invoices.invoice_no']) as $r) {
+                ->get(['invoice_items.name', 'invoice_items.qty', 'invoices.order_id', 'invoices.invoice_no',
+                       'invoices.issued_at', 'invoices.created_at']) as $r) {
                 if ($r->order_id) { $invoiced[(int) $r->order_id] = true; }
                 $q = (float) $r->qty;
                 if ($q <= 0) { continue; }
+                // v5.08 — the document's own date, so a sale made before the shelf was counted is
+                // not deducted from a count that already reflects it.
+                $when = (string) ($r->issued_at ?: $r->created_at);
                 $raw = (string) $r->name;
                 $k   = $this->normName($raw);
                 $pid = $byName[$k] ?? null;
                 $d['lineMap'][$k] = $pid;                 // null is an answer too: "this matched nothing"
+                if ($pid !== null && isset($since[$pid]) && $when !== '' && $when <= $since[$pid]['at']) {
+                    continue;                             // already inside the opening count
+                }
                 if ($pid === null) {
                     $unmatched++; $unmatchedQty += $q;
                     $d['miss'][] = ['doc' => (string) ($r->invoice_no ?: 'invoice'), 'src' => 'invoice',
@@ -387,9 +459,10 @@ final class JubaStockCapability implements ProcessCapability
             foreach (DB::table('orders')
                 ->where('tenant_id', $tid)
                 ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','canceled','rejected','void')")
-                ->get(['id', 'order_no', 'items_json']) as $o) {
+                ->get(['id', 'order_no', 'items_json', 'created_at']) as $o) {
                 $oid = (int) $o->id;
                 if (isset($invoiced[$oid])) { continue; }        // already counted on its invoice
+                $owhen = (string) $o->created_at;
 
                 $ij = $o->items_json;
                 if (is_string($ij)) { $ij = json_decode($ij, true); }
@@ -401,6 +474,9 @@ final class JubaStockCapability implements ProcessCapability
                     $q = (float) ($it['qty'] ?? 0);
                     if ($q <= 0) { continue; }
                     $pid = (int) ($it['product_id'] ?? ($it['id'] ?? 0));
+                    if ($pid > 0 && isset($since[$pid]) && $owhen !== '' && $owhen <= $since[$pid]['at']) {
+                        continue;                          // predates the count
+                    }
                     if ($pid <= 0) {
                         // a lump-sum or free-text line: match it by name like an invoice line, or
                         // report it. Never guessed.
@@ -430,12 +506,14 @@ final class JubaStockCapability implements ProcessCapability
                 ->where('order_items.tenant_id', $tid)
                 ->whereRaw("lower(coalesce(orders.status,'')) not in ('cancelled','canceled','rejected','void')")
                 ->whereNotNull('order_items.product_id')
-                ->get(['order_items.product_id', 'order_items.qty', 'order_items.order_id', 'orders.order_no']) as $r) {
+                ->get(['order_items.product_id', 'order_items.qty', 'order_items.order_id',
+                       'orders.order_no', 'orders.created_at']) as $r) {
                 $oid = (int) $r->order_id;
                 if (isset($invoiced[$oid]) || isset($fromJson[$oid])) { continue; }
                 $q = (float) $r->qty;
                 if ($q <= 0) { continue; }
                 $pid = (int) $r->product_id;
+                if (isset($since[$pid]) && (string) $r->created_at <= $since[$pid]['at']) { continue; }
                 $sold[$pid] = ($sold[$pid] ?? 0) + $q;
                 $d['ord'][$pid] = ($d['ord'][$pid] ?? 0) + $q;
                 $d['ordLines']++; $d['ordUnits'] += $q;
