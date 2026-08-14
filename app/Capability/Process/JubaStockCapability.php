@@ -116,10 +116,26 @@ final class JubaStockCapability implements ProcessCapability
             }
         }
 
-        $names = [];
+        $names = []; $costs = [];
         if ($open) {
-            $names = Product::where('tenant_id', $t)->whereIn('id', array_keys($open))->pluck('name', 'id')->all();
+            $prods = Product::where('tenant_id', $t)->whereIn('id', array_keys($open))
+                ->get(['id', 'name', 'cost_price']);
+            foreach ($prods as $pr) {
+                $names[$pr->id] = (string) $pr->name;
+                $costs[$pr->id] = $pr->cost_price === null ? null : (float) $pr->cost_price;
+            }
         }
+
+        // v5.12 — what the shelf is WORTH, at cost. `cost_price` is the same column SalesOrderCapability
+        // uses for cost of goods, so the two screens cannot disagree about what a carton cost.
+        //
+        // Products with no cost are counted and named rather than treated as free: a total that
+        // quietly excludes half the shelf is a worse number than no total, and this is a figure
+        // meant to be waved at the sales team.
+        $rc       = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $cur      = $rc->consolidationCurrency();
+        $native   = $ctx->nativeCurrency();
+        $valueRows = []; $noCost = 0; $noCostNames = [];
         $counted = 0;
         try { $counted = (int) Product::where('tenant_id', $t)->where('active', true)->count(); }
         catch (\Throwable $e) { $counted = 0; }
@@ -146,6 +162,17 @@ final class JubaStockCapability implements ProcessCapability
                 if (($bought[$pid]['supplier'] ?? '') !== '') { $sub .= ' · last from ' . $bought[$pid]['supplier']; }
             }
 
+            $unitCost = $costs[$pid] ?? null;
+            $lineVal  = ($unitCost !== null && $cur > 0) ? round($cur * $unitCost, 2) : 0.0;
+            if ($unitCost === null || $unitCost <= 0) {
+                if ($cur > 0) {
+                    $noCost++;
+                    if (count($noCostNames) < 6) { $noCostNames[] = (string) ($names[$pid] ?? ('#' . $pid)); }
+                }
+            } elseif ($cur > 0) {
+                $valueRows[] = ['amount' => $lineVal, 'currency' => $native, 'date' => null];
+            }
+
             $rows[] = [
                 'product' => ['value' => (string) ($names[$pid] ?? ('#' . $pid)), 'sub' => $sub, 'avatar' => false],
                 'opening' => ['value' => $this->qty($oq), 'sort' => $oq],
@@ -155,10 +182,22 @@ final class JubaStockCapability implements ProcessCapability
                     'value' => $this->qty($cur), 'sort' => $cur,
                     'tone'  => $cur > 0 ? 'ok' : ($cur < 0 ? 'danger' : 'default'),
                 ],
+                'unitcost' => [
+                    'value' => $unitCost !== null && $unitCost > 0 ? $rc->text($unitCost, $native) : '—',
+                    'sort'  => $unitCost ?? 0,
+                ],
+                'value' => [
+                    'value' => ($unitCost !== null && $unitCost > 0 && $cur > 0) ? $rc->text($lineVal, $native) : '—',
+                    'sort'  => $lineVal,
+                    'tone'  => ($unitCost === null || $unitCost <= 0) && $cur > 0 ? 'warn' : '',
+                ],
             ];
         }
 
-        usort($rows, fn ($a, $b) => $b['current']['sort'] <=> $a['current']['sort']);
+        // Sorted by MONEY, not by quantity. A thousand cheap units is not the thing to chase; the
+        // expensive pallet nobody has shifted is.
+        usort($rows, fn ($a, $b) => $b['value']['sort'] <=> $a['value']['sort']);
+        $stockValue = $rc->consolidate($valueRows)['amount'];
 
         // Sales since the count against a product nobody has counted. Not shown as a row — there is
         // no shelf figure to show — but counted, because it is the size of the job still to do.
@@ -171,6 +210,8 @@ final class JubaStockCapability implements ProcessCapability
             ['key' => 'bought',  'label' => 'Bought since', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'sold',    'label' => 'Sold since', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'current', 'label' => 'Current stock', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'unitcost', 'label' => 'Cost each', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'value', 'label' => 'Value at cost', 'align' => 'right', 'type' => 'num', 'sortable' => true],
         ];
 
         $notCounted = max(0, $counted - count($open));
@@ -182,6 +223,13 @@ final class JubaStockCapability implements ProcessCapability
         // v5.10 — the two ways goods move without the screen noticing, stated where the number is.
         // Both are silent by nature: a purchase typed as free text and an invoice worded differently
         // than the catalogue both look completely normal on their own screens.
+        if ($noCost > 0) {
+            $sub .= ' Stock value is at COST and excludes ' . $noCost . ' item'
+                 . ($noCost === 1 ? '' : 's') . ' with no cost price set — '
+                 . implode(', ', $noCostNames) . (count($noCostNames) < $noCost ? ' …' : '')
+                 . ' — so the shelf is worth MORE than the tile says.';
+        }
+
         $ub = $this->unlinkedBuys;
         if (! empty($ub['error'])) {
             $sub .= ' ⚠ The check for unlinked purchases could not run, so purchases may be missing from this screen.';
@@ -217,6 +265,11 @@ final class JubaStockCapability implements ProcessCapability
         return (new WorkspacePayload)
             ->object(['type' => 'process:juba.stock', 'title' => 'Juba Stock', 'subtitle' => $sub])
             ->financials([
+                ['key' => 'value', 'label' => 'Stock value', 'value' => \App\Capability\Support\Money::fmt($stockValue, $cur),
+                 'tone' => 'ok',
+                 'foot' => $noCost > 0
+                     ? ($noCost . ' item' . ($noCost === 1 ? '' : 's') . ' have no cost price, so the real figure is higher')
+                     : 'at cost, across every counted item on hand'],
                 ['key' => 'instock', 'label' => 'In stock', 'value' => $inStock, 'tone' => 'ok', 'foot' => 'counted items still on hand'],
                 ['key' => 'units', 'label' => 'Units on hand', 'value' => $this->qty(round($units, 3)), 'tone' => 'ok', 'foot' => 'total across those items'],
                 ['key' => 'soldout', 'label' => 'Sold out', 'value' => $soldOut, 'tone' => $soldOut > 0 ? 'warn' : 'ok', 'foot' => 'counted, all sold since'],
@@ -227,7 +280,15 @@ final class JubaStockCapability implements ProcessCapability
                  'tone' => $notCounted > 0 ? 'warn' : 'ok',
                  'foot' => $ghosts > 0 ? ($ghosts . ' of them have sold since') : 'not listed until somebody counts them'],
             ])
-            ->table($columns, $rows)
+            // Grid totals footer as well as the tile: the tile is the headline, the footer is what
+            // stays visible when somebody filters the table down to one category.
+            ->table($columns, $rows, [], [
+                'currency' => $cur,
+                'totals'   => [
+                    ['key' => 'current', 'label' => 'Units'],
+                    ['key' => 'value', 'label' => 'Value at cost', 'money' => true],
+                ],
+            ])
             ->meta([
                 'capability' => 'juba.stock', 'ttl' => 30, 'permissions' => ['menu:products'],
                 // Not rendered anywhere. It exists so the screen can be CHECKED from outside itself.
