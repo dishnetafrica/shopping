@@ -50,6 +50,8 @@ final class StockCountCommand extends Command
         {--tenant= : tenant id (required)}
         {--by=Stock count : who counted}
         {--date= : the count date, defaults to today}
+        {--location= : stock location, defaults to the shop home. Family Shoppers goods are in JUBA
+                       while stock_home_location is unset, so pass --location=juba-consignment}
         {--write : actually record it (default is a dry run)}';
 
     protected $description = 'Record a physical stock count against products, without touching any document.';
@@ -93,10 +95,20 @@ final class StockCountCommand extends Command
 
         [$bought, $sold] = $this->documents($tid);
 
-        $loc      = StockLedger::home($tenant);
+        $home     = StockLedger::home($tenant);
+        $loc      = trim((string) ($this->option('location') ?: '')) ?: $home;
+        $atHome   = ($loc === $home);
         $onLedger = StockLedger::readsFromLedger($tenant);
         $ledger   = StockLedger::forTenant($tenant);
-        $this->line('stock home: ' . $loc . '   reads from ledger: ' . ($onLedger ? 'yes' : 'no'));
+        $this->line('stock home: ' . $home . '   counting at: ' . $loc
+            . '   reads from ledger: ' . ($onLedger ? 'yes' : 'no'));
+        if (! $atHome) {
+            // v5.07.1 — a count filed away from home must NOT rewrite products.stock. That column
+            // describes the HOME warehouse, and syncProductStockCache() recomputes it from the home
+            // ledger; writing the count into it and then syncing would overwrite the count with a
+            // different warehouse's total. So away-from-home counts land on the ledger only.
+            $this->warn('Counting AWAY from the home warehouse: the ledger records it, products.stock is left alone');
+        }
         $this->line('');
 
         $rows = []; $plan = []; $blocked = 0;
@@ -149,13 +161,13 @@ final class StockCountCommand extends Command
                 ->whereDate('created_at', $date)->exists();
             if ($already) { $skipped++; $this->line('  SKIP (already counted on ' . $date . '): ' . $p->name); continue; }
 
-            $onHand = $onLedger
+            $onHand = ($onLedger || ! $atHome)
                 ? (float) DB::table('stock_movements')->where('tenant_id', $tid)
                     ->where('product_id', $p->id)->where('location', $loc)->sum('qty')
                 : (float) ($p->stock ?? 0);
             $diff = round($row['counted'] - $onHand, 3);
 
-            DB::transaction(function () use ($ledger, $p, $loc, $diff, $row, $onHand, $by, $tid, $onLedger) {
+            DB::transaction(function () use ($ledger, $p, $loc, $diff, $row, $onHand, $by, $tid, $onLedger, $atHome) {
                 if (abs($diff) > 0.0005) {
                     $ledger->adjust([
                         'product_id' => (int) $p->id, 'location' => $loc, 'qty' => $diff,
@@ -165,13 +177,23 @@ final class StockCountCommand extends Command
                         'created_by' => $by,
                     ]);
                 }
-                Product::where('tenant_id', $tid)->where('id', $p->id)->update([
-                    'stock' => (int) round($row['counted']),
-                    'stock_confidence' => 'exact',
-                    'stock_checked_at' => now(),
-                    'stock_source' => 'count',
-                ]);
-                if ($onLedger) { $ledger->syncProductStockCache((int) $p->id); }
+                if (! $atHome) {
+                    return;                      // the ledger holds it; products.stock is home's
+                }
+                if ($onLedger) {
+                    // The ledger is the authority here, and the adjustment above already made it
+                    // equal the count. Sync FIRST, then stamp - the other way round the sync
+                    // overwrote the number we had just written.
+                    $ledger->syncProductStockCache((int) $p->id);
+                    Product::where('tenant_id', $tid)->where('id', $p->id)->update([
+                        'stock_confidence' => 'exact', 'stock_checked_at' => now(), 'stock_source' => 'count',
+                    ]);
+                } else {
+                    Product::where('tenant_id', $tid)->where('id', $p->id)->update([
+                        'stock' => (int) round($row['counted']),
+                        'stock_confidence' => 'exact', 'stock_checked_at' => now(), 'stock_source' => 'count',
+                    ]);
+                }
             });
 
             $done++;
