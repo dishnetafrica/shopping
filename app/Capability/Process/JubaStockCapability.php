@@ -64,8 +64,26 @@ use Illuminate\Support\Facades\DB;
  */
 final class JubaStockCapability implements ProcessCapability
 {
+    /**
+     * The currency `products.cost_price` is held in, when there is no purchase document to ask.
+     *
+     * Not a guess and not the tenant base. OrderCostController::purchaseStore is the only thing that
+     * writes that column automatically, and line ~400 writes `round($toUgx($unit), 2)` — the unit cost
+     * converted INTO UGX from whatever currency the bill was in. Its own comment says so: "Rate to
+     * convert a unit cost in the purchase currency to base UGX for the product's cost_price."
+     *
+     * This is deliberately NOT CapabilityContext::nativeCurrency(). That helper answers a different
+     * question — what untagged SALES amounts are stored in — and it returns 'USD' whenever the tenant
+     * base is USD. Tagging a 22,500 UGX carton as $22,500 and adding it to a total is precisely the
+     * mislabelling this constant exists to prevent.
+     */
+    private const COST_CURRENCY = 'UGX';
+
     /** Purchase lines since the count that carry no product_id, so they moved no stock. */
     private array $unlinkedBuys = ['lines' => 0, 'units' => 0.0, 'names' => []];
+
+    /** True when the cost lookup itself failed — reported, never silently valued at zero. */
+    private bool $costError = false;
 
     /** Units purchased BEFORE the cutoff, per product — history that makes a count necessary. */
     private array $preBuys = [];
@@ -126,16 +144,24 @@ final class JubaStockCapability implements ProcessCapability
             }
         }
 
-        // v5.12 — what the shelf is WORTH, at cost. `cost_price` is the same column SalesOrderCapability
-        // uses for cost of goods, so the two screens cannot disagree about what a carton cost.
+        // v5.13 — what the shelf is WORTH, at cost, IN THE CURRENCY IT WAS BOUGHT IN.
         //
-        // Products with no cost are counted and named rather than treated as free: a total that
+        // The cost of a carton is asked of the purchase document first, not the catalogue. order_costs
+        // carries `currency` and `rate_to_usd` on every line, so the price paid is currency-tagged
+        // evidence and ReportingCurrency converts it on the row's own date — history is never
+        // re-priced at today's rate. Only when a product has no purchase on file does this fall back
+        // to products.cost_price, which is UGX (see COST_CURRENCY).
+        //
+        // The previous version tagged every figure with $ctx->nativeCurrency(). On a USD-base tenant
+        // that returns 'USD', so UGX costs were being labelled and summed as dollars.
+        //
+        // Products with no cost at all are counted and named rather than treated as free: a total that
         // quietly excludes half the shelf is a worse number than no total, and this is a figure
         // meant to be waved at the sales team.
-        $rc       = \App\Services\Money\ReportingCurrency::forContext($ctx);
-        $cur      = $rc->consolidationCurrency();
-        $native   = $ctx->nativeCurrency();
-        $valueRows = []; $noCost = 0; $noCostNames = [];
+        $rc        = \App\Services\Money\ReportingCurrency::forContext($ctx);
+        $disp      = $rc->consolidationCurrency();
+        $buyCost   = $this->costMap($t, array_keys($open));
+        $valueRows = []; $noCost = 0; $noCostNames = []; $fromCatalogue = 0; $fromPurchase = 0;
         $counted = 0;
         try { $counted = (int) Product::where('tenant_id', $t)->where('active', true)->count(); }
         catch (\Throwable $e) { $counted = 0; }
@@ -162,15 +188,43 @@ final class JubaStockCapability implements ProcessCapability
                 if (($bought[$pid]['supplier'] ?? '') !== '') { $sub .= ' · last from ' . $bought[$pid]['supplier']; }
             }
 
-            $unitCost = $costs[$pid] ?? null;
+            // Cost basis: the last real purchase of this product, else the catalogue price.
+            $c = $buyCost[$pid] ?? null;
+            if ($c === null && ($costs[$pid] ?? null) !== null && (float) $costs[$pid] > 0) {
+                $c = ['unit' => (float) $costs[$pid], 'currency' => self::COST_CURRENCY,
+                      'usd' => null, 'date' => null, 'basis' => 'catalogue'];
+                if ($cur > 0) { $fromCatalogue++; }
+            } elseif ($c !== null && $cur > 0) {
+                $fromPurchase++;                          // counted on hand, so the two agree with noCost
+            }
+
+            $unitCost = $c['unit'] ?? null;
             $lineVal  = ($unitCost !== null && $cur > 0) ? round($cur * $unitCost, 2) : 0.0;
+
+            // The purchase's own USD figure scaled to the line, so the line converts on the rate that
+            // was actually paid rather than today's. Null when there is no stored rate — Fx then dates
+            // it from the purchase.
+            $lineUsd = ($c !== null && ($c['usd'] ?? null) !== null && $cur > 0)
+                ? round(((float) $c['usd']) * $cur, 2) : null;
+
+            $unitText = '—'; $valueText = '—'; $valueSort = 0.0;
             if ($unitCost === null || $unitCost <= 0) {
                 if ($cur > 0) {
                     $noCost++;
                     if (count($noCostNames) < 6) { $noCostNames[] = (string) ($names[$pid] ?? ('#' . $pid)); }
                 }
-            } elseif ($cur > 0) {
-                $valueRows[] = ['amount' => $lineVal, 'currency' => $native, 'date' => null];
+            } else {
+                $unitText = $rc->text($unitCost, $c['currency'], $c['usd'], $c['date']);
+                if ($cur > 0) {
+                    $valueRows[] = ['amount' => $lineVal, 'currency' => $c['currency'],
+                                    'usd' => $lineUsd, 'date' => $c['date']];
+                    $valueText = $rc->text($lineVal, $c['currency'], $lineUsd, $c['date']);
+                    // Sorted on the CONSOLIDATED figure, never the native one. In original-currency
+                    // mode the column shows each line in its own currency, and ranking 3,000,000 UGX
+                    // above $2,000 because the number is bigger would be nonsense.
+                    $valueSort = $rc->consolidate([['amount' => $lineVal, 'currency' => $c['currency'],
+                                                    'usd' => $lineUsd, 'date' => $c['date']]])['amount'];
+                }
             }
 
             $rows[] = [
@@ -183,12 +237,12 @@ final class JubaStockCapability implements ProcessCapability
                     'tone'  => $cur > 0 ? 'ok' : ($cur < 0 ? 'danger' : 'default'),
                 ],
                 'unitcost' => [
-                    'value' => $unitCost !== null && $unitCost > 0 ? $rc->text($unitCost, $native) : '—',
+                    'value' => $unitText,
                     'sort'  => $unitCost ?? 0,
                 ],
                 'value' => [
-                    'value' => ($unitCost !== null && $unitCost > 0 && $cur > 0) ? $rc->text($lineVal, $native) : '—',
-                    'sort'  => $lineVal,
+                    'value' => $valueText,
+                    'sort'  => $valueSort,
                     'tone'  => ($unitCost === null || $unitCost <= 0) && $cur > 0 ? 'warn' : '',
                 ],
             ];
@@ -230,6 +284,19 @@ final class JubaStockCapability implements ProcessCapability
                  . ' — so the shelf is worth MORE than the tile says.';
         }
 
+        // Where each cost came from, and in what currency, stated on the screen. A valuation whose
+        // basis is invisible is a number nobody can argue with, which is the opposite of useful.
+        $sub .= ' Cost is the price on the last purchase of that item, in the currency it was bought in,'
+             . ' shown at your reporting-currency setting.';
+        if ($fromCatalogue > 0) {
+            $sub .= ' ' . $fromCatalogue . ' item' . ($fromCatalogue === 1 ? ' has' : 's have')
+                 . ' no purchase on file, so ' . ($fromCatalogue === 1 ? 'it uses' : 'they use')
+                 . ' the catalogue cost price, which is held in ' . self::COST_CURRENCY . '.';
+        }
+        if ($this->costError) {
+            $sub .= ' ⚠ Purchase prices could not be read, so every cost here is the catalogue figure.';
+        }
+
         $ub = $this->unlinkedBuys;
         if (! empty($ub['error'])) {
             $sub .= ' ⚠ The check for unlinked purchases could not run, so purchases may be missing from this screen.';
@@ -265,7 +332,10 @@ final class JubaStockCapability implements ProcessCapability
         return (new WorkspacePayload)
             ->object(['type' => 'process:juba.stock', 'title' => 'Juba Stock', 'subtitle' => $sub])
             ->financials([
-                ['key' => 'value', 'label' => 'Stock value', 'value' => \App\Capability\Support\Money::fmt($stockValue, $cur),
+                // $disp, NOT $cur. $cur is reassigned inside the row loop to that row's CURRENT STOCK,
+                // so this tile was formatting the total with the last product's carton count as its
+                // currency code — "2,475 115". Two variables, one letter apart, one of them a float.
+                ['key' => 'value', 'label' => 'Stock value', 'value' => \App\Capability\Support\Money::fmt($stockValue, $disp),
                  'tone' => 'ok',
                  'foot' => $noCost > 0
                      ? ($noCost . ' item' . ($noCost === 1 ? '' : 's') . ' have no cost price, so the real figure is higher')
@@ -283,7 +353,7 @@ final class JubaStockCapability implements ProcessCapability
             // Grid totals footer as well as the tile: the tile is the headline, the footer is what
             // stays visible when somebody filters the table down to one category.
             ->table($columns, $rows, [], [
-                'currency' => $cur,
+                'currency' => $disp,
                 'totals'   => [
                     ['key' => 'current', 'label' => 'Units'],
                     ['key' => 'value', 'label' => 'Value at cost', 'money' => true],
@@ -297,6 +367,17 @@ final class JubaStockCapability implements ProcessCapability
                 // states which half of every Sold figure came from which document, and the checker
                 // verifies the half it can reach instead of guessing at the whole and crying wolf.
                 'reconcile' => $this->reconcile($detail, $names, count($rows)),
+                // The valuation's provenance, so the total can be argued with. Not rendered.
+                'value' => [
+                    'display'     => $disp,                       // what the tile and totals are in
+                    'mode'        => $rc->modeLabel(),            // base / original / ?cur= override
+                    'costBase'    => self::COST_CURRENCY,         // the catalogue fallback's currency
+                    'fromPurchase'=> $fromPurchase,              // priced from a real bill
+                    'fromCatalogue'=> $fromCatalogue,             // priced from products.cost_price
+                    'noCost'      => $noCost,                     // on hand, excluded from the total
+                    'total'       => round($stockValue, 2),
+                    'error'       => $this->costError,
+                ],
             ]);
     }
 
@@ -375,6 +456,64 @@ final class JubaStockCapability implements ProcessCapability
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
         return ['ok' => false, 'error' => 'unknown_action'];
+    }
+
+    /**
+     * What each product last COST, and in what currency.
+     *
+     * Asked of the purchase document, not the catalogue. Every order_costs row carries its own
+     * `currency` and `rate_to_usd`, so the price is currency-tagged evidence rather than something
+     * inferred from a tenant setting — and the stored rate lets ReportingCurrency convert on the rate
+     * that was actually paid instead of today's.
+     *
+     * Deliberately NOT filtered by the opening cutoff: a product counted in Juba but not re-bought
+     * since still has a real price on its last bill, and that is the honest basis to value it at.
+     *
+     * Its own query and its own try/catch, separate from purchasedMap. A missing or renamed cost
+     * column must cost this screen its VALUATION, never its stock arithmetic — a Juba Stock page that
+     * reports zero cartons bought because it could not read a price would be far worse than one that
+     * reports cartons with no price against them.
+     *
+     * @param  array<int,int> $ids  product ids to price
+     * @return array<int,array{unit:float,currency:string,usd:?float,date:?string,basis:string}>
+     */
+    private function costMap(int $tid, array $ids): array
+    {
+        $out = [];
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (! $ids) { return $out; }
+
+        try {
+            $rows = DB::table('order_costs')
+                ->where('tenant_id', $tid)->where('stage', 'purchase')->whereNull('voided_at')
+                ->whereIn('product_id', $ids)
+                ->where('qty', '>', 0)->where('unit_cost', '>', 0)
+                ->orderBy('product_id')->orderByDesc('created_at')->orderByDesc('id')
+                ->get(['product_id', 'unit_cost', 'currency', 'rate_to_usd', 'created_at']);
+        } catch (\Throwable $e) {
+            $this->costError = true;
+
+            return $out;
+        }
+
+        foreach ($rows as $r) {
+            $pid = (int) $r->product_id;
+            if (isset($out[$pid])) { continue; }          // newest-first, so the first row per id wins
+            $unit = (float) $r->unit_cost;
+            if ($unit <= 0) { continue; }
+            $rate = (float) ($r->rate_to_usd ?? 0);
+            $cur  = strtoupper(trim((string) ($r->currency ?? '')));
+            $out[$pid] = [
+                'unit'     => $unit,
+                'currency' => $cur !== '' ? $cur : self::COST_CURRENCY,
+                // rate_to_usd is native units per 1 USD, so the unit price in USD is unit / rate.
+                'usd'      => $rate > 0 ? round($unit / $rate, 6) : null,
+                'date'     => substr((string) $r->created_at, 0, 10) ?: null,
+                'basis'    => 'purchase',
+            ];
+        }
+
+        return $out;
     }
 
     /**
