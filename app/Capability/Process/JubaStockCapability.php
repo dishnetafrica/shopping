@@ -79,6 +79,36 @@ final class JubaStockCapability implements ProcessCapability
      */
     private const COST_CURRENCY = 'UGX';
 
+    /**
+     * Order states where the goods are SOLD but have NOT left the building.
+     *
+     * This is the reason a physical count and this screen disagree and always will. Ashish walks the
+     * Juba shelf and counts 53 cartons of foil. Twenty of them are packed against a confirmed order
+     * that has not gone out yet. Both numbers are true; they answer different questions, and one
+     * column cannot hold both. So the screen now shows what is ON THE SHELF, what is RESERVED, and
+     * what is genuinely free to sell.
+     *
+     * The list is the app's own vocabulary, taken from SendOrderStatusNotification's status map:
+     * New → Accepted → Confirmed → Preparing → Packed → Ready are all pre-dispatch; Dispatched,
+     * In transit, Out for delivery and Delivered are gone. Cancelled and Rejected never counted.
+     *
+     * The pre-shipment set is written out and everything else counts as gone, not the other way
+     * round: this vocabulary is closed and defined by the app, while terminal words multiply
+     * (completed, closed, fulfilled, collected, paid…) and a terminal state nobody listed would
+     * otherwise sit on the shelf for ever.
+     *
+     * Misfiling a status here CANNOT move Current stock — that still deducts every live order, so
+     * the number the sales team already works from is untouched. It can only move the split between
+     * On shelf and Reserved.
+     */
+    private const ON_SHELF_STATUSES = [
+        'new', 'accepted', 'confirmed', 'preparing', 'packed', 'ready',
+        'pending', 'processing', 'draft', 'quote', 'quotation', 'on hold', 'awaiting payment',
+    ];
+
+    /** Sold-but-still-here units per product id, filled by soldMap(). */
+    private array $reserved = [];
+
     /** Purchase lines since the count that carry no product_id, so they moved no stock. */
     private array $unlinkedBuys = ['lines' => 0, 'units' => 0.0, 'names' => []];
 
@@ -167,6 +197,7 @@ final class JubaStockCapability implements ProcessCapability
         catch (\Throwable $e) { $counted = 0; }
 
         $inStock = 0; $soldOut = 0; $over = 0; $units = 0.0;
+        $reservedUnits = 0.0; $reservedLines = 0;
         $rows = [];
         foreach ($open as $pid => $o) {
             $oq  = round((float) $o['qty'], 3);
@@ -174,9 +205,17 @@ final class JubaStockCapability implements ProcessCapability
             $sq  = round((float) ($sold[$pid] ?? 0), 3);
             $cur = round($oq + $bq - $sq, 3);
 
+            // Current stock is UNCHANGED — still counted + bought − everything sold. On shelf simply
+            // adds back the part that has not left yet, so the three columns always reconcile:
+            //     on shelf − reserved = current
+            $rsv     = round((float) ($this->reserved[$pid] ?? 0), 3);
+            $onShelf = round($cur + $rsv, 3);
+
             if ($cur > 0)     { $inStock++; $units += $cur; }
             elseif ($cur < 0) { $over++; }
             else              { $soldOut++; }
+            $reservedUnits += $rsv;
+            if ($rsv > 0) { $reservedLines++; }
 
             $when = substr((string) $o['at'], 0, 10);
             $sub  = ! empty($o['new'])
@@ -232,6 +271,14 @@ final class JubaStockCapability implements ProcessCapability
                 'opening' => ['value' => $this->qty($oq), 'sort' => $oq],
                 'bought'  => ['value' => $this->qty($bq), 'sort' => $bq],
                 'sold'    => ['value' => $this->qty($sq), 'sort' => $sq],
+                'onshelf' => [
+                    'value' => $this->qty($onShelf), 'sort' => $onShelf,
+                    'tone'  => $onShelf > 0 ? 'ok' : ($onShelf < 0 ? 'danger' : 'default'),
+                ],
+                'reserved' => [
+                    'value' => $rsv > 0 ? $this->qty($rsv) : '—', 'sort' => $rsv,
+                    'tone'  => $rsv > 0 ? 'warn' : '',
+                ],
                 'current' => [
                     'value' => $this->qty($cur), 'sort' => $cur,
                     'tone'  => $cur > 0 ? 'ok' : ($cur < 0 ? 'danger' : 'default'),
@@ -263,16 +310,30 @@ final class JubaStockCapability implements ProcessCapability
             ['key' => 'opening', 'label' => 'Counted', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'bought',  'label' => 'Bought since', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'sold',    'label' => 'Sold since', 'align' => 'right', 'type' => 'num', 'sortable' => true],
-            ['key' => 'current', 'label' => 'Current stock', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'onshelf', 'label' => 'On shelf', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'reserved', 'label' => 'Reserved', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'current', 'label' => 'Free to sell', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'unitcost', 'label' => 'Cost each', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'value', 'label' => 'Value at cost', 'align' => 'right', 'type' => 'num', 'sortable' => true],
         ];
 
         $notCounted = max(0, $counted - count($open));
 
-        $sub = 'Current stock = what Juba counted, plus everything bought since, less everything sold since. '
+        $sub = 'On shelf = what Juba counted, plus everything bought since, less everything that has actually '
+             . 'left. Reserved = sold but still standing here, on orders not yet dispatched. Free to sell = '
+             . 'on shelf less reserved, and it is the same number this screen has always shown. '
              . 'A purchase adds the moment it is saved against a product; an invoice deducts the moment it '
              . 'is raised. Cash, credit and unpaid all count — payment status never changes stock.';
+
+        // Which states count as still-here, named, because a split nobody can audit is just a
+        // second number to distrust.
+        if ($reservedUnits > 0) {
+            $sub .= ' ' . $this->qty(round($reservedUnits, 3)) . ' units across '
+                 . $reservedLines . ' product' . ($reservedLines === 1 ? '' : 's')
+                 . ' are reserved: sold on an order still at ' . implode(', ', self::ON_SHELF_STATUSES)
+                 . '. Anything dispatched, in transit or delivered has left and is not reserved. '
+                 . 'This is why a physical count reads higher than Free to sell, and both are right.';
+        }
 
         // v5.10 — the two ways goods move without the screen noticing, stated where the number is.
         // Both are silent by nature: a purchase typed as free text and an invoice worded differently
@@ -342,6 +403,11 @@ final class JubaStockCapability implements ProcessCapability
                      : 'at cost, across every counted item on hand'],
                 ['key' => 'instock', 'label' => 'In stock', 'value' => $inStock, 'tone' => 'ok', 'foot' => 'counted items still on hand'],
                 ['key' => 'units', 'label' => 'Units on hand', 'value' => $this->qty(round($units, 3)), 'tone' => 'ok', 'foot' => 'total across those items'],
+                ['key' => 'reserved', 'label' => 'Reserved', 'value' => $this->qty(round($reservedUnits, 3)),
+                 'tone' => $reservedUnits > 0 ? 'warn' : 'ok',
+                 'foot' => $reservedUnits > 0
+                     ? ('sold on ' . $reservedLines . ' product' . ($reservedLines === 1 ? '' : 's') . ', still on the shelf')
+                     : 'nothing sold is still standing here'],
                 ['key' => 'soldout', 'label' => 'Sold out', 'value' => $soldOut, 'tone' => $soldOut > 0 ? 'warn' : 'ok', 'foot' => 'counted, all sold since'],
                 ['key' => 'over', 'label' => 'Sold more than we had', 'value' => $over,
                  'tone' => $over > 0 ? 'danger' : 'ok',
@@ -355,7 +421,9 @@ final class JubaStockCapability implements ProcessCapability
             ->table($columns, $rows, [], [
                 'currency' => $disp,
                 'totals'   => [
-                    ['key' => 'current', 'label' => 'Units'],
+                    ['key' => 'onshelf', 'label' => 'On shelf'],
+                    ['key' => 'reserved', 'label' => 'Reserved'],
+                    ['key' => 'current', 'label' => 'Free to sell'],
                     ['key' => 'value', 'label' => 'Value at cost', 'money' => true],
                 ],
             ])
@@ -377,6 +445,12 @@ final class JubaStockCapability implements ProcessCapability
                     'noCost'      => $noCost,                     // on hand, excluded from the total
                     'total'       => round($stockValue, 2),
                     'error'       => $this->costError,
+                ],
+                // on shelf − reserved = free to sell, per product and in total. Checkable from outside.
+                'shelf' => [
+                    'reservedUnits'    => round($reservedUnits, 3),
+                    'reservedProducts' => $reservedLines,
+                    'heldStatuses'     => self::ON_SHELF_STATUSES,
                 ],
             ]);
     }
@@ -635,6 +709,15 @@ final class JubaStockCapability implements ProcessCapability
     private function soldMap(int $tid, array $since = [], ?string $firstOpen = null): array
     {
         $sold = []; $unmatched = 0; $unmatchedQty = 0.0; $fromJson = [];
+        $this->reserved = [];
+
+        // Sold, but not yet gone. An INVOICE never lands here — billing goods is the strongest
+        // statement there is that they left. Only an uninvoiced order at a pre-dispatch status does.
+        $onShelfStatus = function ($raw): bool {
+            $k = trim((string) preg_replace('/[\s_-]+/u', ' ', mb_strtolower(trim((string) $raw))));
+
+            return $k !== '' && in_array($k, self::ON_SHELF_STATUSES, true);
+        };
         $d = ['inv' => [], 'ord' => [], 'miss' => [], 'lineMap' => [], 'ordNos' => [],
               'invLines' => 0, 'ordLines' => 0, 'invUnits' => 0.0, 'ordUnits' => 0.0];
         $empty = [[], 0, 0.0, $d];
@@ -750,10 +833,11 @@ final class JubaStockCapability implements ProcessCapability
             foreach (DB::table('orders')
                 ->where('tenant_id', $tid)
                 ->whereRaw("lower(coalesce(status,'')) not in ('cancelled','canceled','rejected','void')")
-                ->get(['id', 'order_no', 'items_json', 'created_at']) as $o) {
+                ->get(['id', 'order_no', 'items_json', 'created_at', 'status']) as $o) {
                 $oid = (int) $o->id;
                 if (isset($invoiced[$oid])) { continue; }        // already counted on its invoice
                 $owhen = (string) $o->created_at;
+                $held  = $onShelfStatus($o->status ?? '');       // sold, but still standing here
 
                 $ij = $o->items_json;
                 if (is_string($ij)) { $ij = json_decode($ij, true); }
@@ -785,6 +869,7 @@ final class JubaStockCapability implements ProcessCapability
                     $d['ordLines']++; $d['ordUnits'] += $q;
                     $d['ordNos'][$oid] = $ono;
                     $fromJson[$oid] = true;
+                    if ($held) { $this->reserved[$pid] = ($this->reserved[$pid] ?? 0) + $q; }
                 }
             }
         } catch (\Throwable $e) {
@@ -799,7 +884,7 @@ final class JubaStockCapability implements ProcessCapability
                 ->whereRaw("lower(coalesce(orders.status,'')) not in ('cancelled','canceled','rejected','void')")
                 ->whereNotNull('order_items.product_id')
                 ->get(['order_items.product_id', 'order_items.qty', 'order_items.order_id',
-                       'orders.order_no', 'orders.created_at']) as $r) {
+                       'orders.order_no', 'orders.created_at', 'orders.status']) as $r) {
                 $oid = (int) $r->order_id;
                 if (isset($invoiced[$oid]) || isset($fromJson[$oid])) { continue; }
                 $q = (float) $r->qty;
@@ -810,6 +895,7 @@ final class JubaStockCapability implements ProcessCapability
                 $d['ord'][$pid] = ($d['ord'][$pid] ?? 0) + $q;
                 $d['ordLines']++; $d['ordUnits'] += $q;
                 $d['ordNos'][$oid] = (string) ($r->order_no ?: ('#' . $oid));
+                if ($onShelfStatus($r->status ?? '')) { $this->reserved[$pid] = ($this->reserved[$pid] ?? 0) + $q; }
             }
         } catch (\Throwable $e) {
             // the invoiced half stands
