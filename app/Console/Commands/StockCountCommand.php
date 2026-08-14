@@ -79,6 +79,19 @@ final class StockCountCommand extends Command
         $by    = trim((string) $this->option('by')) ?: 'Stock count';
         $date  = trim((string) ($this->option('date') ?: now()->format('Y-m-d')));
 
+        // v5.14 — the MOMENT the count is true as of, which is what Juba Stock compares every
+        // document against. This used to be an unconditional now(), so `--date` set the word printed
+        // in the header and the duplicate guard and NOTHING ELSE: backdating a count to Tuesday still
+        // stamped it "now", and Tuesday's and Wednesday's sales were both left inside it instead of
+        // being deducted. The option said "the count date" and did not set the count date.
+        //
+        // A dated count is true as of the END of that day: everything that happened on the day the
+        // shelf was walked is inside the count, and the first thing that moves it is the next day's
+        // paperwork. Same rule as the exact-moment case — a document AT the count moment is inside it.
+        $countedAt = $this->option('date')
+            ? \Illuminate\Support\Carbon::parse($date)->endOfDay()
+            : now();
+
         $lines = [];
         foreach ((array) $this->argument('item') as $raw) {
             $raw = trim((string) $raw);
@@ -95,6 +108,11 @@ final class StockCountCommand extends Command
 
         $this->line('');
         $this->info('PHYSICAL COUNT — ' . $tenant->name . ' — by ' . $by . ' on ' . $date);
+        // The moment, not just the day. Juba Stock deducts every document AFTER this instant and
+        // ignores everything at or before it, so the exact time is the whole behaviour of the count.
+        $this->line('   true as of ' . $countedAt->format('Y-m-d H:i:s')
+            . ($this->option('date') ? '  (end of the day you gave)' : '  (now)')
+            . ' — sales and purchases after this move it; anything before is already inside it.');
         $this->line($write ? '*** WRITE MODE ***' : 'DRY RUN — nothing will be written (add --write when you are satisfied)');
 
         [$bought, $sold] = $this->documents($tid);
@@ -268,7 +286,7 @@ final class StockCountCommand extends Command
                 if (\Illuminate\Support\Facades\Schema::hasTable('stock_openings')) {
                     DB::table('stock_openings')->insert([
                         'tenant_id' => $tid, 'product_id' => (int) $p->id, 'location' => $loc,
-                        'qty' => $row['counted'], 'counted_at' => now(), 'counted_by' => $by,
+                        'qty' => $row['counted'], 'counted_at' => $countedAt, 'counted_by' => $by,
                         'note' => 'documents said ' . $row['doc'] . ' at the time of the count',
                         'created_at' => now(), 'updated_at' => now(),
                     ]);
