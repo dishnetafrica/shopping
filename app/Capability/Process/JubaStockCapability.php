@@ -849,9 +849,6 @@ final class JubaStockCapability implements ProcessCapability
                     $q = (float) ($it['qty'] ?? 0);
                     if ($q <= 0) { continue; }
                     $pid = (int) ($it['product_id'] ?? ($it['id'] ?? 0));
-                    if ($pid > 0 && isset($since[$pid]) && $owhen !== '' && $owhen <= $since[$pid]['at']) {
-                        continue;                          // predates the count
-                    }
                     if ($pid <= 0) {
                         // a lump-sum or free-text line: match it by name like an invoice line, or
                         // report it. Never guessed.
@@ -864,6 +861,26 @@ final class JubaStockCapability implements ProcessCapability
                             continue;
                         }
                     }
+
+                    // v5.15 — THE DATE GATE, and it belongs HERE: after the product is known, however
+                    // it was found. It used to sit above, inside `if ($pid > 0)`, so it only ever
+                    // tested lines whose items_json carried a product_id. A line with no product_id
+                    // was resolved BY NAME and then fell straight through to the total with no date
+                    // test at all — so ORD-4, ORD-10 and ORD-14, orders from weeks ago, were being
+                    // deducted from a count taken tonight. Twenty cartons of foil kept reappearing
+                    // after every recount because the count could not close off history that was
+                    // never being compared to it.
+                    //
+                    // Same two rules the invoice half above applies, and now written once:
+                    //   product HAS a count   → anything at or before it is already inside the count
+                    //   product has NO count  → anything before the first count is history (preSold)
+                    if (isset($since[$pid])) {
+                        if ($owhen !== '' && $owhen <= $since[$pid]['at']) { continue; }
+                    } elseif ($firstOpen !== null && $owhen !== '' && $owhen <= $firstOpen) {
+                        $this->preSold[$pid] = ($this->preSold[$pid] ?? 0) + $q;
+                        continue;
+                    }
+
                     $sold[$pid] = ($sold[$pid] ?? 0) + $q;
                     $d['ord'][$pid] = ($d['ord'][$pid] ?? 0) + $q;
                     $d['ordLines']++; $d['ordUnits'] += $q;
@@ -890,7 +907,15 @@ final class JubaStockCapability implements ProcessCapability
                 $q = (float) $r->qty;
                 if ($q <= 0) { continue; }
                 $pid = (int) $r->product_id;
-                if (isset($since[$pid]) && (string) $r->created_at <= $since[$pid]['at']) { continue; }
+                // The same two rules as the other two paths. The second one was missing here too:
+                // a product with no count of its own had its whole order history counted as sold
+                // since, instead of being closed off as the history it is.
+                if (isset($since[$pid])) {
+                    if ((string) $r->created_at <= $since[$pid]['at']) { continue; }
+                } elseif ($firstOpen !== null && (string) $r->created_at <= $firstOpen) {
+                    $this->preSold[$pid] = ($this->preSold[$pid] ?? 0) + $q;
+                    continue;
+                }
                 $sold[$pid] = ($sold[$pid] ?? 0) + $q;
                 $d['ord'][$pid] = ($d['ord'][$pid] ?? 0) + $q;
                 $d['ordLines']++; $d['ordUnits'] += $q;
