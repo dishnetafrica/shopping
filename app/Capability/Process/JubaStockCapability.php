@@ -64,6 +64,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class JubaStockCapability implements ProcessCapability
 {
+    /** Purchase lines since the count that carry no product_id, so they moved no stock. */
+    private array $unlinkedBuys = ['lines' => 0, 'units' => 0.0, 'names' => []];
+
     public function key(): string { return 'juba.stock'; }
 
     public function permission(): string { return 'menu:products'; }
@@ -81,9 +84,13 @@ final class JubaStockCapability implements ProcessCapability
         // carry invoice wordings matching no product, and 60 products read as sold more than
         // bought. Anchoring on a physical count closes all of that off — the history is inside the
         // count — and leaves a short, checkable tail.
-        $open   = $this->openingsMap($t);
-        $bought = $this->purchasedMap($t, $open);
-        [$sold, $unmatched, $unmatchedQty, $detail] = $this->soldMap($t, $open);
+        $open = $this->openingsMap($t);
+        // The earliest count on the shop. Everything before it — unmatched wordings, unlinked
+        // purchases, negative history — belongs to the era the counts closed off.
+        $firstOpen = null;
+        foreach ($open as $o) { if ($firstOpen === null || $o['at'] < $firstOpen) { $firstOpen = $o['at']; } }
+        $bought = $this->purchasedMap($t, $open, $firstOpen);
+        [$sold, $unmatched, $unmatchedQty, $detail] = $this->soldMap($t, $open, $firstOpen);
 
         $names = [];
         if ($open) {
@@ -143,7 +150,22 @@ final class JubaStockCapability implements ProcessCapability
         $notCounted = max(0, $counted - count($open));
 
         $sub = 'Current stock = what Juba counted, plus everything bought since, less everything sold since. '
-             . 'Cash, credit and unpaid all count — payment status never changes stock.';
+             . 'A purchase adds the moment it is saved against a product; an invoice deducts the moment it '
+             . 'is raised. Cash, credit and unpaid all count — payment status never changes stock.';
+
+        // v5.10 — the two ways goods move without the screen noticing, stated where the number is.
+        // Both are silent by nature: a purchase typed as free text and an invoice worded differently
+        // than the catalogue both look completely normal on their own screens.
+        $ub = $this->unlinkedBuys;
+        if (! empty($ub['error'])) {
+            $sub .= ' ⚠ The check for unlinked purchases could not run, so purchases may be missing from this screen.';
+        } elseif (($ub['lines'] ?? 0) > 0) {
+            $sub .= ' ⚠ ' . $ub['lines'] . ' purchase line' . ($ub['lines'] === 1 ? '' : 's')
+                 . ' since the count (' . $this->qty($ub['units']) . ' units) name no product, so they added '
+                 . 'NOTHING here: ' . implode('; ', array_slice($ub['names'], 0, 4))
+                 . (count($ub['names']) > 4 ? ' …' : '')
+                 . '. Open the purchase and pick the product to fix it.';
+        }
         if ($notCounted > 0) {
             $sub .= ' ' . number_format($notCounted) . ' active product'
                  . ($notCounted === 1 ? ' has' : 's have') . ' never been counted and '
@@ -160,9 +182,10 @@ final class JubaStockCapability implements ProcessCapability
             $where = [];
             if ($mi['lines'] > 0) { $where[] = $mi['lines'] . ' on invoices (' . $this->qty($mi['units']) . ' units)'; }
             if ($mo['lines'] > 0) { $where[] = $mo['lines'] . ' on orders (' . $this->qty($mo['units']) . ' units)'; }
-            $sub .= ' ' . $unmatched . ' sales line' . ($unmatched === 1 ? '' : 's')
+            $sub .= ' ⚠ Since the count, ' . $unmatched . ' sales line' . ($unmatched === 1 ? '' : 's')
                  . ' could not be matched to a product by name and ' . ($unmatched === 1 ? 'is' : 'are')
-                 . ' NOT deducted — ' . implode(', ', $where) . '. Nothing is matched on a guess.';
+                 . ' NOT deducted — ' . implode(', ', $where) . '. Add the wording to that product\'s '
+                 . 'Keywords, one per line. Nothing is matched on a guess.';
         }
 
         return (new WorkspacePayload)
@@ -248,9 +271,11 @@ final class JubaStockCapability implements ProcessCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
-        $open   = $this->openingsMap($ctx->tenantId());
-        $bought = $this->purchasedMap($ctx->tenantId(), $open);
-        [$sold] = $this->soldMap($ctx->tenantId(), $open);   // list() takes the first
+        $open = $this->openingsMap($ctx->tenantId());
+        $first = null;
+        foreach ($open as $o) { if ($first === null || $o['at'] < $first) { $first = $o['at']; } }
+        $bought = $this->purchasedMap($ctx->tenantId(), $open, $first);
+        [$sold] = $this->soldMap($ctx->tenantId(), $open, $first);   // list() takes the first
         $units = 0.0;
         foreach ($open as $pid => $o) {
             $c = (float) $o['qty'] + (float) ($bought[$pid]['qty'] ?? 0) - (float) ($sold[$pid] ?? 0);
@@ -275,7 +300,7 @@ final class JubaStockCapability implements ProcessCapability
      * @param  array<int,array{qty:float,at:string}> $since  opening per product id
      * @return array<int,array{qty:float,lines:int,supplier:string}>
      */
-    private function purchasedMap(int $tid, array $since): array
+    private function purchasedMap(int $tid, array $since, ?string $firstOpen = null): array
     {
         try {
             $rows = DB::table('order_costs')
@@ -286,6 +311,30 @@ final class JubaStockCapability implements ProcessCapability
                 ->get(['product_id', 'qty', 'supplier_name', 'created_at']);
         } catch (\Throwable $e) {
             return [];
+        }
+
+        // v5.10 — purchase lines since the count that carry NO product_id. A purchase is only
+        // stock if it says WHICH product arrived; typed as free text it moves nothing, silently.
+        // That silence is the problem: goods arrive, the shelf fills, and the screen does not move.
+        $this->unlinkedBuys = ['lines' => 0, 'units' => 0.0, 'names' => []];
+        if ($firstOpen !== null) {
+            try {
+                foreach (DB::table('order_costs')
+                    ->where('tenant_id', $tid)->where('stage', 'purchase')->whereNull('voided_at')
+                    ->whereNull('product_id')->where('qty', '>', 0)
+                    ->where('created_at', '>', $firstOpen)
+                    ->get(['note', 'qty']) as $u) {
+                    $this->unlinkedBuys['lines']++;
+                    $this->unlinkedBuys['units'] += (float) $u->qty;
+                    $nm = trim((string) ($u->note ?? ''));
+                    if ($nm !== '' && count($this->unlinkedBuys['names']) < 20) { $this->unlinkedBuys['names'][] = $nm; }
+                }
+            } catch (\Throwable $e) {
+                // Say so rather than report a comforting zero. A silent catch here would repeat the
+                // exact failure this screen exists to expose: a check that cannot run is not a
+                // check that passed.
+                $this->unlinkedBuys['error'] = true;
+            }
         }
 
         $map = [];
@@ -350,7 +399,7 @@ final class JubaStockCapability implements ProcessCapability
      *
      * @return array{0:array<int,float>,1:int,2:float,3:array<string,mixed>}
      */
-    private function soldMap(int $tid, array $since = []): array
+    private function soldMap(int $tid, array $since = [], ?string $firstOpen = null): array
     {
         $sold = []; $unmatched = 0; $unmatchedQty = 0.0; $fromJson = [];
         $d = ['inv' => [], 'ord' => [], 'miss' => [], 'lineMap' => [], 'ordNos' => [],
@@ -435,6 +484,11 @@ final class JubaStockCapability implements ProcessCapability
                     continue;                             // already inside the opening count
                 }
                 if ($pid === null) {
+                    // v5.10 — an unmatched wording on a document that PREDATES the count is already
+                    // inside the count and is not a problem to solve. Only what has failed to match
+                    // since the shelf was counted still costs you stock. This is what turned 303
+                    // units of archaeology into a short, current list.
+                    if ($firstOpen !== null && $when !== '' && $when <= $firstOpen) { continue; }
                     $unmatched++; $unmatchedQty += $q;
                     $d['miss'][] = ['doc' => (string) ($r->invoice_no ?: 'invoice'), 'src' => 'invoice',
                                     'name' => trim($raw), 'qty' => $q];
@@ -482,6 +536,7 @@ final class JubaStockCapability implements ProcessCapability
                         // report it. Never guessed.
                         $pid = $byName[$this->normName((string) ($it['name'] ?? ''))] ?? null;
                         if ($pid === null) {
+                            if ($firstOpen !== null && $owhen !== '' && $owhen <= $firstOpen) { continue; }
                             $unmatched++; $unmatchedQty += $q;
                             $d['miss'][] = ['doc' => $ono, 'src' => 'order',
                                             'name' => trim((string) ($it['name'] ?? '(no name)')), 'qty' => $q];
