@@ -182,26 +182,69 @@ final class ProfitRealCommand extends Command
             $this->error('   order lines could not be read: ' . $e->getMessage());
         }
 
-        /* ---- expenses: money out that is NOT stock and NOT owners' money ------------------- */
+        /* ---- expenses ---------------------------------------------------------------------
+         *
+         * v5.17.1 — classified by the SERVER'S OWN RULES, from PanelApiController::cashPnl. The first
+         * version of this command bucketed on `stage` alone and produced a $92,471 expense total on a
+         * shop with $38,984 of revenue — a fictional $70,903 loss. What it swept in:
+         *
+         *   Conversion / Transfer  $62,723   both legs of an FX swap or a move between holders. They
+         *                                    net to zero by construction. cashPnl excludes them by
+         *                                    CATEGORY, and the v4.36 audit records that a NULL-category
+         *                                    bug here was caught by its own reconciliation check.
+         *   supplier_payment       $18,223   settling a bill that was already recorded as a purchase.
+         *                                    On a cash basis cashPnl calls it cost of goods; on an
+         *                                    ACCRUAL basis it is neither cost nor expense — the goods
+         *                                    were costed when they SOLD, a few lines above. Counting
+         *                                    it here charges the same stock twice.
+         *   Loan Repayment          $2,503   financing. Turns cash into a smaller debt; not a cost.
+         *                                    Detected exactly as cashPnl detects it, same setting.
+         *   Local purchase / Purchase        stock, reached by category rather than stage.
+         *
+         * Only `expense` and `cash_out` are running costs, which is the same split cashPnl uses:
+         * operating profit = gross − opex − other_out + other_in.
+         */
         $exp = []; $expTotal = 0.0; $purchases = 0.0;
+        $skipped = []; $otherIn = 0.0;
+        $lenders = $this->lenderPattern((string) $t->setting('books.loan_holders', 'Bhavin'));
+        $isCapitalNote = fn ($n) => (bool) preg_match('/capital|startup|introduc|invest/i', (string) $n);
         try {
-            $q = DB::table('order_costs')->where('tenant_id', $T)->whereNull('voided_at');
+            $q = DB::table('order_costs')->where('tenant_id', $T)->whereNull('voided_at')
+                ->whereNotIn('status', ['void', 'rejected']);
             if ($from !== null) { $q->where('created_at', '>=', $from); }
             if ($hi !== null)   { $q->where('created_at', '<=', $hi); }
-            foreach ($q->get(['stage', 'category', 'native_amount', 'currency', 'usd_amount', 'created_at', 'note']) as $c) {
-                $stage = strtolower((string) $c->stage);
+            foreach ($q->get(['stage', 'category', 'native_amount', 'currency', 'usd_amount', 'created_at', 'note', 'holder']) as $c) {
+                $stage = strtolower(trim((string) $c->stage));
+                $cat   = trim((string) ($c->category ?? ''));
                 $amt = $usd((float) $c->native_amount, (string) $c->currency,
                     ((float) $c->usd_amount) > 0 ? (float) $c->usd_amount : null, substr((string) $c->created_at, 0, 10));
-                if ($stage === 'purchase') { $purchases += $amt; continue; }         // stock, not cost
-                if (in_array($stage, self::IN_STAGES, true)) { continue; }           // money in
-                if (in_array($stage, ['drawing', 'drawings'], true)) { continue; }   // owners' money
-                $cat = trim((string) ($c->category ?: $stage)) ?: 'Uncategorised';
-                $exp[$cat] = ($exp[$cat] ?? 0) + $amt;
+                $drop = function (string $why) use (&$skipped, $amt) { $skipped[$why] = ($skipped[$why] ?? 0) + $amt; };
+
+                // 1. FX legs and custody moves, by category — they net to zero across the pair.
+                if (in_array($cat, ['Conversion', 'Transfer'], true)) { $drop('currency conversions and transfers between holders'); continue; }
+                // 2. financing, before anything else can claim it
+                if ($this->isLoanRepayment($lenders, $stage, (string) $c->holder, (string) $c->note, $cat)) {
+                    $drop('loan repayments (financing, not a cost)'); continue;
+                }
+                // 3. stock, and settling the bills for stock
+                if ($stage === 'purchase')          { $purchases += $amt; $drop('purchases (stock — costed when the goods SELL)'); continue; }
+                if ($stage === 'supplier_payment')  { $drop('supplier bill settlements (the goods were costed when they sold)'); continue; }
+                // 4. owners' money in and out
+                if ($stage === 'funding' || ($stage === 'cash_in' && $isCapitalNote($c->note))) { $drop('capital introduced'); continue; }
+                if ($stage === 'drawing' || $stage === 'drawings') { $drop('owner drawings'); continue; }
+                // 5. customer receipts — the INVOICE is the revenue, not the payment for it
+                if ($stage === 'customer_payment') { $drop('customer payments (the invoice is already counted as revenue)'); continue; }
+                if ($stage === 'cash_in')          { $otherIn += $amt; continue; }
+
+                if ($stage !== 'expense' && $stage !== 'cash_out') { $drop('stage "' . ($stage ?: 'blank') . '" — not classified'); continue; }
+                $key = $cat !== '' ? $cat : $stage;
+                $exp[$key] = ($exp[$key] ?? 0) + $amt;
                 $expTotal += $amt;
             }
         } catch (\Throwable $e) {
             $this->error('   expenses could not be read: ' . $e->getMessage());
         }
+        $expTotal -= $otherIn;                    // other cash in offsets other cash out, as cashPnl does
 
         /* ---- report ----------------------------------------------------------------------- */
         $gross = $rev - $cogs;
@@ -242,7 +285,17 @@ final class ProfitRealCommand extends Command
             $line('   ' . str_pad(mb_substr((string) $k, 0, 28), 30) . $m($v));
         }
         if (count($exp) > 12) { $line('   ' . str_pad('… ' . (count($exp) - 12) . ' more', 30)); }
+        if ($otherIn > 0.005) { $line('   ' . str_pad('less other cash in', 30) . $m(-$otherIn)); }
         $line('   TOTAL EXPENSES           ' . $m($expTotal));
+
+        // Every dollar of cash movement that is NOT an expense, and why. Without this the total is
+        // just a number to trust; with it, it is a number to check.
+        if ($skipped) {
+            arsort($skipped);
+            $line('');
+            $line('   cash movements deliberately NOT counted as expenses:');
+            foreach ($skipped as $why => $v) { $line('      ' . $m($v) . '   ' . $why); }
+        }
 
         $rule();
         $line('   NET PROFIT               ' . $m($net) . ($net < 0 ? '   *** A LOSS ***' : ''));
@@ -374,6 +427,30 @@ final class ProfitRealCommand extends Command
         }
 
         return $out;
+    }
+
+    /** The lender regex, built exactly as PanelApiController::lenderPattern builds it. */
+    private function lenderPattern(string $names): string
+    {
+        $parts = array_filter(array_map('trim', explode(',', $names)));
+        $parts = array_map(fn ($n) => preg_quote($n, '/'), $parts);
+
+        return '/' . ($parts ? implode('|', $parts) : 'bhavin') . '/i';
+    }
+
+    /**
+     * Money out, naming a lender, and saying so — the same three conditions the server and the Books
+     * screen both apply, so a repayment cannot be an expense on one screen and financing on another.
+     * The `\b` matters: without it "return" matches inside ordinary words.
+     */
+    private function isLoanRepayment(string $lenders, string $stage, string $holder, string $note, string $category): bool
+    {
+        if (in_array($stage, self::IN_STAGES, true)) { return false; }
+        $text = trim($holder . ' ' . $note . ' ' . $category);
+
+        return $text !== ''
+            && preg_match($lenders, $text) === 1
+            && preg_match('/\b(loan|interest|repay|repaid|return)\w*\b/i', $text) === 1;
     }
 
     /** The money on an order line, whatever the front end called the field. */
