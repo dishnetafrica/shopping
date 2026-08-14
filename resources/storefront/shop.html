@@ -2784,19 +2784,39 @@ function groupProducts(list){
     if(!g[key].image&&p.image)g[key].image=p.image;});
   return order.map(function(k){var grp=g[k];grp.variants.sort(function(a,b){return (a.grams||1e12)-(b.grams||1e12);});return grp;});
 }
-function poaCard(name,category,image,packHtml){
+/* v5.06 — a price-on-request card is now a LINK to the product page, like every other card.
+   It never was one: prodCard builds a real <a href> around the image and the name, poaCard built a
+   bare <div>, and the only thing you could do with it was ask for a price on WhatsApp. On a shop
+   where SOME items are quote-only that is a small gap. On GSL, where every product is quote-only,
+   it meant the entire catalogue was unreadable — 32 products with descriptions, specifications and
+   four photos each, and no way to open any of them. Asking a customer to request a price for
+   something they cannot read about is the wrong way round.
+
+   The id is threaded through from prodCard; when it is absent (a grouped variant row) the card
+   degrades to exactly what it did before, so nothing that worked stops working. */
+function poaCard(name,category,image,packHtml,id){
   var msg=encodeURIComponent('Hi, I\u2019d like a price for: '+name+'.');
   var wa=(SHOP.waNumber?('https://wa.me/'+SHOP.waNumber+'?text='+msg):'#');
   var ic=catIcon(category);
-  var img='<div class="img">'+ic+(image?'<img alt="" src="'+esc(image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+'</div>';
-  return '<div class="pc">'+img+'<div class="bd"><div class="nm">'+esc(name)+'</div>'+(packHtml||'')
+  var dopen=id?(' onclick="return cardGo(event,'+jk(id)+','+jk(name)+')" style="cursor:pointer"'):'';
+  var imgInner=ic+(image?'<img alt="'+esc(name)+'" src="'+esc(image)+'" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'');
+  var img=id
+    ? ('<a class="img" href="'+esc(productHref(id,name))+'"'+dopen+'>'+imgInner+'</a>')
+    : ('<div class="img">'+imgInner+'</div>');
+  var nm=id
+    ? ('<a class="nm" href="'+esc(productHref(id,name))+'"'+dopen+' style="color:inherit;text-decoration:none;display:block">'+esc(name)+'</a>')
+    : ('<div class="nm">'+esc(name)+'</div>');
+  return '<div class="pc">'+img+'<div class="bd">'+nm+(packHtml||'')
     +'<div class="pr" style="color:var(--green);font-size:14px">Price on request</div>'
     +'<a class="add" href="'+wa+'" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Request a quote</a>'
     +'</div></div>';
 }
 function variantCard(grp){
   if(grp.variants.length===1)return prodCard(grp.variants[0].product);
-  if(grp.variants[0].product.poa)return poaCard(grp.base,grp.category,grp.image,'');
+  // v5.06 — same fix for a grouped quote-only card: link it to the first variant's page rather
+  // than leaving a dead tile. Adding to cart is meaningless without a price, so the picker is not
+  // what this card wants; the description is.
+  if(grp.variants[0].product.poa)return poaCard(grp.base,grp.category,grp.image,'',grp.variants[0].product.id);
   var key=grp.category+'|'+grp.base.toLowerCase();
   var inv=grp.variants.filter(function(v){return !oosOf(v.product);});
   var allOos=inv.length===0;
@@ -3079,7 +3099,7 @@ var HEART_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 var CMP_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h11M7 4 4 7l3 3M20 17H9M17 14l3 3-3 3"/></svg>';
 
 function prodCard(p){
-  if(p.poa)return poaCard(p.name,p.category,p.image,packLine(p));
+  if(p.poa)return poaCard(p.name,p.category,p.image,packLine(p),p.id);   // v5.06 — pass the id so the card can link
   var key=p.name, inCart=CART[key];
   var ic=catIcon(p.category);
   /* v4.27 — a REAL <a href> so Google can crawl to the product page. The click is

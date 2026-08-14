@@ -35,6 +35,13 @@ class ProductImporter
         'sku'        => ['sku', 'item code', 'itemcode', 'code'],
         'barcode'    => ['barcode', 'barcode 1', 'barcode1', 'barcode_1', 'ean', 'upc'],
         'image_url'  => ['image', 'image url', 'imageurl', 'image link', 'photo', 'picture'],
+        // v5.06 — the extra shots. `products.gallery_1..3` have existed since v4.2 and the product
+        // page renders them, but no importer could fill them: a supplier sheet with four photos of
+        // one item could only ever land the first, and the other three had to be uploaded by hand,
+        // one product at a time. The columns were always there; only the alias was missing.
+        'gallery_1'  => ['gallery 1', 'gallery1', 'image 2', 'image2', 'photo 2', 'photo2'],
+        'gallery_2'  => ['gallery 2', 'gallery2', 'image 3', 'image3', 'photo 3', 'photo3'],
+        'gallery_3'  => ['gallery 3', 'gallery3', 'image 4', 'image4', 'photo 4', 'photo4'],
         'active'     => ['active', 'enabled', 'status'],
         'moq'        => ['moq', 'min order', 'minimum order', 'min qty', 'minimum qty', 'min order qty'],
         'pack_size'  => ['pack size', 'packsize', 'pack', 'units per pack', 'pcs per carton', 'pcs in ctn', 'pcs in carton', 'pieces per pack'],
@@ -95,6 +102,9 @@ class ProductImporter
                 'barcode'    => $this->cleanBarcode($get('barcode')),
                 'keywords'   => $get('keywords') ?: null,
                 'image_url'  => $get('image_url') ?: null,
+                'gallery_1'  => $get('gallery_1') ?: null,
+                'gallery_2'  => $get('gallery_2') ?: null,
+                'gallery_3'  => $get('gallery_3') ?: null,
                 'active'     => $get('active') === '' ? true : $this->bool($get('active')),
                 'moq'        => $get('moq') !== '' ? max(1, (int) $this->num($get('moq'))) : null,
                 'pack_size'  => $get('pack_size') !== '' ? max(1, (int) $this->num($get('pack_size'))) : null,
@@ -141,6 +151,9 @@ class ProductImporter
                     if ($get('stock') !== '')     $upd['stock']     = $row['stock'];
                     if ($get('barcode') !== '')   $upd['barcode']   = $row['barcode'];
                     if ($get('image_url') !== '') $upd['image_url'] = $row['image_url'];
+                    foreach (['gallery_1', 'gallery_2', 'gallery_3'] as $g) {
+                        if ($get($g) !== '') $upd[$g] = $row[$g];
+                    }
                     if ($get('active') !== '')    $upd['active']    = $row['active'];
                     if ($get('moq') !== '')       $upd['moq']       = $row['moq'];
                     if ($get('pack_size') !== '') $upd['pack_size'] = $row['pack_size'];
