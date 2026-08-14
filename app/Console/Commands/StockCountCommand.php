@@ -51,6 +51,10 @@ final class StockCountCommand extends Command
         {--by=Stock count : who counted}
         {--date= : the count date, defaults to today}
         {--location= : stock location; defaults to the shop home. Juba goods need juba-consignment}
+        {--create : create a product for any line that matches nothing, then count it}
+        {--category=Uncategorised : category for products created by --create}
+        {--unit= : unit label for products created by --create, e.g. carton}
+        {--pack= : pieces per pack for products created by --create}
         {--write : actually record it (default is a dry run)}';
 
     protected $description = 'Record a physical stock count against products, without touching any document.';
@@ -110,9 +114,26 @@ final class StockCountCommand extends Command
         }
         $this->line('');
 
-        $rows = []; $plan = []; $blocked = 0;
+        $create = (bool) $this->option('create');
+        $rows = []; $plan = []; $blocked = 0; $toCreate = [];
         foreach ($lines as [$needle, $qty]) {
             $cands = $this->resolve($tid, $needle);
+
+            // v5.09 — counting a shelf turns up things the catalogue has never heard of. Juba found
+            // 15 cartons of scrub sponge and a box of Galaxy Pack glasses, neither of which exists
+            // as a product, so neither could be counted. --create makes the product from the text
+            // you typed and then counts it.
+            //
+            // Created HIDDEN and unpriced on purpose: it is real stock, so it belongs in reports and
+            // in the count, but nobody has set a price, and an unpriced product on the storefront
+            // renders as "Price on request" to customers. Hidden keeps it off the shelf front while
+            // staff can still see and sell it — which is exactly what Visibility means by unlisted.
+            if ($create && $cands->isEmpty() && ! str_starts_with($needle, '#')) {
+                $toCreate[] = [$needle, $qty];
+                $this->line('<fg=cyan>' . str_pad('"' . $needle . '"', 26) . ' counted ' . $this->q($qty)
+                    . '  - WILL BE CREATED as a new product (hidden, no price)</>');
+                continue;
+            }
 
             if ($cands->count() !== 1) {
                 $blocked++;
@@ -143,6 +164,15 @@ final class StockCountCommand extends Command
         $this->line('resolved ' . count($plan) . ' of ' . count($lines) . ' line(s)'
             . ($blocked ? ('   ' . $blocked . ' need you to pick the product') : ''));
 
+        if ($toCreate) {
+            $this->line('');
+            $this->line('to create: ' . count($toCreate) . ' product(s) in category "'
+                . (string) $this->option('category') . '"'
+                . ($this->option('unit') ? (', unit ' . $this->option('unit')) : '')
+                . ($this->option('pack') ? (', pack of ' . $this->option('pack')) : '')
+                . ' - hidden, price 0, active');
+        }
+
         if (! $write) {
             $this->line('');
             $this->comment('Dry run — nothing written. A large variance is a question about the paperwork,');
@@ -150,6 +180,32 @@ final class StockCountCommand extends Command
             $this->comment('and having both numbers is the point. Re-run with --write to record the count.');
 
             return self::SUCCESS;
+        }
+
+        // Create first, then everything below treats them as ordinary counted products.
+        foreach ($toCreate as [$needle, $qty]) {
+            $exists = Product::where('tenant_id', $tid)->whereRaw('lower(name) = ?', [mb_strtolower($needle)])->first();
+            if ($exists) {
+                $this->line('  EXISTS ALREADY, not created: ' . $needle);
+                $p = $exists;
+            } else {
+                $p = Product::create([
+                    'tenant_id'  => $tid,
+                    'name'       => mb_substr($needle, 0, 255),
+                    'category'   => (string) $this->option('category') ?: 'Uncategorised',
+                    'price'      => 0,
+                    'base_price' => 0,
+                    'active'     => true,
+                    'hidden'     => true,
+                    'unit_label' => $this->option('unit') ?: null,
+                    'pack_size'  => $this->option('pack') ? max(1, (int) $this->option('pack')) : null,
+                    'moq'        => 1,
+                ]);
+                $this->line('  CREATED   ' . str_pad(mb_substr((string) $p->name, 0, 46), 48)
+                    . ' id #' . $p->id . '  (hidden, no price - price it and unhide when ready)');
+            }
+            $b = 0.0; $s2 = 0.0;                       // brand new: nothing bought or sold before it
+            $plan[] = ['p' => $p, 'counted' => (float) $qty, 'doc' => round($b - $s2, 3)];
         }
 
         $done = 0; $skipped = 0;
