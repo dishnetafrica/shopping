@@ -302,7 +302,10 @@ final class ProfitRealCommand extends Command
         $rule();
 
         $line('HOW THIS DIFFERS FROM THE BOOKS SCREEN');
-        $line('   cash paid to suppliers      ' . $m($purchases));
+        // NOT "cash paid to suppliers" — this sums every purchase row, cash and credit alike, and a
+        // credit bill is goods received with nothing paid yet. cashPnl excludes credit rows; this does
+        // not, because on an accrual basis the goods arrived whether or not the bill has settled.
+        $line('   goods bought (cash + credit)' . $m($purchases));
         $line('   cost of goods actually sold ' . $m($cogs));
         $line('   difference                  ' . $m($purchases - $cogs));
         $line('');
