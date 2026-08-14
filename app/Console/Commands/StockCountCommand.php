@@ -50,8 +50,7 @@ final class StockCountCommand extends Command
         {--tenant= : tenant id (required)}
         {--by=Stock count : who counted}
         {--date= : the count date, defaults to today}
-        {--location= : stock location, defaults to the shop home. Family Shoppers goods are in JUBA
-                       while stock_home_location is unset, so pass --location=juba-consignment}
+        {--location= : stock location; defaults to the shop home. Juba goods need juba-consignment}
         {--write : actually record it (default is a dry run)}';
 
     protected $description = 'Record a physical stock count against products, without touching any document.';
