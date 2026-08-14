@@ -24,11 +24,18 @@ return new class extends Migration
         }
 
         // Rename any collision before the constraint lands, oldest row keeps the number.
+        //
+        // v5.05 — `->having('n', '>', 1)` referenced the SELECT alias, which PostgreSQL does not
+        // allow in HAVING: "ERROR: column \"n\" does not exist". The catch below swallowed it, so
+        // the migration reported success while the de-duplication did NOTHING — and on a table
+        // that DID hold collisions the unique index then failed too (also caught), leaving a
+        // migration that had achieved nothing at all and said so to nobody. A fresh database has
+        // no duplicates, which is why CI never showed it and only the Postgres server log did.
         try {
             $dupes = DB::table('quotations')
                 ->select('tenant_id', 'quote_no', DB::raw('COUNT(*) as n'))
                 ->whereNotNull('quote_no')->where('quote_no', '!=', '')
-                ->groupBy('tenant_id', 'quote_no')->having('n', '>', 1)->get();
+                ->groupBy('tenant_id', 'quote_no')->havingRaw('COUNT(*) > 1')->get();
 
             foreach ($dupes as $d) {
                 $rows = DB::table('quotations')

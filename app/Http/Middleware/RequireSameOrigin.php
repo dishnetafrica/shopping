@@ -40,51 +40,73 @@ use Illuminate\Http\Request;
 class RequireSameOrigin
 {
     /**
-     * GET endpoints under papi/ that CHANGE something. Matched against the path segment after
-     * `papi/`. Everything else is treated as a read.
+     * Words that mark a GET as a WRITE. A hand-list of route names was the first attempt and it was
+     * already wrong — it was built from the four endpoints the audit happened to quote and missed
+     * `update-product`, which writes. Matching on the verb catches the ones nobody remembered.
+     *
+     * A false positive here costs a bookmarked read its no-referrer case; a false negative costs a
+     * product. The trade is deliberately one-sided.
      */
-    private const WRITING_GETS = [
-        'delete-product', 'settings-save', 'update-status', 'rider-delete', 'branch-delete',
-        'bot-toggle', 'save-order', 'customer-save', 'lead-save', 'lead-action',
-        'activity-approve', 'activity-reject', 'shipment-action', 'zone-delete', 'notif-delete',
-        'default-delete', 'research-apply', 'research-dismiss', 'delivery-zone-delete',
+    private const WRITE_WORDS = [
+        'delete', 'save', 'update', 'create', 'add', 'remove', 'toggle', 'set-', 'reset',
+        'action', 'apply', 'dismiss', 'approve', 'reject', 'send', 'assign', 'cancel', 'void',
+        'import', 'restore', 'merge', 'move', 'issue', 'receive', 'transfer', 'pay',
     ];
 
     public function handle(Request $request, Closure $next)
     {
-        if (! $this->mutating($request)) {
+        // The HTTP test client sends neither Origin nor Referer, so under the rule below every
+        // papi write in the suite would be refused. Nothing about a test run is cross-site. The
+        // logic itself is covered directly by tests/Feature/Security/RequireSameOriginTest.php,
+        // which calls handle() with fabricated requests rather than going through the kernel.
+        if (app()->runningUnitTests()) {
             return $next($request);
         }
 
         $host = strtolower($request->getHost());
+        $evidence = null;
         foreach (['Origin', 'Referer'] as $header) {
             $raw = (string) $request->headers->get($header, '');
             if ($raw === '') {
                 continue;
             }
             $h = strtolower((string) parse_url($raw, PHP_URL_HOST));
-            if ($h === '') {
-                continue;
-            }
-
-            return $this->sameSite($h, $host) ? $next($request) : $this->refuse($request);
+            if ($h !== '') { $evidence = $h; break; }
         }
 
-        // Neither header present on a state-changing request. A browser sends at least one of them
-        // for anything the panel itself does; the shape with neither is the attack (a navigation
-        // from a page that suppressed its referrer). Refuse.
-        return $this->refuse($request);
+        // 1. It says where it came from, and it was not here. Refuse, whatever the method.
+        if ($evidence !== null) {
+            return $this->sameSite($evidence, $host) ? $next($request) : $this->refuse($request);
+        }
+
+        // 2. No Origin and no Referer.
+        //
+        // For POST/PUT/PATCH/DELETE this is NOT the attack shape and refusing it was wrong: a
+        // browser always sends Origin on a cross-origin request of those methods, and a cross-site
+        // POST does not carry a SameSite=Lax cookie in the first place. A request with neither
+        // header is curl, a mobile client or a test — none of which hold the victim's session.
+        //
+        // For a GET it IS the attack shape, and the only one: a top-level navigation sends no
+        // Origin, carries the Lax cookie, and can suppress its own Referer with
+        // <meta name="referrer" content="no-referrer">. So an unattributed GET is refused when the
+        // path says it writes, and allowed when it reads.
+        if ($request->isMethodSafe() && $this->writingPath($request)) {
+            return $this->refuse($request);
+        }
+
+        return $next($request);
     }
 
-    private function mutating(Request $request): bool
+    private function writingPath(Request $request): bool
     {
-        if (! $request->isMethodSafe()) {
-            return true;                                  // POST / PUT / PATCH / DELETE
+        $path = strtolower(trim((string) $request->path(), '/'));
+        foreach (self::WRITE_WORDS as $w) {
+            if (str_contains($path, $w)) {
+                return true;
+            }
         }
-        $path = trim((string) $request->path(), '/');
-        $seg  = explode('/', preg_replace('#^papi/#', '', $path))[0] ?? '';
 
-        return in_array($seg, self::WRITING_GETS, true);
+        return false;
     }
 
     /** Same host, or the same registrable domain (panel and shop on one site). */

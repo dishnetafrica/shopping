@@ -98,13 +98,23 @@ class AccountingControlsController extends Controller
         // 1) Ledger journals balance (debits == credits) — only if the ledger tables exist.
         if (Schema::hasTable('ledger_journals') && Schema::hasTable('ledger_lines')) {
             try {
+                // v5.05 — `->having('diff','!=',0)` referenced the SELECT alias, which PostgreSQL
+                // rejects in HAVING ("column \"diff\" does not exist"). The catch below then
+                // recorded the control as ok=true/'skipped'. So the check that asks whether the
+                // books balance has been reporting PASS without ever running. Same defect as the
+                // quotations migration, and this is the expensive one: the alias is repeated in
+                // the HAVING because that is what Postgres requires.
                 $unbal = DB::table('ledger_lines')
                     ->select('journal_id', DB::raw('ROUND(SUM(debit_usd)-SUM(credit_usd),2) as diff'))
                     ->where('tenant_id',$tid)->groupBy('journal_id')
-                    ->having('diff','!=',0)->get();
+                    ->havingRaw('ROUND(SUM(debit_usd)-SUM(credit_usd),2) <> 0')->get();
                 $checks[] = ['name'=>'Ledger journals balanced','ok'=>$unbal->count()===0,'detail'=>$unbal->count().' unbalanced'];
                 foreach ($unbal as $j) $issues[] = "Journal {$j->journal_id} is out of balance by {$j->diff}";
-            } catch (\Throwable $e) { $checks[] = ['name'=>'Ledger journals balanced','ok'=>true,'detail'=>'skipped']; }
+            } catch (\Throwable $e) {
+                // A control that could not run has NOT passed. Saying otherwise is how this hid.
+                $checks[] = ['name'=>'Ledger journals balanced','ok'=>false,'detail'=>'could not run: '.$e->getMessage()];
+                $issues[] = 'Ledger balance check could not run — this control is not proving anything.';
+            }
         }
 
         // 2) Approved cash entries must have a positive amount + a currency.
