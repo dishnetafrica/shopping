@@ -55,8 +55,11 @@ final class ProductCapability implements ObjectCapability
             'schema' => ProductListCapability::formSchema($ctx->tenantId()),
             // v4.54 — spelled out rather than labelled "Hidden", because the two things staff get
             // wrong here are thinking it deletes the product and thinking it stops them selling it.
-            'labels' => ['hidden' => 'Hide from customers (stays in stock and reports; still sellable on WhatsApp)'],
-            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'hidden' => ($p->hidden ?? false) ? 'yes' : 'no', 'photos' => $photos]];
+            'labels' => [
+                'hidden' => 'Hide from customers (stays in stock and reports; still sellable on WhatsApp)',
+                'reorder_point' => 'Reorder point — alert on Juba Stock when free-to-sell falls to this level (blank = no alert)',
+            ],
+            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'reorder_point' => $p->reorder_point !== null ? (int) $p->reorder_point : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'hidden' => ($p->hidden ?? false) ? 'yes' : 'no', 'photos' => $photos]];
         $archive = ['key' => 'archive_product', 'label' => 'Archive', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/archive_product', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Archive "' . $p->name . '"? It will be hidden from the catalogue but kept for order history.'];
 
         // Asset Lifecycle · Product Specifications (S1b) — show this product's specs on the detail page

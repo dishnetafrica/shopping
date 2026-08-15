@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Product extends Model
 {
     use BelongsToTenant;
-    protected $fillable = ['tenant_id','name','description','sku','oem_number','category','brand','price','base_price','cost_price','stock','barcode','keywords','image_url','gallery_1','gallery_2','gallery_3','active','sell_mode','serialized','warranty_manufacturer_months','warranty_company_months','is_kit','sold_by_weight','weight_unit','reference_weight_grams','reference_price','display_order','is_fresh_today','moq','pack_size','unit_label','unit_size','origin_country','archived_at','hidden'];
+    protected $fillable = ['tenant_id','name','description','sku','oem_number','category','brand','price','base_price','cost_price','stock','barcode','keywords','image_url','gallery_1','gallery_2','gallery_3','active','sell_mode','serialized','warranty_manufacturer_months','warranty_company_months','is_kit','sold_by_weight','weight_unit','reference_weight_grams','reference_price','display_order','is_fresh_today','moq','pack_size','unit_label','unit_size','origin_country','archived_at','hidden','reorder_point'];
 
     /** Configurable product specifications (Asset Lifecycle · product_specs). Additive read relation. */
     public function specs(): \Illuminate\Database\Eloquent\Relations\HasMany
@@ -26,7 +26,7 @@ class Product extends Model
     {
         return $this->hasMany(\App\Models\KitComponent::class, 'kit_product_id');
     }
-    protected $casts = ['price'=>'decimal:2','base_price'=>'decimal:2','cost_price'=>'decimal:2','active'=>'boolean','serialized'=>'boolean','warranty_manufacturer_months'=>'integer','warranty_company_months'=>'integer','is_kit'=>'boolean','sold_by_weight'=>'boolean','reference_weight_grams'=>'integer','reference_price'=>'decimal:2','display_order'=>'integer','is_fresh_today'=>'boolean','archived_at'=>'datetime','hidden'=>'boolean'];
+    protected $casts = ['price'=>'decimal:2','base_price'=>'decimal:2','cost_price'=>'decimal:2','active'=>'boolean','serialized'=>'boolean','warranty_manufacturer_months'=>'integer','warranty_company_months'=>'integer','is_kit'=>'boolean','sold_by_weight'=>'boolean','reference_weight_grams'=>'integer','reference_price'=>'decimal:2','display_order'=>'integer','is_fresh_today'=>'boolean','archived_at'=>'datetime','hidden'=>'boolean','reorder_point'=>'integer'];
 
     /** E6.4 (prereq) — mirror catalog stock changes into the one stock ledger (gated on stock_ledger). */
     protected static function booted(): void
