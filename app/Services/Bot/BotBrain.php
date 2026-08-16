@@ -315,7 +315,7 @@ class BotBrain
         // Try the LLM first; fall back to keywords.
         $action = $this->nlu->parse($tenant, $convo, $text);
         if ($action) {
-            $reply = $this->execute($tenant, $convo, $action['intent'], $action['items'] ?? [], $action['note'] ?? '');
+            $reply = $this->execute($tenant, $convo, $action['intent'], $action['items'] ?? [], $action['note'] ?? '', $text);
             return $this->maybeAskModifier($tenant, $convo) ?? $reply;
         }
         $reply = $this->keywordRespond($tenant, $convo, $text);
@@ -397,7 +397,7 @@ class BotBrain
              . "\n\nNeed anything else? Tell me a product or say *menu*.";
     }
 
-    protected function execute(Tenant $tenant, Conversation $convo, string $intent, array $items, string $note = ''): string
+    protected function execute(Tenant $tenant, Conversation $convo, string $intent, array $items, string $note = '', string $origText = ''): string
     {
         $cart = is_array($convo->cart) ? $convo->cart : [];
 
@@ -464,17 +464,43 @@ class BotBrain
                 return $msg.($this->cartSummary($tenant, $cart) ?: "Your basket is now empty.");
 
             case 'add':
-                $added = []; $missed = [];
+                $added = []; $missed = []; $sizeAsk = [];
                 foreach ($items as $it) {
                     $p = $this->search->find($it['query'])->first();
                     if (! $p) { $missed[] = $it['query']; continue; }
-                    $cart = $this->addResolvedLine($tenant, $cart, $p, $it, $added);
+                    // Phase-0 safety guard on the LLM path: an OpenAI extraction can fold a weight/volume
+                    // size into qty ("250g" -> qty 250). Whenever a size is in play, DISTRUST the model's
+                    // qty and let UnitGuard decide against the full product model. Only a size-free item
+                    // may use the model's count as the quantity.
+                    $nluQty = max(1, (int) ($it['qty'] ?? 1));
+                    $size   = \App\Services\Bot\UnitGuard::sizeForItem((string) ($it['query'] ?? ''), $nluQty, $origText);
+                    if ($size === null) {
+                        $cart = $this->addResolvedLine($tenant, $cart, $p, ['qty' => $nluQty], $added);
+                        continue;
+                    }
+                    $decision = \App\Services\Bot\UnitGuard::decide([
+                        'name'           => (string) $p->name,
+                        'sold_by_weight' => ! empty($p->sold_by_weight),
+                        'size'           => $size,
+                        'count'          => null,
+                    ]);
+                    if ($decision['mode'] === 'weight' && $this->weightPriceFor($p, (int) $decision['grams'])) {
+                        $cart = $this->addResolvedLine($tenant, $cart, $p, ['weight_grams' => (int) $decision['grams']], $added);
+                    } elseif ($decision['mode'] === 'count') {
+                        $cart = $this->addResolvedLine($tenant, $cart, $p, ['qty' => (int) $decision['qty']], $added);
+                    } else {
+                        // A size we can't resolve into a whole unit or a priced weight — ask, never guess.
+                        $sizeAsk[] = trim($p->name . ' (' . $size . ')');
+                    }
                 }
                 $convo->cart = $cart; $convo->save();
-                if (! $added && $missed) {
+                if (! $added && ! $sizeAsk && $missed) {
                     return "I couldn't find ".implode(', ', $missed).". Try another name, or say *cart* / *checkout*.";
                 }
-                $head = "Added *".implode('*, *', $added)."*.";
+                $head = $added ? ("Added *".implode('*, *', $added)."*.") : '';
+                if ($sizeAsk) {
+                    $head .= ($head ? "\n" : '') . "For *".implode('*, *', $sizeAsk)."* — how much would you like? Tell me a size (e.g. *250g*, *1kg*) or a number of packs.";
+                }
                 if ($missed) $head .= "\n(I couldn't find: ".implode(', ', $missed).".)";
                 return $head."\n\n".$this->cartSummary($tenant, $cart)."\n\nAdd more, or say *checkout*.";
 
@@ -2594,6 +2620,10 @@ class BotBrain
                 'product_type' => (string) ($p->product_type ?? ''),   // drives matcher +250 tier
                 'price'        => Pricing::net($tenant, (float) $p->price),
                 'stock'        => $p->stock ?? 1,
+                // Phase-0 unit safety: the engine needs to know a product is weight-priced so a size
+                // ("250g") is asked back rather than mistaken for a quantity. Pricing stays on the
+                // full-model path (this array carries no pricing refs).
+                'sold_by_weight' => (bool) ($p->sold_by_weight ?? false),
                 // v4.54 — hidden rows STAY in this array on purpose. Searching by name has to find
                 // them ("do you have two apple?" is a customer asking, and asking gets answered);
                 // it is BROWSING that must not list them, so the flag rides along and the browse
