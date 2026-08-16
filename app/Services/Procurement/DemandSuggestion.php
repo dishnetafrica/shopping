@@ -43,12 +43,17 @@ final class DemandSuggestion
         $transit = $this->inTransitMap($tid);
         $sales   = $this->salesMap($tid);
 
+        // reorder_point ships in a later migration; only select it where it exists so the plan still
+        // builds on a database that has not run that migration yet.
+        $hasReorder = \Illuminate\Support\Facades\Schema::hasColumn('products', 'reorder_point');
+        $cols = ['id', 'name', 'stock', 'pack_size', 'moq', 'unit_label'];
+        if ($hasReorder) { $cols[] = 'reorder_point'; }
         $products = Product::where('tenant_id', $tid)
             ->where(fn ($q) => $q->whereNull('active')->orWhere('active', true))
             ->whereNull('archived_at')
             ->orderBy('name')
             ->limit(1000)
-            ->get(['id', 'name', 'stock', 'pack_size', 'moq', 'unit_label']);
+            ->get($cols);
 
         $lines = [];
         foreach ($products as $p) {
@@ -65,8 +70,27 @@ final class DemandSuggestion
             $need = $expected - $current - $inTransit;
             $suggested = $need > 0 ? $this->roundUpToPack($need, (float) ($p->pack_size ?? 0), (float) ($p->moq ?? 0)) : 0.0;
 
-            // Only include products that have demand or need topping up — keeps the plan focused.
-            if ($expected <= 0 && $suggested <= 0) {
+            // Reorder-point pull-in. The Juba Stock screen flags a product when it drops to its floor;
+            // this brings that same product into the plan even when recent velocity is zero, so a slow
+            // mover that has quietly run down still gets bought.
+            //
+            // GUARDED against the empty-ledger flood: this shop's receipts ledger is 0 for most
+            // products, and "current <= floor" would otherwise be true for every product that has a
+            // floor set. So the pull-in only fires when there is a real on-hand / in-transit / velocity
+            // signal for this product — never on a pure all-zeros row, which is unknown, not empty.
+            $rp = $hasReorder && $p->reorder_point !== null ? (int) $p->reorder_point : null;
+            $hasSignal = ($stockK + $stockJ + $inTransit) > 0 || $expected > 0;
+            $belowReorder = $rp !== null && $hasSignal && ($current + $inTransit) <= $rp;
+            if ($belowReorder) {
+                // Top the suggestion up to the floor at least — Ashish edits the requested qty anyway.
+                $reorderNeed = $rp - $current - $inTransit;
+                if ($reorderNeed > 0) {
+                    $suggested = max($suggested, $this->roundUpToPack($reorderNeed, (float) ($p->pack_size ?? 0), (float) ($p->moq ?? 0)));
+                }
+            }
+
+            // Only include products that have demand, need topping up, or have hit their reorder floor.
+            if ($expected <= 0 && $suggested <= 0 && ! $belowReorder) {
                 continue;
             }
 
@@ -79,7 +103,10 @@ final class DemandSuggestion
                 'suggested_qty'  => $suggested,
                 'requested_qty'  => $suggested,   // default the ask to the suggestion; Ashish edits
                 'unit_label'     => (string) ($p->unit_label ?: ''),
-                '_rank'          => $suggested * 1000 + $expected,
+                'below_reorder'  => $belowReorder,
+                // Reorder-flagged lines rank above pure-velocity ones of the same size, so what has
+                // actually hit its floor floats to the top of the plan.
+                '_rank'          => $suggested * 1000 + $expected + ($belowReorder ? 500 : 0),
             ];
         }
 

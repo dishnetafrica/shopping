@@ -14,7 +14,9 @@ use App\Models\Warranty;
 use App\Services\Catalog\KitService;
 use App\Services\Catalog\ProductSpecService;
 use App\Services\Catalog\ProductWriteService;
+use App\Services\Inventory\CountRecorder;
 use App\Services\Inventory\SerialService;
+use App\Services\Inventory\StockLedger;
 
 final class ProductCapability implements ObjectCapability
 {
@@ -55,9 +57,29 @@ final class ProductCapability implements ObjectCapability
             'schema' => ProductListCapability::formSchema($ctx->tenantId()),
             // v4.54 — spelled out rather than labelled "Hidden", because the two things staff get
             // wrong here are thinking it deletes the product and thinking it stops them selling it.
-            'labels' => ['hidden' => 'Hide from customers (stays in stock and reports; still sellable on WhatsApp)'],
-            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'hidden' => ($p->hidden ?? false) ? 'yes' : 'no', 'photos' => $photos]];
+            'labels' => [
+                'hidden' => 'Hide from customers (stays in stock and reports; still sellable on WhatsApp)',
+                'reorder_point' => 'Reorder point — alert on Juba Stock when free-to-sell falls to this level (blank = no alert)',
+            ],
+            'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'reorder_point' => $p->reorder_point !== null ? (int) $p->reorder_point : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'hidden' => ($p->hidden ?? false) ? 'yes' : 'no', 'photos' => $photos]];
         $archive = ['key' => 'archive_product', 'label' => 'Archive', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/archive_product', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Archive "' . $p->name . '"? It will be hidden from the catalogue but kept for order history.'];
+
+        // Record a physical count from the product page — the fastest way to give a fast-mover the
+        // trusted opening the Juba Stock reorder alert needs. Writes exactly where the stock:count CLI
+        // writes (ledger trust_count + stock_openings anchor + products.stock cache) via CountRecorder,
+        // so a count typed here and one typed on the command line are the same fact.
+        $homeLoc = StockLedger::home($ctx->tenant);
+        $recordCount = ['key' => 'record_count', 'label' => 'Record count', 'method' => 'POST',
+            'endpoint' => '/api/v1/workspace/product/' . $p->id . '/record_count', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['counted' => 'number', 'location' => 'combo:Kampala|Juba', 'note' => 'text'],
+            'labels' => [
+                'counted'  => 'Counted quantity — what is physically on the shelf right now',
+                'location' => 'Where the stock is',
+                'note'     => 'Note (optional)',
+            ],
+            // counted left blank on purpose: a count you type fresh is worth more than one nudged
+            // toward the number already on the screen.
+            'prefill' => ['counted' => '', 'location' => $homeLoc === StockLedger::LOC_JUBA ? 'Juba' : 'Kampala', 'note' => '']];
 
         // Asset Lifecycle · Product Specifications (S1b) — show this product's specs on the detail page
         // and offer inline editing. Rendered via the generic 'answers' section, so the V3 front-end
@@ -234,7 +256,7 @@ final class ProductCapability implements ObjectCapability
             ->related($p->category ? $this->reco->topInCategory($ctx, (string) $p->category, 6, (int) $p->id) : [])
             ->stats(array_merge($serialStats, $warrantyStats, $kitStats))
             ->answers(array_merge($specAnswers, $warrantyAnswers, $kitAnswers))
-            ->actions(array_values(array_filter([$edit, $archive, $editSpecs, $addSerials, $editWarranty])))
+            ->actions(array_values(array_filter([$edit, $recordCount, $archive, $editSpecs, $addSerials, $editWarranty])))
             ->meta(['capability' => 'product', 'ttl' => 60, 'permissions' => ['menu:products']]);
     }
 
@@ -248,6 +270,7 @@ final class ProductCapability implements ObjectCapability
         return match ($action) {
             'update_product' => $this->doUpdate($ctx, $p, $input),
             'archive_product' => $this->doArchive($ctx, $p),
+            'record_count' => $this->doRecordCount($ctx, $p, $input),
             'set_specs' => $this->doSetSpecs($ctx, $p, $input),
             'add_serials' => $this->doAddSerials($ctx, $p, $input),
             'set_warranty' => $this->doSetWarranty($ctx, $p, $input),
@@ -338,5 +361,40 @@ final class ProductCapability implements ObjectCapability
         app(ProductWriteService::class)->archive($ctx->tenant, $p);
 
         return ['ok' => true, 'message' => 'Product archived.'];
+    }
+
+    /** Format a quantity as 8, not 8.000, and keep 1.5 as 1.5. */
+    private static function qtyText(float $q): string
+    {
+        return rtrim(rtrim(number_format($q, 3, '.', ''), '0'), '.') ?: '0';
+    }
+
+    /**
+     * Record a physical count for this one product (menu:products gated upstream by the command route).
+     * recount is always on: a panel user retyping a number expects the correction to take, not to be
+     * refused because the item was already counted earlier today — the newest count simply wins.
+     */
+    private function doRecordCount(CapabilityContext $ctx, Product $p, array $input): array
+    {
+        $raw = $input['counted'] ?? '';
+        if ($raw === '' || ! is_numeric($raw) || (float) $raw < 0) {
+            return ['ok' => false, 'error' => 'Enter the counted quantity — 0 or more.'];
+        }
+
+        $loc = str_contains(strtolower(trim((string) ($input['location'] ?? ''))), 'juba')
+            ? StockLedger::LOC_JUBA : StockLedger::LOC_KAMPALA;
+        $by   = trim((string) ($ctx->user->name ?? '')) ?: 'Panel count';
+        $note = trim((string) ($input['note'] ?? '')) ?: null;
+
+        $res = CountRecorder::record($ctx->tenant, $p, (float) $raw, $loc, $by, null, true, $note);
+
+        $where = $loc === StockLedger::LOC_JUBA ? 'Juba' : 'Kampala';
+        $moved = (float) $res['moved'];
+        $msg = 'Counted ' . self::qtyText((float) $res['counted']) . ' in ' . $where
+            . ($moved !== 0.0
+                ? ' — book adjusted by ' . ($moved > 0 ? '+' : '') . self::qtyText($moved)
+                : ' — matches the book');
+
+        return ['ok' => true, 'message' => $msg];
     }
 }

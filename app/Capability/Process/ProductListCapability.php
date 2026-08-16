@@ -192,6 +192,7 @@ final class ProductListCapability implements ProcessCapability
             'stock'          => 'number',
             'moq'            => 'number',
             'pack_size'      => 'number',
+            'reorder_point'  => \Illuminate\Support\Facades\Schema::hasColumn('products', 'reorder_point') ? 'number' : null,
             'unit_label'     => 'text',
             'origin_country' => 'text',          // v4.28
             'sku'            => 'text',

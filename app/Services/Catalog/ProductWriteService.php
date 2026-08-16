@@ -35,6 +35,7 @@ final class ProductWriteService
             'stock'      => (int) ($d['stock'] ?? 0),
             'moq'        => isset($d['moq']) && $d['moq'] !== '' ? max(1, (int) $d['moq']) : null,
             'pack_size'  => isset($d['pack_size']) && $d['pack_size'] !== '' ? max(1, (int) $d['pack_size']) : null,
+            'reorder_point' => isset($d['reorder_point']) && $d['reorder_point'] !== '' ? max(0, (int) $d['reorder_point']) : null,
             'unit_label' => trim((string) ($d['unit_label'] ?? '')) ?: null,
             'active'     => true,
         ], $this->detailColumns($d), $this->photoColumns($d) ?: ['image_url' => trim((string) ($d['image'] ?? ''))]));
@@ -149,6 +150,11 @@ final class ProductWriteService
         }
         if (array_key_exists('pack_size', $d)) {
             $p->pack_size = $d['pack_size'] === '' || $d['pack_size'] === null ? null : max(1, (int) $d['pack_size']);
+        }
+        if (array_key_exists('reorder_point', $d)) {
+            // 0 is a legitimate floor ("only reorder once genuinely out"), so it is kept, not nulled —
+            // only a blank field clears the reorder point back to "no floor set".
+            $p->reorder_point = $d['reorder_point'] === '' || $d['reorder_point'] === null ? null : max(0, (int) $d['reorder_point']);
         }
         if (array_key_exists('unit_label', $d)) {
             $p->unit_label = trim((string) $d['unit_label']) ?: null;

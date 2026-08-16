@@ -164,13 +164,18 @@ final class JubaStockCapability implements ProcessCapability
             }
         }
 
-        $names = []; $costs = [];
+        $names = []; $costs = []; $reorder = [];
+        // reorder_point ships in a later migration; guard the select so this screen still renders on a
+        // database that has not run it yet (nothing is judged against a floor that does not exist).
+        $hasReorder = \Illuminate\Support\Facades\Schema::hasColumn('products', 'reorder_point');
         if ($open) {
-            $prods = Product::where('tenant_id', $t)->whereIn('id', array_keys($open))
-                ->get(['id', 'name', 'cost_price']);
+            $cols = ['id', 'name', 'cost_price'];
+            if ($hasReorder) { $cols[] = 'reorder_point'; }
+            $prods = Product::where('tenant_id', $t)->whereIn('id', array_keys($open))->get($cols);
             foreach ($prods as $pr) {
                 $names[$pr->id] = (string) $pr->name;
                 $costs[$pr->id] = $pr->cost_price === null ? null : (float) $pr->cost_price;
+                $reorder[$pr->id] = ($hasReorder && $pr->reorder_point !== null) ? (int) $pr->reorder_point : null;
             }
         }
 
@@ -198,6 +203,7 @@ final class JubaStockCapability implements ProcessCapability
 
         $inStock = 0; $soldOut = 0; $over = 0; $units = 0.0;
         $reservedUnits = 0.0; $reservedLines = 0;
+        $belowReorder = 0; $withFloor = 0;   // products at/under their reorder point, and how many have one set
         $rows = [];
         foreach ($open as $pid => $o) {
             $oq  = round((float) $o['qty'], 3);
@@ -266,6 +272,24 @@ final class JubaStockCapability implements ProcessCapability
                 }
             }
 
+            // Reorder status — judged against Free to sell (what Juba counted, less what has left, less
+            // what is reserved), and ONLY when the owner has set a floor. A product with no reorder
+            // point set is never judged. And because this screen only lists counted products, the ~97%
+            // of the catalogue nobody has counted is not a row here at all — so an uncounted shelf can
+            // never raise a false "buy now". That is the whole reason the alert can be trusted.
+            $rp = $reorder[$pid] ?? null;
+            $statusText = '—'; $statusBadge = 'default'; $statusSort = 3;
+            if ($rp !== null) {
+                $withFloor++;
+                if ($cur <= 0) {                                  // has a floor and is out — most urgent
+                    $statusText = 'Reorder — out'; $statusBadge = 'danger'; $statusSort = 0; $belowReorder++;
+                } elseif ($cur <= $rp) {                          // still on the shelf but at/under the floor
+                    $statusText = 'Reorder'; $statusBadge = 'warn'; $statusSort = 1; $belowReorder++;
+                } else {
+                    $statusText = 'OK'; $statusBadge = 'ok'; $statusSort = 2;
+                }
+            }
+
             $rows[] = [
                 'product' => ['value' => (string) ($names[$pid] ?? ('#' . $pid)), 'sub' => $sub, 'avatar' => false],
                 'opening' => ['value' => $this->qty($oq), 'sort' => $oq],
@@ -283,6 +307,7 @@ final class JubaStockCapability implements ProcessCapability
                     'value' => $this->qty($cur), 'sort' => $cur,
                     'tone'  => $cur > 0 ? 'ok' : ($cur < 0 ? 'danger' : 'default'),
                 ],
+                'status' => ['value' => $statusText, 'badge' => $statusBadge, 'sort' => $statusSort],
                 'unitcost' => [
                     'value' => $unitText,
                     'sort'  => $unitCost ?? 0,
@@ -313,6 +338,7 @@ final class JubaStockCapability implements ProcessCapability
             ['key' => 'onshelf', 'label' => 'On shelf', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'reserved', 'label' => 'Reserved', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'current', 'label' => 'Free to sell', 'align' => 'right', 'type' => 'num', 'sortable' => true],
+            ['key' => 'status', 'label' => 'Reorder', 'type' => 'badge', 'sortable' => true],
             ['key' => 'unitcost', 'label' => 'Cost each', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'value', 'label' => 'Value at cost', 'align' => 'right', 'type' => 'num', 'sortable' => true],
         ];
@@ -374,6 +400,13 @@ final class JubaStockCapability implements ProcessCapability
                  . ($notCounted === 1 ? 'is' : 'are') . ' NOT listed — a number nobody has stood in '
                  . 'front of is not stock. Count them with: php artisan stock:count';
         }
+        if ($withFloor > 0) {
+            $sub .= ' The Reorder column checks Free to sell against each product\'s reorder point: '
+                 . $belowReorder . ' of ' . $withFloor . ' with a floor set '
+                 . ($belowReorder === 1 ? 'has' : 'have') . ' reached it. Products with no reorder point set — '
+                 . 'and the ' . number_format($notCounted) . ' never counted — are not judged, because a floor '
+                 . 'only means something against a stock figure you trust. Set one on the product page.';
+        }
         if (($detail['ordUnits'] ?? 0) > 0) {
             $sub .= ' Of what has sold since, ' . $this->qty($detail['invUnits']) . ' units came off invoices and '
                  . $this->qty($detail['ordUnits']) . ' off orders that were never invoiced.';
@@ -415,6 +448,13 @@ final class JubaStockCapability implements ProcessCapability
                 ['key' => 'uncounted', 'label' => 'Never counted', 'value' => number_format($notCounted),
                  'tone' => $notCounted > 0 ? 'warn' : 'ok',
                  'foot' => $ghosts > 0 ? ($ghosts . ' of them have sold since') : 'not listed until somebody counts them'],
+                // The actionable number: counted products with a reorder point set that have fallen to or
+                // below it. Owner-set floors only — silent (value 0) until somebody sets one.
+                ['key' => 'reorder', 'label' => 'Below reorder', 'value' => $belowReorder,
+                 'tone' => $belowReorder > 0 ? 'danger' : 'ok',
+                 'foot' => $withFloor > 0
+                     ? ('of ' . $withFloor . ' with a reorder point set — add these to a Demand Plan')
+                     : 'set a reorder point on a product to watch it here'],
             ])
             // Grid totals footer as well as the tile: the tile is the headline, the footer is what
             // stays visible when somebody filters the table down to one category.
