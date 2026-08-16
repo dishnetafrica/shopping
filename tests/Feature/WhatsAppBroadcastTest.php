@@ -28,8 +28,9 @@ class WhatsAppBroadcastTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @var array the fake gateway's next sendText() return */
-    private array $sendResult = ['key' => ['id' => 'WAID']];
+    /** @var array the fake gateway's next sendText() return (public: the container-faked gateway is a
+     *  separate anonymous class and reads this off the test instance, so it cannot be private). */
+    public array $sendResult = ['key' => ['id' => 'WAID']];
 
     private function tenant(array $settings = []): Tenant
     {
