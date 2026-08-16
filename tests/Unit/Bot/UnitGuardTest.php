@@ -111,4 +111,19 @@ class UnitGuardTest extends TestCase
         $this->assertSame('2kg', UnitGuard::sizeForItem('sugar', 2, '2kg sugar'));            // catches C4 on the LLM path
         $this->assertNull(UnitGuard::sizeFoldedIntoQty('add 1kg rice', 1));                   // qty 1 is never an inflated size
     }
+
+    /**
+     * Staging regression: the LLM returned {query:"ajinomoto", qty:1} for "add 250g ajinomoto" — the
+     * size never inflated qty, so it must be recovered from its position beside the item and clarified,
+     * not silently substituted with a 500gm pack.
+     */
+    public function test_llm_dropped_size_with_qty_one_is_still_caught(): void
+    {
+        $this->assertSame('250g', UnitGuard::sizeForItem('ajinomoto', 1, 'add 250g ajinomoto'));
+        $this->assertSame('250g', UnitGuard::sizeForItem('aluminium foil', 1, 'add 250g aluminium foil'));
+        $this->assertSame('clarify', UnitGuard::decide(['name' => 'Ajinomoto 500gm', 'sold_by_weight' => false, 'size' => '250g', 'count' => null])['mode']);
+        $this->assertSame(['mode' => 'count', 'qty' => 1], UnitGuard::decide(['name' => 'Ajinomoto 500gm', 'sold_by_weight' => false, 'size' => '500g', 'count' => null]));
+        $this->assertNull(UnitGuard::sizeForItem('glasses', 5, 'add 5 cartons glasses'));       // count unit, not a size
+        $this->assertNull(UnitGuard::sizeForItem('oil', 3, 'add 250g sugar and 3 oil'));        // no cross-item theft
+    }
 }

@@ -127,9 +127,12 @@ final class UnitGuard
     }
 
     /**
-     * The effective size for one extracted item. First trust a size still visible in the item text;
-     * otherwise catch the case where an LLM folded the size NUMBER into qty (query "sugar", qty 250,
-     * from "250g sugar") by matching the qty against a size token in the original message.
+     * The effective size for one extracted item. In order:
+     *  1. a size still visible in the item's own query text;
+     *  2. a size the LLM folded into the QUANTITY (query "sugar", qty 250, from "250g sugar");
+     *  3. a size sitting directly beside this item's words in the original message even though the
+     *     LLM dropped it and set qty to 1 (query "ajinomoto", qty 1, from "250g ajinomoto").
+     * Case 3 is what makes the guard hold when the model normalises the qty instead of inflating it.
      */
     public static function sizeForItem(string $itemQuery, int $itemQty, string $originalText = ''): ?string
     {
@@ -137,8 +140,41 @@ final class UnitGuard
         if ($s !== null) {
             return $s;
         }
+        if ($originalText === '') {
+            return null;
+        }
 
-        return $originalText !== '' ? self::sizeFoldedIntoQty($originalText, $itemQty) : null;
+        return self::sizeFoldedIntoQty($originalText, $itemQty)
+            ?? self::sizeBesideItem($originalText, $itemQuery);
+    }
+
+    /**
+     * A weight/volume size token sitting immediately before or after this item's words in the message
+     * ("250g ajinomoto" / "ajinomoto 250g"). Catches a stated size the LLM stripped from the query
+     * without inflating qty, so it can be resolved (weight line / exact pack / clarify) instead of
+     * silently dropped. Only adjacency counts, so a size meant for a different item isn't stolen.
+     */
+    public static function sizeBesideItem(string $text, string $itemQuery): ?string
+    {
+        $t     = mb_strtolower($text);
+        $words = array_values(array_filter(
+            preg_split('/\s+/', trim(mb_strtolower($itemQuery))) ?: [],
+            fn ($w) => mb_strlen($w) >= 3          // skip tiny/noise tokens
+        ));
+        if (! $words) {
+            return null;
+        }
+        $units = 'kg|kgs|g|gm|gms|gram|grams|ml|cl|l|lt|ltr|litre|litres|liter|liters';
+        $size  = '\d+(?:\.\d+)?\s*(?:' . $units . ')';
+        foreach ($words as $w) {
+            $wq = preg_quote($w, '/');
+            if (preg_match('/(' . $size . ')\b\s+' . $wq . '/i', $t, $m)
+             || preg_match('/' . $wq . '\s+(' . $size . ')\b/i', $t, $m)) {
+                return self::detectSize($m[1]);
+            }
+        }
+
+        return null;
     }
 
     /**
