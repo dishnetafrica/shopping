@@ -11,7 +11,7 @@ namespace App\Services\Bot;
  */
 class ShoppingParser
 {
-    private const UNIT_ALT = 'kg|kgs|g|gm|gms|gram|grams|ml|cl|l|lt|ltr|litre|litres|liter|liters|pc|pcs|pk|pkt|pkts|pack|packs|packet|packets|piece|pieces|box|boxes|tin|tins|btl|bottle|bottles|jar|jars|bar|bars|sachet|sachets|roll|rolls|dozen|loaf|loaves';
+    private const UNIT_ALT = 'kg|kgs|g|gm|gms|gram|grams|ml|cl|l|lt|ltr|litre|litres|liter|liters|pc|pcs|pk|pkt|pkts|pack|packs|packet|packets|piece|pieces|box|boxes|carton|cartons|ctn|ctns|tin|tins|btl|bottle|bottles|jar|jars|bar|bars|sachet|sachets|roll|rolls|dozen|loaf|loaves';
 
     public function parse(string $text): array
     {
@@ -183,8 +183,10 @@ class ShoppingParser
         $f = preg_replace('/^of\s+/', '', $f);
         $f = trim($f);
 
-        // qty = count interpretation (preserves "2kg sugar" => 2 when there is a single SKU)
-        $qty = $count ?? $sizeNum ?? 1;
+        // qty = the EXPLICIT unit count only. A size number ($sizeNum, e.g. the 250 in "250g") must
+        // NEVER become the quantity — that was the reproduced "250g -> qty 250" failure. The size is
+        // carried separately in 'size' and resolved by UnitGuard against the matched product.
+        $qty = $count ?? 1;
 
         return [
             'query' => $f,
