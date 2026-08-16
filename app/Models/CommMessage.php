@@ -25,21 +25,22 @@ class CommMessage extends Model
     public const ST_FAILED    = 'failed';
     public const ST_RETRY     = 'retry';
     public const ST_CANCELLED = 'cancelled';
+    public const ST_SKIPPED   = 'skipped';   // a safety check refused the send; see skip_reason
 
     protected $fillable = [
         'tenant_id', 'channel', 'token', 'to_email', 'to_name', 'cc', 'bcc', 'reply_to',
         'subject', 'html_body', 'text_body', 'template_key', 'vars', 'attachments',
         'status', 'provider_id', 'provider_message_id', 'attempts', 'max_attempts',
-        'scheduled_at', 'next_attempt_at', 'sent_at', 'delivered_at', 'opened_at',
+        'scheduled_at', 'next_attempt_at', 'sent_at', 'delivered_at', 'opened_at', 'replied_at',
         'opens', 'clicks', 'bounced_at', 'complained_at', 'unsubscribed_at',
-        'last_error', 'related_type', 'related_id', 'meta', 'created_by',
+        'last_error', 'skip_reason', 'related_type', 'related_id', 'meta', 'created_by',
     ];
 
     protected $casts = [
         'cc' => 'array', 'bcc' => 'array', 'vars' => 'array',
         'attachments' => 'array', 'meta' => 'array',
         'scheduled_at' => 'datetime', 'next_attempt_at' => 'datetime',
-        'sent_at' => 'datetime', 'delivered_at' => 'datetime', 'opened_at' => 'datetime',
+        'sent_at' => 'datetime', 'delivered_at' => 'datetime', 'opened_at' => 'datetime', 'replied_at' => 'datetime',
         'bounced_at' => 'datetime', 'complained_at' => 'datetime', 'unsubscribed_at' => 'datetime',
     ];
 

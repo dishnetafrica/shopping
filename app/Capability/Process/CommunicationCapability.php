@@ -132,6 +132,24 @@ final class CommunicationCapability implements ProcessCapability
         // ---- Campaigns tab -------------------------------------------------
         $camps = CommCampaign::withoutGlobalScope('tenant')->where('tenant_id', $tid)
             ->orderByDesc('id')->limit(20)->get();
+
+        // Live per-campaign metrics in ONE grouped query over the message spine (sent / delivered /
+        // read / skipped), so the list shows real delivery — not a stored counter that can drift.
+        $campAgg = [];
+        $campIds = $camps->pluck('id')->all();
+        if ($campIds) {
+            foreach (\Illuminate\Support\Facades\DB::table('comm_messages')->where('tenant_id', $tid)
+                ->where('related_type', 'campaign')->whereIn('related_id', $campIds)
+                ->selectRaw("related_id,
+                    sum(case when status = 'sent' then 1 else 0 end) as sent,
+                    sum(case when delivered_at is not null then 1 else 0 end) as delivered,
+                    sum(case when opened_at is not null then 1 else 0 end) as rd,
+                    sum(case when status = 'skipped' then 1 else 0 end) as skipped")
+                ->groupBy('related_id')->get() as $r) {
+                $campAgg[(int) $r->related_id] = $r;
+            }
+        }
+
         $campRows = [];
         $campActions = [];
         foreach ($camps as $c) {
@@ -142,10 +160,15 @@ final class CommunicationCapability implements ProcessCapability
             elseif (! empty($seg['city'])) $aud = 'City: '.$seg['city'];
             elseif (! empty($seg['ordered_within_days'])) $aud = 'Ordered ≤ '.$seg['ordered_within_days'].'d';
             elseif (! empty($seg['not_ordered_within_days'])) $aud = 'Winback > '.$seg['not_ordered_within_days'].'d';
+            $a = $campAgg[$c->id] ?? null;
+            $skipped = (int) ($a->skipped ?? 0);
             $campRows[] = [
                 (string) $c->name, strtoupper((string) $c->channel), $aud,
                 ['value' => ucfirst((string) $c->status), 'tone' => $tone],
-                number_format((int) $c->sent_count).' / '.number_format((int) $c->total_count),
+                number_format((int) ($a->sent ?? 0)),
+                number_format((int) ($a->delivered ?? 0)),
+                number_format((int) ($a->rd ?? 0)),
+                ['value' => number_format($skipped), 'tone' => $skipped > 0 ? 'warn' : 'default'],
                 Carbon::parse($c->created_at)->format('d M'),
             ];
             if ($isOwner && count($campActions) < 8) {
@@ -162,9 +185,18 @@ final class CommunicationCapability implements ProcessCapability
                 }
             }
         }
-        $campCard = ['kind' => 'table', 'title' => 'Campaigns', 'sub' => count($campRows).' most recent',
-            'columns' => [['label' => 'Name'], ['label' => 'Ch'], ['label' => 'Audience'], ['label' => 'Status'], ['label' => 'Progress', 'align' => 'right'], ['label' => 'Created', 'align' => 'right']],
+        $campCard = ['kind' => 'table', 'title' => 'Campaigns', 'sub' => count($campRows).' most recent · WhatsApp needs explicit opt-in',
+            'columns' => [['label' => 'Name'], ['label' => 'Ch'], ['label' => 'Audience'], ['label' => 'Status'],
+                ['label' => 'Sent', 'align' => 'right'], ['label' => 'Delivered', 'align' => 'right'],
+                ['label' => 'Read', 'align' => 'right'], ['label' => 'Skipped', 'align' => 'right'],
+                ['label' => 'Created', 'align' => 'right']],
             'rows' => $campRows, 'empty' => 'No campaigns yet — "New campaign" creates a draft you can launch.'];
+
+        // WhatsApp marketing daily budget — a visible ceiling (sent today / limit / remaining) so a
+        // campaign can't quietly run past the configured cap.
+        $waLimit = \App\Services\Comms\Marketing\DailyLimiter::limit($t);
+        $waSent  = \App\Services\Comms\Marketing\DailyLimiter::sentToday($t);
+        $waLeft  = \App\Services\Comms\Marketing\DailyLimiter::remaining($t);
 
         // ---- Suppressions tab (closes the M1 gap) --------------------------
         $supps = CommSuppression::withoutGlobalScope('tenant')->where('tenant_id', $tid)
@@ -302,6 +334,10 @@ final class CommunicationCapability implements ProcessCapability
                 ['key' => 'failed', 'label' => 'Failed', 'value' => (string) $failed, 'tone' => $failed > 0 ? 'danger' : 'ok', 'foot' => 'retry from Quick actions'],
                 ['key' => 'queued', 'label' => 'Queued', 'value' => (string) $queued, 'tone' => $queued > 0 ? 'info' : 'default'],
                 ['key' => 'supp', 'label' => 'Suppressed', 'value' => (string) $suppTot, 'foot' => 'never contacted'],
+                ['key' => 'wa_today', 'label' => 'WhatsApp marketing today',
+                    'value' => number_format($waSent).' / '.number_format($waLimit),
+                    'tone' => $waLeft > 0 ? 'ok' : 'warn',
+                    'foot' => number_format($waLeft).' left today · internal cap, not a WhatsApp-guaranteed limit'],
             ])
             ->quickActions($quick)
             ->tabSections([

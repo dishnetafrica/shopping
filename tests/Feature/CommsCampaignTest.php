@@ -57,7 +57,11 @@ class CommsCampaignTest extends TestCase
     {
         DB::table('customer_profiles')->insert(array_merge([
             'tenant_id' => $t->id, 'phone' => $phone, 'name' => 'C '.$phone,
-            'email' => null, 'created_at' => now(), 'updated_at' => now(),
+            'email' => null,
+            // WhatsApp marketing now requires EXPLICIT opt-in (a prior inbound message is not consent).
+            // These fixtures represent consented customers, so the channel-routing assertions still hold.
+            'marketing_opted_in_at' => now(),
+            'created_at' => now(), 'updated_at' => now(),
         ], $extra));
     }
 
