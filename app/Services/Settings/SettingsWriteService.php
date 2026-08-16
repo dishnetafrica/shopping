@@ -116,6 +116,8 @@ final class SettingsWriteService
         // v4.22 TenderBot — margin added to a supplier cost to reach the bid price.
         'tender_margin_pct' => ['float', 0.0],
         'research_daily_cap' => ['int', 0],                  // v4.29 — per-shop ceiling on AI research calls
+        'marketing_daily_limit' => ['int', 0],               // WhatsApp marketing daily cap (never auto-raised)
+        'marketing_min_interval_days' => ['int', 0],         // per-customer cross-campaign frequency floor
         // v4.26 — director loan: rate is a FRACTION per month (0.03 = 3%); stock is a USD value.
         'books.loan_rate' => ['float', 0.0],
         'books.stock_usd' => ['float', 0.0],

@@ -34,6 +34,7 @@ class WebhookController
             // use it to detect a dropped WhatsApp link and alert the shop owner.
             $this->maybeHandleConnection($request->all());
             $this->maybeHandleSendStatus($request->all());
+            $this->maybeHandleCloudStatus($request->all());
             return response()->json(['ok' => true]); // status / presence / group / fromMe — not a customer message
         }
 
@@ -146,7 +147,14 @@ class WebhookController
             if ($status === '') continue;
 
             $to = preg_replace('/@.*/', '', (string) (data_get($u, 'remoteJid', data_get($u, 'key.remoteJid', ''))));
-            $id = (string) (data_get($u, 'keyId', data_get($u, 'key.id', ''))) ?: uniqid('s_');
+            $realId = (string) (data_get($u, 'keyId', data_get($u, 'key.id', '')));
+            $id = $realId ?: uniqid('s_');
+
+            // Join the delivery/read signal back to the campaign message that sent it (only a real
+            // provider id can match a row; a synthetic fallback id no-ops inside the ingest).
+            if ($realId !== '') {
+                \App\Services\Comms\WhatsAppStatusIngest::fromEvolutionUpdate($t->id, $realId, $status, $u);
+            }
 
             if ($status === 'ERROR') {
                 $num = optional(\App\Models\WhatsappChannel::where('instance', $instance)->first())->number;
@@ -159,6 +167,34 @@ class WebhookController
                 if ($last === '' || now()->diffInSeconds(\Illuminate\Support\Carbon::parse($last)) >= 30) {
                     $t->putSetting('wa_send_ok_at', now()->toIso8601String());
                 }
+            }
+        }
+    }
+
+    /**
+     * Meta Cloud API delivery/read callbacks: entry[].changes[].value.statuses[] (status
+     * sent|delivered|read|failed, id at .id). Tenant is resolved from the change's phone_number_id,
+     * the same instance key inbound Cloud messages resolve on. Evolution uses messages.update above;
+     * this is the official-API equivalent so campaign stats populate on either driver.
+     */
+    private function maybeHandleCloudStatus(array $payload): void
+    {
+        foreach ((array) data_get($payload, 'entry', []) as $entry) {
+            foreach ((array) data_get($entry, 'changes', []) as $change) {
+                $statuses = data_get($change, 'value.statuses');
+                if (! is_array($statuses) || $statuses === []) {
+                    continue;
+                }
+                $phoneId = (string) data_get($change, 'value.metadata.phone_number_id', '');
+                if ($phoneId === '') {
+                    continue;
+                }
+                $t = Tenant::byWhatsappInstance($phoneId);
+                if (! $t) {
+                    continue;
+                }
+                // Hand the whole change to the ingest; it walks value.statuses[] itself.
+                \App\Services\Comms\WhatsAppStatusIngest::fromCloud($t->id, ['entry' => [['changes' => [$change]]]]);
             }
         }
     }

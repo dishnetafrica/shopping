@@ -47,6 +47,11 @@ class CampaignService
             $q->whereNotNull('email')->where('email', '!=', '');
         } else {
             $q->whereNotNull('phone')->whereRaw("length(phone) >= 7");
+            // STRICT explicit marketing consent for WhatsApp. A prior inbound message is NOT consent,
+            // so this is 0 until opt-in is captured — 0 opted-in → 0 broadcasts, by design.
+            if (\Illuminate\Support\Facades\Schema::hasColumn('customer_profiles', 'marketing_opted_in_at')) {
+                $q->whereNotNull('marketing_opted_in_at')->whereNull('marketing_opted_out_at');
+            }
         }
 
         if (! empty($segment['segment'])) {
@@ -161,12 +166,29 @@ class CampaignService
 
         [$subject, $html, $waText] = $this->content($tenant, $c);
 
+        // Per-tenant daily cap paces the WhatsApp side: this pass is capped to the day's remaining
+        // budget. When 0 remain, enqueue nothing and DON'T advance the cursor — the audience isn't
+        // exhausted, the day's budget is; it resumes on a later sweep (after midnight, tenant-local).
+        $fullBatch  = max(1, (int) $c->throttle_per_minute);
+        $batchLimit = $fullBatch;
+        if (in_array('whatsapp', $c->channels(), true)) {
+            $remaining = Marketing\DailyLimiter::remaining($tenant);
+            if ($remaining <= 0) {
+                $c->save();                       // persist the SCHEDULED→SENDING transition above
+                return 0;
+            }
+            $batchLimit = min($batchLimit, $remaining);
+        }
+
         // ONE cursor walk over profiles (union of both channel audiences when
         // 'both'), so a customer with email+phone advances the cursor once.
         $rows = $this->cursorQuery($tenant, $c)
             ->orderBy('customer_profiles.id')
-            ->limit(max(1, (int) $c->throttle_per_minute))
-            ->get(['customer_profiles.id', 'customer_profiles.name', 'customer_profiles.email', 'customer_profiles.phone']);
+            ->limit($batchLimit)
+            ->get([
+                'customer_profiles.id', 'customer_profiles.name', 'customer_profiles.email', 'customer_profiles.phone',
+                'customer_profiles.marketing_opted_in_at', 'customer_profiles.marketing_opted_out_at',
+            ]);
 
         $made = 0;
         foreach ($rows as $p) {
@@ -191,19 +213,7 @@ class CampaignService
                     $made++;
                 }
                 if ($ch === 'whatsapp' && $p->phone) {
-                    $digits = preg_replace('/[^0-9]/', '', (string) $p->phone);
-                    if (strlen($digits) < 7 || $this->already($c, 'whatsapp', $digits)) continue;
-                    // v4.32 — the shop's do-not-message list. WhatsAppService already checks the
-                    // suppression table, but that misses the Settings list and staff numbers, and
-                    // stopping here saves enqueueing a message only to cancel it later.
-                    if (\App\Services\Marketing\CampaignExclusions::for($tenant)->blocks($digits)) continue;
-                    if ($c->template_key) {
-                        $this->whatsapp->queueTemplate($tenant, $c->template_key, $digits, $vars, $opts + ['to_name' => $p->name]);
-                    } else {
-                        $text = $this->renderer->renderString((string) $waText, array_merge($this->renderer->defaults($tenant), $vars), false);
-                        $this->whatsapp->queueRaw($tenant, $digits, $text, $opts + ['to_name' => $p->name]);
-                    }
-                    $made++;
+                    $made += $this->enqueueWhatsapp($tenant, $c, $p, (string) $waText, $vars, $opts);
                 }
             }
 
@@ -212,14 +222,71 @@ class CampaignService
 
         $c->enqueued_count = $c->enqueued_count + $made;
 
-        // Fewer rows than the throttle => the cursor reached the end => done.
-        if (count($rows) < (int) $c->throttle_per_minute) {
+        // Fewer rows than we asked for => the cursor reached the end of the audience => done. A daily
+        // cap only lowers batchLimit; it never yields fewer rows than the audience holds, so this stays
+        // correct: a cap-shortened batch that fills to batchLimit is not "done".
+        if (count($rows) < $batchLimit) {
             $c->status      = CommCampaign::ST_DONE;
             $c->finished_at = now();
         }
         $c->save();
 
         return $made;
+    }
+
+    /**
+     * Enqueue one WhatsApp campaign message through the safety guard. Returns 1 if queued, else 0 —
+     * and records an auditable `skipped` row with the reason (never a silent drop), so the recipient
+     * isn't re-evaluated on the next pass.
+     */
+    protected function enqueueWhatsapp(Tenant $tenant, CommCampaign $c, object $p, string $waText, array $vars, array $opts): int
+    {
+        $digits = preg_replace('/[^0-9]/', '', (string) $p->phone);
+        if (strlen($digits) < 7) {
+            return 0;
+        }
+
+        // Strict consent — belt to the SQL audience filter, and the ONLY consent gate for a 'both'
+        // campaign whose phone row entered the union via email eligibility. Not recorded as a skip:
+        // a non-consented customer is simply not a marketing recipient.
+        if ($p->marketing_opted_in_at === null || $p->marketing_opted_out_at !== null) {
+            return 0;
+        }
+
+        $reason = Marketing\CampaignSafetyGuard::blockedReason($tenant, $c, $digits, 'enqueue');
+        if ($reason !== null) {
+            // The daily cap is paced by batchLimit; if it still surfaces here, stop rather than record
+            // — the recipient will be reached on a later pass.
+            if ($reason !== Marketing\CampaignSafetyGuard::R_DAILY_LIMIT) {
+                $this->recordSkip($tenant, $c, $digits, $reason, (string) ($p->name ?? ''));
+            }
+            return 0;
+        }
+
+        if ($c->template_key) {
+            $this->whatsapp->queueTemplate($tenant, $c->template_key, $digits, $vars, $opts + ['to_name' => $p->name]);
+        } else {
+            $text = $this->renderer->renderString($waText, array_merge($this->renderer->defaults($tenant), $vars), false);
+            $this->whatsapp->queueRaw($tenant, $digits, $text, $opts + ['to_name' => $p->name]);
+        }
+
+        return 1;
+    }
+
+    /** Record a skipped recipient so the skip is auditable and not retried. */
+    protected function recordSkip(Tenant $tenant, CommCampaign $c, string $digits, string $reason, string $name): void
+    {
+        \App\Models\CommMessage::create([
+            'tenant_id'    => $tenant->id,
+            'channel'      => 'whatsapp',
+            'to_email'     => $digits,
+            'to_name'      => $name !== '' ? $name : null,
+            'status'       => \App\Models\CommMessage::ST_SKIPPED,
+            'skip_reason'  => $reason,
+            'related_type' => 'campaign',
+            'related_id'   => $c->id,
+            'meta'         => ['campaign' => $c->name, 'skipped' => $reason],
+        ]);
     }
 
     /** Union audience (any of the campaign's channels reachable) past the cursor. */
@@ -301,16 +368,38 @@ class CampaignService
             ->where('tenant_id', $c->tenant_id)
             ->where('related_type', 'campaign')->where('related_id', $c->id);
 
+        $sent      = (clone $base)->where('status', 'sent')->count();
+        $delivered = (clone $base)->whereNotNull('delivered_at')->count();
+        $read      = (clone $base)->whereNotNull('opened_at')->count();     // WhatsApp read = opened_at
+        $replied   = (clone $base)->whereNotNull('replied_at')->count();
+        $failed    = (clone $base)->where('status', 'failed')->count();
+        $skipped   = (clone $base)->where('status', 'skipped')->count();
+        $optedOut  = (clone $base)->where('skip_reason', 'opted_out')->count();
+        $enqueued  = (clone $base)->count();
+
+        $rate = fn (int $num, int $den): float => $den > 0 ? round($num / $den * 100, 1) : 0.0;
+
         return [
-            'enqueued'  => (clone $base)->count(),
-            'sent'      => (clone $base)->where('status', 'sent')->count(),
+            'enqueued'  => $enqueued,
+            'sent'      => $sent,
+            'delivered' => $delivered,
+            'read'      => $read,
+            'replied'   => $replied,
             'queued'    => (clone $base)->whereIn('status', ['pending', 'retry', 'sending'])->count(),
-            'failed'    => (clone $base)->where('status', 'failed')->count(),
+            'failed'    => $failed,
+            'skipped'   => $skipped,
+            'opted_out' => $optedOut,
             'cancelled' => (clone $base)->where('status', 'cancelled')->count(),   // mostly suppression hits
-            'opened'    => (clone $base)->whereNotNull('opened_at')->count(),
+            'opened'    => $read,                                                  // back-compat alias
             'clicked'   => (clone $base)->where('clicks', '>', 0)->count(),
             'bounced'   => (clone $base)->whereNotNull('bounced_at')->count(),
             'unsubbed'  => (clone $base)->whereNotNull('unsubscribed_at')->count(),
+            // Rates (percentages) — internal quality signals, NOT official WhatsApp thresholds.
+            'delivery_rate' => $rate($delivered, $sent),
+            'read_rate'     => $rate($read, $delivered ?: $sent),
+            'reply_rate'    => $rate($replied, $sent),
+            'failure_rate'  => $rate($failed, $sent + $failed),
+            'opt_out_rate'  => $rate($optedOut, $enqueued),
         ];
     }
 }

@@ -123,6 +123,34 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // --- Marketing opt-out (STOP) + reply attribution, before any bot routing ---
+        // Only customer messages; an owner's manual reply (from_me) is handled below.
+        if (empty($this->incoming['from_me'])) {
+            $from   = (string) $this->incoming['from'];
+            $digits = preg_replace('/[^0-9]/', '', $from) ?: '';
+            $body   = trim((string) ($this->incoming['text'] ?? ''));
+
+            if ($body !== '' && \App\Services\Comms\Marketing\OptOutKeywords::isStop($body)) {
+                \App\Services\Comms\Marketing\MarketingConsent::optOut($this->tenantId, $digits, 'inbound-stop');
+                try {
+                    $gateway->sendText($replyInst, $digits,
+                        "You've been unsubscribed and won't receive marketing messages from us. "
+                        . "You can still message us any time to place an order.");
+                } catch (\Throwable $e) {
+                    // A failed confirmation must not undo the opt-out — the suppression is already written.
+                }
+                BotTrace::log($this->tenantId, (string) $mid, $from, 'marketing_opt_out', 'inbound STOP: ' . mb_substr($body, 0, 40));
+                return;   // an opt-out is not routed into the ordering bot
+            }
+
+            // Not a STOP — if we recently sent this number a marketing message, credit the reply.
+            try {
+                \App\Services\Comms\WhatsAppStatusIngest::recordReply($this->tenantId, $digits);
+            } catch (\Throwable $e) {
+                // Reply attribution is a metric, never allowed to break message handling.
+            }
+        }
+
         // Owner replied by hand (fromMe). If it's just the bot's own message echoing back,
         // ignore it. If it's something the owner typed, treat it as a manual takeover and
         // soft-pause auto-replies for this chat for a while, so the bot doesn't talk over a
