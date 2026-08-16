@@ -20,7 +20,7 @@ use Tests\TestCase;
  */
 class RequireSameOriginTest extends TestCase
 {
-    private function run(string $method, string $path, array $headers = []): int
+    private function doRequest(string $method, string $path, array $headers = []): int
     {
         $req = Request::create('https://app.mycloudbss.com/' . ltrim($path, '/'), $method);
         foreach ($headers as $k => $v) {
@@ -34,26 +34,26 @@ class RequireSameOriginTest extends TestCase
 
     public function test_a_cross_site_write_is_refused(): void
     {
-        $this->assertSame(403, $this->run('POST', 'papi/record-payment', ['Origin' => 'https://evil.example']));
-        $this->assertSame(403, $this->run('GET', 'papi/delete-product?id=412', ['Referer' => 'https://evil.example/page']));
+        $this->assertSame(403, $this->doRequest('POST', 'papi/record-payment', ['Origin' => 'https://evil.example']));
+        $this->assertSame(403, $this->doRequest('GET', 'papi/delete-product?id=412', ['Referer' => 'https://evil.example/page']));
     }
 
     public function test_a_cross_site_read_is_refused_too(): void
     {
         // It announced where it came from and it was not here; there is no reason to serve it.
-        $this->assertSame(403, $this->run('GET', 'papi/products', ['Origin' => 'https://evil.example']));
+        $this->assertSame(403, $this->doRequest('GET', 'papi/products', ['Origin' => 'https://evil.example']));
     }
 
     public function test_the_panels_own_requests_pass(): void
     {
-        $this->assertSame(200, $this->run('POST', 'papi/record-payment', ['Origin' => 'https://app.mycloudbss.com']));
-        $this->assertSame(200, $this->run('GET', 'papi/delete-product?id=1', ['Referer' => 'https://app.mycloudbss.com/panel/products']));
-        $this->assertSame(200, $this->run('GET', 'papi/products', ['Referer' => 'https://app.mycloudbss.com/panel']));
+        $this->assertSame(200, $this->doRequest('POST', 'papi/record-payment', ['Origin' => 'https://app.mycloudbss.com']));
+        $this->assertSame(200, $this->doRequest('GET', 'papi/delete-product?id=1', ['Referer' => 'https://app.mycloudbss.com/panel/products']));
+        $this->assertSame(200, $this->doRequest('GET', 'papi/products', ['Referer' => 'https://app.mycloudbss.com/panel']));
     }
 
     public function test_a_sibling_host_on_the_same_site_passes(): void
     {
-        $this->assertSame(200, $this->run('POST', 'papi/record-payment', ['Origin' => 'https://www.mycloudbss.com']));
+        $this->assertSame(200, $this->doRequest('POST', 'papi/record-payment', ['Origin' => 'https://www.mycloudbss.com']));
     }
 
     /**
@@ -64,14 +64,14 @@ class RequireSameOriginTest extends TestCase
     {
         foreach (['papi/delete-product?id=412', 'papi/settings-save?x=1', 'papi/update-product?id=9',
                   'papi/update-status?id=1&s=Delivered', 'papi/branch-delete?id=2', 'papi/bot-toggle?on=0'] as $p) {
-            $this->assertSame(403, $this->run('GET', $p), $p . ' should be refused');
+            $this->assertSame(403, $this->doRequest('GET', $p), $p . ' should be refused');
         }
     }
 
     public function test_an_unattributed_read_is_allowed(): void
     {
         foreach (['papi/products', 'papi/dashboard', 'papi/reports?range=30', 'papi/track?id=1&t=abc'] as $p) {
-            $this->assertSame(200, $this->run('GET', $p), $p . ' should be allowed');
+            $this->assertSame(200, $this->doRequest('GET', $p), $p . ' should be allowed');
         }
     }
 
@@ -82,16 +82,16 @@ class RequireSameOriginTest extends TestCase
      */
     public function test_an_unattributed_post_is_allowed(): void
     {
-        $this->assertSame(200, $this->run('POST', 'papi/trade-cashbook/transfer'));
-        $this->assertSame(200, $this->run('POST', 'papi/staff-cash/receive'));
-        $this->assertSame(200, $this->run('POST', 'papi/work-orders/5/complete'));
+        $this->assertSame(200, $this->doRequest('POST', 'papi/trade-cashbook/transfer'));
+        $this->assertSame(200, $this->doRequest('POST', 'papi/staff-cash/receive'));
+        $this->assertSame(200, $this->doRequest('POST', 'papi/work-orders/5/complete'));
     }
 
     public function test_a_malformed_origin_is_not_mistaken_for_evidence(): void
     {
         // parse_url returns no host for these; they must fall through to the method rules, not
         // pass as "same site".
-        $this->assertSame(403, $this->run('GET', 'papi/delete-product?id=1', ['Origin' => 'null']));
-        $this->assertSame(200, $this->run('POST', 'papi/record-payment', ['Origin' => 'null']));
+        $this->assertSame(403, $this->doRequest('GET', 'papi/delete-product?id=1', ['Origin' => 'null']));
+        $this->assertSame(200, $this->doRequest('POST', 'papi/record-payment', ['Origin' => 'null']));
     }
 }

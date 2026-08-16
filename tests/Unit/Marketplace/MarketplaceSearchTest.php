@@ -27,7 +27,7 @@ class MarketplaceSearchTest extends TestCase
     {
         $out = $this->search()->quoteWith(
             $this->cfg(),
-            new FakeProvider([$this->result('TP-Link Archer C6 AC1200 Router', 302000)]),
+            new FakeProvider([$this->makeResult('TP-Link Archer C6 AC1200 Router', 302000)]),
             'tp-link router',
         );
 
@@ -43,7 +43,7 @@ class MarketplaceSearchTest extends TestCase
     {
         $out = $this->search()->quoteWith(
             $this->cfg(),
-            new FakeProvider([$this->result('Kitchen Blender 2L', 120000)]),
+            new FakeProvider([$this->makeResult('Kitchen Blender 2L', 120000)]),
             'wireless router',
         );
         $this->assertTrue($out->isNone());
@@ -59,7 +59,7 @@ class MarketplaceSearchTest extends TestCase
     {
         $out = $this->search()->quoteWith(
             $this->cfg(),
-            new FakeProvider([$this->result('TP-Link Archer C6 Router', 302000, 'https://evil.example/x.jpg')]),
+            new FakeProvider([$this->makeResult('TP-Link Archer C6 Router', 302000, 'https://evil.example/x.jpg')]),
             'tp-link archer c6 router',
         );
         $this->assertTrue($out->isQuote());
@@ -72,7 +72,7 @@ class MarketplaceSearchTest extends TestCase
         // Here we assert the richer object still carries all fields for the bot.
         $out = $this->search()->quoteWith(
             $this->cfg(),
-            new FakeProvider([$this->result('TP-Link Archer C6 Router', 302000)]),
+            new FakeProvider([$this->makeResult('TP-Link Archer C6 Router', 302000)]),
             'tp-link archer c6 router',
         );
         $arr = $out->quotes()[0]->toArray();
@@ -86,9 +86,9 @@ class MarketplaceSearchTest extends TestCase
         $out = $this->search()->quoteWith(
             $this->cfg(['maxOptions' => 2]),
             new FakeProvider([
-                $this->result('Solar Panel 100W Mono', 300000),
-                $this->result('Solar Panel 150W Mono', 400000),
-                $this->result('Solar Panel 200W Mono', 500000),
+                $this->makeResult('Solar Panel 100W Mono', 300000),
+                $this->makeResult('Solar Panel 150W Mono', 400000),
+                $this->makeResult('Solar Panel 200W Mono', 500000),
             ]),
             'solar panel',
         );
