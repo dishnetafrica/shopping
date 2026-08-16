@@ -7,15 +7,20 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
   jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping',
   tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence' };
-const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
-  ['Sales',['pos','advisor','customers','growth','discovery','visits','leads','demand','tenders','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
-  ['Messaging',['chats','communication','diagnostics']],
-  ['Inventory',['products','suggestions','categories','purchase.process','suppliers','consignments']],
-  ['Procurement',['procurement.hub','demand.plans','juba.stock']],
-  ['Operations',['jobs','maintenance','claims','tasks','warehouse','dispatch','transport']],
-  ['Finance',['finance','pnl','books','cashbook','evidence','partners']],
-  ['Marketing',['ai.campaign','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
-  ['Settings',['settings','team','modules','billing']] ];
+// Navigation IA (2026-08) — grouped around the operator's question in the moment (Am I selling? buying?
+// counting stock? handling money?), each screen under exactly one group. Group HEADERS live here; item
+// LABELS live in LABELS above; has() gates by key regardless of group, so moving a key between groups
+// never changes what a role can see. Renames/order only — no routes, permissions or keys change.
+const GROUPS = [ ['Home',['briefing','worklist','setup','guide']],
+  ['Sell',['pos','salesOrders','quotations','invoices','payments','collections','advisor']],
+  ['Customers',['customers','leads','followups','growth','discovery','visits','demand','tenders','evidence']],
+  ['Buy',['purchase.process','suppliers','procurement.hub','demand.plans','juba.stock']],
+  ['Stock',['products','categories','suggestions','warehouse','consignments']],
+  ['Money',['finance','cashbook','partners']],
+  ['Communication',['chats','communication','campaigns','ai.campaign','ads','diagnostics']],
+  ['Operations',['jobs','maintenance','claims','tasks','dispatch','transport','scheduled']],
+  ['Reports',['pnl','books','storefront.insights']],
+  ['Settings',['settings','team','modules','billing','storefront.collections','storefront.kits','storefront.delivery']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { growth:'growth', demand:'demand', discovery:'discovery', visits:'visits', suggestions:'suggestions', followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // DOCUMENTATION ONLY — read by nothing. What actually gates a menu item is has() below,
