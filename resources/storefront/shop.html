@@ -1818,6 +1818,9 @@ function applyTheme(){
   var root=document.documentElement.style;
   if(THEME.accent)     root.setProperty('--green', THEME.accent);
   if(THEME.accentDark) root.setProperty('--green-d', THEME.accentDark);
+  // Premium palette overrides (empty for every tenant that sets none → no-op, byte-identical render).
+  // Keys come from a fixed server-side allow-list; values are validated colour strings.
+  if(THEME.vars){ for(var k in THEME.vars){ if(THEME.vars[k]) root.setProperty(k, THEME.vars[k]); } }
   var q=document.getElementById('q');           if(q && THEME.searchHint) q.placeholder=THEME.searchHint;
   var sub=document.getElementById('hdrSub');     if(sub && THEME.tagline) sub.textContent=THEME.tagline;
   var eb=document.getElementById('hdrEyebrow');  if(eb && THEME.eyebrow){eb.textContent=THEME.eyebrow;eb.style.display='block';}
