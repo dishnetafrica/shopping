@@ -16,6 +16,15 @@ The working directory holds **application source only** — no `vendor/`, no `co
 - **What you CAN do in the sandbox:** `php -l` (lint) after every edit; standalone PHP harnesses; real SQL via `pdo_sqlite`. Prove framework-bound logic with assertion shims / pure harnesses, and **say plainly** what must be verified on staging. Never fabricate load/queue/live-SQL numbers.
 - **Discipline:** `php -l` after each edit; `grep` for callers before changing a function signature; deliver complete files.
 
+## Financial writes — verification bar (non-negotiable)
+
+For any write to **inventory, accounting, cashbook, ledger, stock, or payments**, never rely on unit tests or static reasoning alone:
+
+- **Identify the authoritative writer first** — the single place that fact is persisted — and route through it. Never add a second writer for the same fact; if one exists, share or extend it (e.g. `CountRecorder` is the one physical-count writer for both the `stock:count` CLI and the panel). Duplicated financial writers drift and are the failure this rule exists to prevent.
+- **Prove old/new behaviour equivalence** when changing it — a pure harness over the decision logic *and* the exact persisted values (amounts, deltas, keys, audit-note strings), not "looks right".
+- **Run the tests** that cover it; if they can't run here (the sandbox can't boot Laravel/PHPUnit), say so plainly and name what stays unverified.
+- **Do a controlled staging transaction before merge whenever possible** — one real write on staging, reconciled against the books/screen — because test-green is necessary, not sufficient (ADR-000 §12, "prove with real data before trusting with real money"). If a merge lands before that, the staging transaction is still **owed** and must be called out explicitly, not treated as done.
+
 ## Commands
 
 The app itself is validated by CI (`.github/workflows/php.yml`) inside a full Laravel install against real Postgres 16, on **PHP 8.4** (runtime image is 8.3; `composer.json` requires `php ^8.2`). To reproduce what CI does *after a real `composer install`*:
