@@ -1767,6 +1767,32 @@ class StorefrontController extends Controller
             $v = $tenant->setting($setting, null);
             if ($v !== null && $v !== '') $t[$key] = filter_var($v, FILTER_VALIDATE_BOOLEAN);
         }
+
+        // Premium palette (2026-08) — expose the rest of the storefront's CSS variables as per-tenant
+        // settings so a shop can commit to a full look (e.g. dark-green + gold solar) rather than just
+        // recolouring the green accent. EMPTY BY DEFAULT: a tenant that sets none gets an empty `vars`
+        // map and the SPA applies nothing, so every other shop renders byte-identical (freeze-safe,
+        // per STOREFRONT-THEME-NOTES). Keys are a fixed server-side allow-list mapped to CSS vars;
+        // values are owner-set colour strings. --green/--green-d stay handled by accent/accentDark above.
+        $palette = [
+            '--amber'    => 'theme_gold',       // primary CTA / highlight (solar gold)
+            '--bg'       => 'theme_bg',          // page canvas
+            '--ink'      => 'theme_ink',         // body text
+            '--muted'    => 'theme_muted',
+            '--line'     => 'theme_line',        // hairlines / borders
+            '--card'     => 'theme_card',        // card surface
+            '--tile'     => 'theme_tile',        // category-tile wash
+            '--tileicon' => 'theme_tile_icon',
+        ];
+        $vars = [];
+        foreach ($palette as $cssVar => $setting) {
+            $v = $tenant->setting($setting, null);
+            if ($v !== null && $v !== '' && preg_match('/^#[0-9a-fA-F]{3,8}$|^(?:rgb|hsl)a?\([\d%.,\/\s]+\)$/', trim((string) $v))) {
+                $vars[$cssVar] = trim((string) $v);
+            }
+        }
+        $t['vars'] = $vars;
+
         return $t;
     }
 
