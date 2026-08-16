@@ -54,30 +54,9 @@ class CampaignService
             }
         }
 
-        if (! empty($segment['segment'])) {
-            $q->where('segment', $segment['segment']);
-        }
-        if (! empty($segment['city'])) {
-            $q->where('city', $segment['city']);
-        }
-        if (! empty($segment['ordered_within_days'])) {
-            $days = (int) $segment['ordered_within_days'];
-            $q->whereExists(function ($s) use ($tenant, $days) {
-                $s->select(DB::raw(1))->from('orders')
-                  ->whereColumn('orders.customer_phone', 'customer_profiles.phone')
-                  ->where('orders.tenant_id', $tenant->id)
-                  ->where('orders.created_at', '>=', now()->subDays($days));
-            });
-        }
-        if (! empty($segment['not_ordered_within_days'])) {
-            $days = (int) $segment['not_ordered_within_days'];
-            $q->whereNotExists(function ($s) use ($tenant, $days) {
-                $s->select(DB::raw(1))->from('orders')
-                  ->whereColumn('orders.customer_phone', 'customer_profiles.phone')
-                  ->where('orders.tenant_id', $tenant->id)
-                  ->where('orders.created_at', '>=', now()->subDays($days));
-            });
-        }
+        // Phase 2 — all segment predicates (tag, city, customer type, recent/inactive, date ranges,
+        // bought product/category) live in one place so this and cursorQuery() can never drift.
+        Marketing\AudienceSegments::apply($q, $tenant, $segment);
 
         return $q;
     }
@@ -310,26 +289,8 @@ class CampaignService
                 $w->where(function ($e) { $e->whereNotNull('email')->where('email', '!=', ''); })
                   ->orWhere(function ($p) { $p->whereNotNull('phone')->whereRaw('length(phone) >= 7'); });
             });
-        if (! empty($seg['segment'])) $q->where('segment', $seg['segment']);
-        if (! empty($seg['city']))    $q->where('city', $seg['city']);
-        if (! empty($seg['ordered_within_days'])) {
-            $days = (int) $seg['ordered_within_days'];
-            $q->whereExists(function ($s) use ($tenant, $days) {
-                $s->select(DB::raw(1))->from('orders')
-                  ->whereColumn('orders.customer_phone', 'customer_profiles.phone')
-                  ->where('orders.tenant_id', $tenant->id)
-                  ->where('orders.created_at', '>=', now()->subDays($days));
-            });
-        }
-        if (! empty($seg['not_ordered_within_days'])) {
-            $days = (int) $seg['not_ordered_within_days'];
-            $q->whereNotExists(function ($s) use ($tenant, $days) {
-                $s->select(DB::raw(1))->from('orders')
-                  ->whereColumn('orders.customer_phone', 'customer_profiles.phone')
-                  ->where('orders.tenant_id', $tenant->id)
-                  ->where('orders.created_at', '>=', now()->subDays($days));
-            });
-        }
+        Marketing\AudienceSegments::apply($q, $tenant, $seg);
+
         return $q;
     }
 
