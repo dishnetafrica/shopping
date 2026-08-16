@@ -145,7 +145,14 @@ final class AudienceSegments
             return;
         }
 
-        $predicate = function ($w) use ($tid, $ids) {
+        // orders.items_json is a `jsonb` column on Postgres: a raw LIKE errors ("operator does not
+        // exist: jsonb ~~ unknown"), and CAST-to-text normalises spacing/key-order so a string match is
+        // fragile. Use jsonb containment there (type-safe: product 5 never matches 50, key order/spacing
+        // irrelevant). On sqlite (local dev) jsonb is stored as verbatim text, so a delimiter-guarded
+        // LIKE is correct and portable.
+        $driver = DB::connection()->getDriverName();
+
+        $predicate = function ($w) use ($tid, $ids, $driver) {
             $w->whereExists(function ($s) use ($tid, $ids) {
                 $s->select(DB::raw(1))->from('order_items')
                   ->join('orders', 'orders.id', '=', 'order_items.order_id')
@@ -153,15 +160,20 @@ final class AudienceSegments
                   ->where('orders.tenant_id', $tid)
                   ->whereIn('order_items.product_id', $ids);
             });
-            $w->orWhereExists(function ($s) use ($tid, $ids) {
+            $w->orWhereExists(function ($s) use ($tid, $ids, $driver) {
                 $s->select(DB::raw(1))->from('orders')
                   ->whereColumn('orders.customer_phone', 'customer_profiles.phone')
                   ->where('orders.tenant_id', $tid)
-                  ->where(function ($j) use ($ids) {
+                  ->where(function ($j) use ($ids, $driver) {
                       foreach ($ids as $id) {
-                          // Delimiters keep 123 from matching 1234. Laravel json_encode has no spaces.
-                          $j->orWhere('orders.items_json', 'like', '%"product_id":' . (int) $id . '}%')
-                            ->orWhere('orders.items_json', 'like', '%"product_id":' . (int) $id . ',%');
+                          if ($driver === 'pgsql') {
+                              // jsonb array containment: true when any element has this exact product_id.
+                              $j->orWhereRaw('orders.items_json @> ?::jsonb', ['[{"product_id":' . (int) $id . '}]']);
+                          } else {
+                              // Verbatim JSON text. Delimiters keep 123 from matching 1234 (json_encode has no spaces).
+                              $j->orWhere('orders.items_json', 'like', '%"product_id":' . (int) $id . '}%')
+                                ->orWhere('orders.items_json', 'like', '%"product_id":' . (int) $id . ',%');
+                          }
                       }
                   });
             });

@@ -28,8 +28,9 @@ class WhatsAppBroadcastTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @var array the fake gateway's next sendText() return */
-    private array $sendResult = ['key' => ['id' => 'WAID']];
+    /** @var array the fake gateway's next sendText() return (public: the container-faked gateway is a
+     *  separate anonymous class and reads this off the test instance, so it cannot be private). */
+    public array $sendResult = ['key' => ['id' => 'WAID']];
 
     private function tenant(array $settings = []): Tenant
     {
@@ -94,13 +95,7 @@ class WhatsAppBroadcastTest extends TestCase
 
         $rows = $this->rows($c);
         $this->assertCount(1, $rows);
-        $row = $rows->first();
-        // DIAGNOSTIC (temporary): if the send didn't reach 'sent', surface why so CI prints the
-        // exact reason instead of a bare 'retry' vs 'sent' mismatch. Remove once Phase-1 is green.
-        $this->assertSame('sent', $row->status, sprintf(
-            'send did not complete: status=%s attempts=%s skip_reason=%s last_error=%s',
-            $row->status, $row->attempts, $row->skip_reason ?? '(null)', $row->last_error ?? '(null)'
-        ));
+        $this->assertSame('sent', $rows->first()->status);
     }
 
     // 2. non-opted-in customer is skipped (never in the audience)
