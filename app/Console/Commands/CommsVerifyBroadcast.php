@@ -12,6 +12,7 @@ use App\Services\Comms\Marketing\CampaignSafetyGuard;
 use App\Services\Comms\Marketing\DailyLimiter;
 use App\Services\Comms\Marketing\MarketingConsent;
 use App\Services\Comms\WhatsAppDispatcher;
+use App\Services\Marketing\CampaignExclusions;
 use App\Support\TenantContext;
 use Illuminate\Console\Command;
 
@@ -75,14 +76,35 @@ class CommsVerifyBroadcast extends Command
             return self::FAILURE;
         }
 
+        // Pre-flight: the send can only be proven if --to is actually reachable. The same safety layers
+        // the engine enforces will (correctly) skip a number that is opted out, on the do-not-contact
+        // table, or on the tenant's own exclusion list (staff/owner/shop numbers — "Never message my own
+        // team"). A test recipient in any of those states produces a 'skipped' row, never a 'sent' one —
+        // so catch it here with a clear reason instead of a confusing FAIL.
+        $blockReason = $this->recipientBlock($tenant, (string) $to);
+
         if (! $confirm) {
             $this->warn('DRY RUN — no message will be sent. Re-run with --confirm to perform the real transaction.');
             $this->line("  Tenant:     {$tenant->id} ({$tenant->name})");
             $this->line("  Instance:   {$instance}");
             $this->line("  Would send ONE real WhatsApp message to: {$to}");
+            if ($blockReason !== null) {
+                $this->warn("  ⚠ {$to} is currently un-sendable: {$blockReason}");
+                $this->line('    The engine would (correctly) SKIP it — pick a --to number NOT on your');
+                $this->line('    opt-out / do-not-contact / staff-exclusion list to prove the send path.');
+            }
             $this->line('  Would also drive a synthetic opted-out number through the pipeline (never contacted),');
             $this->line('  then reconcile comm_messages / stats / daily-cap and print PASS/FAIL.');
             return self::SUCCESS;
+        }
+
+        if ($blockReason !== null) {
+            $this->error("Recipient {$to} is un-sendable by design: {$blockReason}");
+            $this->line('The broadcast engine will SKIP it, so the send path cannot be proven with this number.');
+            $this->line('This is the safety layer working — not a failure. Re-run with a --to number that is a real,');
+            $this->line('reachable customer number NOT on your opt-out / do-not-contact / staff-exclusion list.');
+            $this->line('(If it is only excluded as staff, you can also toggle "Never message my own team" off for the test.)');
+            return self::FAILURE;
         }
 
         // Unique one-off tag so the campaign audience is exactly the two test rows — never real customers.
@@ -148,7 +170,11 @@ class CommsVerifyBroadcast extends Command
         $stats      = $svc->stats($c->refresh());
         $dailyafter = DailyLimiter::sentToday($tenant);
 
-        $this->check('opted-in message reached "sent"',        ($inMsg?->status === CommMessage::ST_SENT),          'status=' . ($inMsg?->status ?? 'missing'));
+        $inGot = 'status=' . ($inMsg?->status ?? 'missing');
+        if ($inMsg && $inMsg->status !== CommMessage::ST_SENT) {
+            $inGot .= ' reason=' . ($inMsg->skip_reason ?? '-') . ' err=' . ($inMsg->last_error ?? '-');
+        }
+        $this->check('opted-in message reached "sent"',        ($inMsg?->status === CommMessage::ST_SENT),          $inGot);
         $this->check('provider_message_id captured',           (! empty($inMsg?->provider_message_id)),             'id=' . ($inMsg?->provider_message_id ?? '(none)'));
         $this->check('opted-out message is "skipped"',         ($outMsg?->status === CommMessage::ST_SKIPPED),      'status=' . ($outMsg?->status ?? 'missing'));
         $this->check('skip reason is opted_out',               ($outMsg?->skip_reason === CampaignSafetyGuard::R_OPTED_OUT), 'reason=' . ($outMsg?->skip_reason ?? '(none)'));
@@ -186,6 +212,30 @@ class CommsVerifyBroadcast extends Command
         }
         $this->error('RESULT: FAIL — one or more checks did not reconcile (see table above). Do NOT trust with live broadcasts yet.');
         return self::FAILURE;
+    }
+
+    /**
+     * Why the recipient can't be sent to, or null if it's reachable. These are exactly the states the
+     * broadcast engine skips — surfacing them up front turns a confusing FAIL into a clear message.
+     */
+    private function recipientBlock(Tenant $tenant, string $to): ?string
+    {
+        $digits = CommSuppression::normalise($to, 'whatsapp');
+
+        if (CommSuppression::isSuppressed((int) $tenant->id, $digits, 'whatsapp')) {
+            return 'on the WhatsApp do-not-contact list (comm_suppressions) — a prior STOP/opt-out';
+        }
+        if (CampaignExclusions::for($tenant)->blocks($digits)) {
+            return 'on the campaign exclusion list (a staff/owner/shop number, or the "Never message these numbers" settings list)';
+        }
+        $p = CustomerProfile::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)->where('phone', 'like', '%' . substr($digits, -9))->get()
+            ->first(fn ($x) => CommSuppression::normalise((string) $x->phone, 'whatsapp') === $digits);
+        if ($p && $p->marketing_opted_out_at !== null) {
+            return 'already opted out on its profile (marketing_opted_out_at is set) — needs an admin re-enable';
+        }
+
+        return null;
     }
 
     /** Find an existing profile by digit-tail, or create a minimal one that passes the audience filter. */
