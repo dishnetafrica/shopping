@@ -49,8 +49,12 @@ class CampaignService
             $q->whereNotNull('phone')->whereRaw("length(phone) >= 7");
             // STRICT explicit marketing consent for WhatsApp. A prior inbound message is NOT consent,
             // so this is 0 until opt-in is captured — 0 opted-in → 0 broadcasts, by design.
+            // Opt-out is deliberately NOT filtered here: an opted-out customer who once opted in stays
+            // in the audience so the send path records an auditable 'skipped' (opted_out) row and the
+            // funnel counts them — the hard no-send block lives in enqueueWhatsapp(). (Never-opted-in
+            // stays excluded: they were never a recipient, so there is nothing to audit.)
             if (\Illuminate\Support\Facades\Schema::hasColumn('customer_profiles', 'marketing_opted_in_at')) {
-                $q->whereNotNull('marketing_opted_in_at')->whereNull('marketing_opted_out_at');
+                $q->whereNotNull('marketing_opted_in_at');
             }
         }
 
@@ -205,10 +209,13 @@ class CampaignService
 
         $c->enqueued_count = $c->enqueued_count + $made;
 
-        // Fewer rows than we asked for => the cursor reached the end of the audience => done. A daily
-        // cap only lowers batchLimit; it never yields fewer rows than the audience holds, so this stays
-        // correct: a cap-shortened batch that fills to batchLimit is not "done".
-        if (count($rows) < $batchLimit) {
+        // Done when the cursor has reached the end of the audience. Fewer rows than asked for proves
+        // that directly; when the final batch fills EXACTLY to batchLimit, we confirm exhaustion by
+        // checking there is nothing left past the advanced cursor — otherwise DONE would be deferred a
+        // whole (empty) sweep. A daily cap only lowers batchLimit; it never yields fewer rows than the
+        // audience holds, and cursorQuery() still sees the remainder, so a cap-shortened batch that
+        // fills to batchLimit is correctly NOT "done".
+        if (count($rows) < $batchLimit || ! $this->cursorQuery($tenant, $c)->exists()) {
             $c->status      = CommCampaign::ST_DONE;
             $c->finished_at = now();
         }
@@ -230,9 +237,16 @@ class CampaignService
         }
 
         // Strict consent — belt to the SQL audience filter, and the ONLY consent gate for a 'both'
-        // campaign whose phone row entered the union via email eligibility. Not recorded as a skip:
-        // a non-consented customer is simply not a marketing recipient.
-        if ($p->marketing_opted_in_at === null || $p->marketing_opted_out_at !== null) {
+        // campaign whose phone row entered the union via email eligibility.
+        // Never opted in → not a marketing recipient at all: silent, nothing to audit.
+        if ($p->marketing_opted_in_at === null) {
+            return 0;
+        }
+        // Opted out → an EXPLICIT hard no-send block that also leaves an auditable trail. This is the
+        // authoritative opt-out enforcement point (belt-level, not reliant on the guard below), so
+        // opt-out is honoured even if a suppression row is ever missing. Never sent; recorded as a skip.
+        if ($p->marketing_opted_out_at !== null) {
+            $this->recordSkip($tenant, $c, $digits, Marketing\CampaignSafetyGuard::R_OPTED_OUT, (string) ($p->name ?? ''));
             return 0;
         }
 
