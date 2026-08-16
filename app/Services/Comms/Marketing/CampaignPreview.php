@@ -43,7 +43,7 @@ final class CampaignPreview
         $eligible = 0; $suppressed = 0; $frequency = 0; $otherReasons = [];
         foreach ($phones as $phone) {
             $digits = CommSuppression::normalise((string) $phone, 'whatsapp');
-            $reason = CampaignSafetyGuard::blockedReason($tenant, $campaign, $digits, 'enqueue');
+            $reason = CampaignSafetyGuard::blockedReason($tenant, $campaign, $digits, 'preview');
             if ($reason === null) {
                 $eligible++;
             } elseif (in_array($reason, [CampaignSafetyGuard::R_OPTED_OUT, CampaignSafetyGuard::R_SUPPRESSED], true)) {

@@ -36,7 +36,9 @@ final class CampaignSafetyGuard
     public const R_BAD_NUMBER     = 'invalid_number';
 
     /**
-     * @param  string  $stage  'enqueue' (full check) or 'send' (last-second re-check).
+     * @param  string  $stage  'enqueue' (full check) · 'send' (last-second re-check) · 'preview'
+     *                         (dry-run: same exclusion checks as enqueue, but WITHOUT the "is the
+     *                         campaign running" gate, since a preview is run against a draft campaign).
      * @return string|null     a reason constant, or null when the send is allowed.
      */
     public static function blockedReason(Tenant $tenant, CommCampaign $campaign, string $phone, string $stage = 'enqueue'): ?string
@@ -47,12 +49,14 @@ final class CampaignSafetyGuard
         }
 
         // Campaign must still be live. At send it must be SENDING; a paused/cancelled campaign must not
-        // fire an already-queued row.
-        $liveStatuses = $stage === 'send'
-            ? [CommCampaign::ST_SENDING]
-            : [CommCampaign::ST_SCHEDULED, CommCampaign::ST_SENDING];
-        if (! in_array($campaign->status, $liveStatuses, true)) {
-            return self::R_NOT_RUNNING;
+        // fire an already-queued row. A preview deliberately skips this gate — it dry-runs a draft.
+        if ($stage !== 'preview') {
+            $liveStatuses = $stage === 'send'
+                ? [CommCampaign::ST_SENDING]
+                : [CommCampaign::ST_SCHEDULED, CommCampaign::ST_SENDING];
+            if (! in_array($campaign->status, $liveStatuses, true)) {
+                return self::R_NOT_RUNNING;
+            }
         }
 
         // Opt-out is authoritative in comm_suppressions (reason 'unsubscribed'); other exclusions
@@ -74,8 +78,8 @@ final class CampaignSafetyGuard
         }
 
         // Frequency + idempotency are settled at enqueue; re-checking them at send would risk a
-        // campaign blocking its own in-flight row.
-        if ($stage === 'enqueue') {
+        // campaign blocking its own in-flight row. A preview reports them too (same funnel as enqueue).
+        if ($stage === 'enqueue' || $stage === 'preview') {
             if (FrequencyGuard::recentlyMarketed($tenant, $digits)) {
                 return self::R_FREQUENCY;
             }
