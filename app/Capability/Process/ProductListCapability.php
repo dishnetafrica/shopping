@@ -248,10 +248,17 @@ final class ProductListCapability implements ProcessCapability
                 ->when($q !== '', fn ($qq) => $qq->where('name', 'ilike', '%' . $q . '%'))
                 ->orderBy('name')->limit(20)->get();
             $items = $rows->map(fn ($p) => [
+                'id' => (int) $p->id,
                 'name' => (string) $p->name,
                 'price' => round((float) $p->price, 2),
                 'unit' => (string) ($p->unit_label ?: ''),
                 'image' => (string) ($p->image_url ?: ''),
+                // 'sub' is read by the ⌘K command center only; the invoice/quotation product picker
+                // ignores it and still reads price/unit/image above.
+                'sub' => trim(implode(' · ', array_filter([
+                    (string) ($p->unit_label ?: ''),
+                    $p->price > 0 ? number_format((float) $p->price) : '',
+                ]))),
             ])->all();
 
             return ['ok' => true, 'items' => $items];

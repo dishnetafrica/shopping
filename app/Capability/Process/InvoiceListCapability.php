@@ -157,6 +157,25 @@ final class InvoiceListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'search') {
+            // Read-only lookup for the global command center (⌘K). No writes.
+            $q = trim((string) ($input['q'] ?? ''));
+            $digits = preg_replace('/[^0-9]/', '', $q);
+            $rows = Invoice::where('tenant_id', $ctx->tenantId())->where('status', '!=', 'void')
+                ->when($q !== '', fn ($qq) => $qq->where(fn ($w) => $w
+                    ->where('invoice_no', 'ilike', '%' . $q . '%')
+                    ->orWhere('customer_name', 'ilike', '%' . $q . '%')
+                    ->when($digits !== '', fn ($d) => $d->orWhere('customer_phone', 'like', '%' . $digits . '%'))))
+                ->orderByDesc('id')->limit(20)->get();
+            $items = $rows->map(fn ($i) => [
+                'id' => (int) $i->id,
+                'name' => (string) ($i->invoice_no ?: ('Invoice #' . $i->id)),
+                'sub' => trim(implode(' · ', array_filter([(string) $i->customer_name, (string) $i->customer_phone, ucfirst((string) $i->status)]))),
+            ])->all();
+
+            return ['ok' => true, 'items' => $items];
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }

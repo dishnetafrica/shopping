@@ -10,7 +10,7 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
 const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
   ['Sales',['pos','advisor','customers','growth','discovery','visits','leads','demand','tenders','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
   ['Messaging',['chats','communication','diagnostics']],
-  ['Inventory',['products','demand','suggestions','categories','purchase.process','suppliers','consignments']],
+  ['Inventory',['products','suggestions','categories','purchase.process','suppliers','consignments']],
   ['Procurement',['procurement.hub','demand.plans','juba.stock']],
   ['Operations',['jobs','maintenance','claims','tasks','warehouse','dispatch','transport']],
   ['Finance',['finance','pnl','books','cashbook','evidence','partners']],
@@ -126,16 +126,59 @@ let LAST_REC = null;        // last record payload, so tab switches re-render wi
 
 // Append the active report-currency override (?cur=) so every workspace + command call is consistent.
 function withCur(u){ const c=CFG.cur; if(!c) return u; return u+(u.indexOf('?')<0?'?':'&')+'cur='+encodeURIComponent(c); }
+// v4.91 — CFG.csrf was read once, at page load, and never looked at again. Every write for the rest
+// of the day used that one frozen token, so when the session rotated it hours later every save and
+// every upload failed with a 419 the staff reported as "token missing". Refreshing the page always
+// "fixed" it, because a refresh is the only thing that ever re-read the token — which is exactly why
+// it looked random and unfixable from the floor.
+//
+// A write that meets a stale token now fetches a live one and retries itself, once. A dead SESSION is
+// a different failure and must NOT be retried: that one says so plainly and goes to the login screen,
+// instead of the silent nothing staff were getting.
+let __csrfBusy = null;
+async function refreshCsrf(){
+  if(__csrfBusy) return __csrfBusy;      // one refresh in flight no matter how many writes queue behind it
+  __csrfBusy = (async () => {
+    try{
+      const r = await fetch('/api/v1/workspace/_token', { credentials:'include',
+        headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
+      if(r.status === 401) return null;   // the session is gone; a new token would not help
+      const d = await r.json();
+      if(d && d.token){
+        CFG.csrf = d.token;
+        const m = document.querySelector('meta[name=csrf-token]'); if(m) m.content = d.token;
+        return d.token;
+      }
+    }catch(e){}
+    return null;
+  })();
+  const out = await __csrfBusy; __csrfBusy = null; return out;
+}
+function sessionExpired(){
+  toast('Your session ended — please sign in again', true);
+  setTimeout(()=>{ location.href = '/app/login'; }, 1600);
+}
 async function api(path){
   const r = await fetch(withCur(CFG.base+path), { credentials:'include', headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
+  if(r.status === 401){ sessionExpired(); return { _error:401 }; }
   if(!r.ok && r.status!==200){ return { _error:r.status }; }
   return r.json();
 }
 async function post(endpoint, body){
-  const r = await fetch(withCur(endpoint), { method:'POST', credentials:'include',
+  const send = () => fetch(withCur(endpoint), { method:'POST', credentials:'include',
     headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':CFG.csrf,'Content-Type':'application/json' },
     body: JSON.stringify(body||{}) });
-  return r.json();
+  let r = await send();
+  if(r.status === 419){                  // stale token — get a live one and send it again, once only
+    const t = await refreshCsrf();
+    if(t) r = await send();
+  }
+  if(r.status === 401){ sessionExpired(); return { ok:false, error:'Your session ended — please sign in again.' }; }
+  if(r.status === 419){ return { ok:false, error:'Could not verify that request. Please refresh the page and try once more.' }; }
+  // A non-JSON body (an HTML error page, a proxy timeout) used to throw here and surface as nothing
+  // at all. Say what happened instead.
+  try{ return await r.json(); }
+  catch(e){ return { ok:false, error:'The server did not send a readable reply (status ' + r.status + ').' }; }
 }
 // GET-with-query write, for reusing legacy panel endpoints that read $request->query() (e.g. /papi/lead-save).
 // No body/JSON — every field goes on the query string, exactly like the panel does.
@@ -1309,6 +1352,9 @@ async function setImgUpload(k){
   try{
     var fd=new FormData(); fd.append('key',k); fd.append('file',f);
     var res=await fetch('/papi/branding-upload',{method:'POST',credentials:'same-origin',headers:{'X-CSRF-TOKEN':CFG.csrf,'Accept':'application/json'},body:fd});
+    // papi/* is CSRF-exempt, so a 419 cannot happen here — but the auth middleware still 401s on a
+    // dead session, and the old code then threw on res.json() and showed a bare "Upload failed".
+    if(res.status===401){ if(st) st.textContent='Session ended — sign in again'; sessionExpired(); return; }
     var d=await res.json();
     if(d&&d.ok&&d.url){ document.getElementById('sfimgv_'+k).value=d.url; var pv=document.getElementById('sfimg_'+k); if(pv) pv.style.backgroundImage='url(\''+d.url+'\')'; if(st) st.textContent='\u2713 uploaded \u2014 press Save'; }
     else { if(st) st.textContent=(d&&(d.error||d.message))||'Upload failed'; }
@@ -2745,8 +2791,150 @@ function uploadFileField(k){
 function closeM(){ document.getElementById('ov').classList.remove('on'); __WAPV=null; var m=document.getElementById('modal'); if(m) m.classList.remove('wa-modal'); }
 document.getElementById('ov').addEventListener('click',e=>{ if(e.target.id==='ov') closeM(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeM(); });
-document.getElementById('search').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const p=e.target.value.trim().split(/\s+/); if(p[0]&&p[1]) route(p[0].toLowerCase(),p[1]); } });
+// The header search box is now the entry point to the ⌘K command center — focusing it (tap or click)
+// opens the palette. The old "customer 5" quick-jump is kept as a keydown fallback for the rare case
+// the box is typed into directly (e.g. before scripts wire up).
+(function(){ const s=document.getElementById('search'); if(!s) return;
+  s.setAttribute('placeholder','Search…  ⌘K');
+  s.addEventListener('focus',()=>{ openCmdk(); s.blur(); });
+  s.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const p=e.target.value.trim().split(/\s+/); if(p[0]&&p[1]) route(p[0].toLowerCase(),p[1]); } });
+})();
 window.addEventListener('hashchange',()=>{ const h=parseHash(); if(h.key && (h.key!==CUR.key||h.id!==CUR.id)) route(h.key,h.id); });
+
+/* ============================================================================
+   ⌘K COMMAND CENTER (Phase B) — one palette for: find a record · jump to a screen · run an action.
+   Additive & read-only against existing endpoints:
+     • records come from each list capability's `search` command (/api/v1/workspace/<list>/_/search)
+       — the SAME command the New-invoice customer/product pickers already use; no new query logic.
+     • "Go to" targets are read straight off the rendered sidebar, so the palette can only ever offer
+       screens the role already has (permissions stay the single gate).
+     • Quick actions route to the existing create flows — no new create logic here.
+   Entities are gated on CFG.capKeys so a role never queries a workspace it cannot open.
+   ========================================================================== */
+const CMD_ENTITIES = [
+  { list:'customers',   obj:'customer',   label:'Customers', icon:'user' },
+  { list:'salesOrders', obj:'salesOrder', label:'Orders',    icon:'cart' },
+  { list:'invoices',    obj:'invoice',    label:'Invoices',  icon:'receipt' },
+  { list:'products',    obj:'product',    label:'Products',  icon:'box' },
+  { list:'suppliers',   obj:'supplier',   label:'Suppliers', icon:'truck' },
+];
+// Quick actions hand off to flows that already exist; the palette adds no create logic of its own.
+const CMD_ACTIONS = [
+  { label:'New sale',       hint:'Open the POS till',    icon:'cart',    gate:()=>capHas('pos'),             run:()=>route('pos') },
+  { label:'Add customer',   hint:'Create a customer',    icon:'user',    gate:()=>capHas('customers'),       run:()=>quickAdd('customers') },
+  { label:'New invoice',    hint:'Raise an invoice',     icon:'receipt', gate:()=>capHas('invoices'),        run:()=>quickAdd('invoices') },
+  { label:'Record payment', hint:'Open Payments',        icon:'dollar',  gate:()=>capHas('payments'),        run:()=>route('payments') },
+  { label:'Receive stock',  hint:'Open Purchasing',      icon:'truck',   gate:()=>capHas('purchase.process'),run:()=>route('purchase.process') },
+];
+function capHas(k){ return !!(CFG.capKeys && CFG.capKeys.has(k)); }
+// Jump targets = whatever the sidebar actually rendered for this role (permission-accurate by construction).
+function cmdkNavTargets(){
+  return Array.from(document.querySelectorAll('#nav .nitem')).map(n=>({
+    key: n.dataset.key,
+    label: (n.querySelector('.nl') ? n.querySelector('.nl').textContent : n.dataset.key) || n.dataset.key,
+  }));
+}
+let PAL = { open:false, seq:0, sel:-1, rows:[], q:'', loading:false, last:[] };
+function ensureCmdk(){
+  let ov = document.getElementById('cmdk'); if(ov) return ov;
+  ov = document.createElement('div'); ov.id='cmdk'; ov.className='cmdk-ov';
+  ov.innerHTML = '<div class="cmdk" role="dialog" aria-label="Command center" aria-modal="true">'
+    + '<div class="cmdk-h"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
+    + '<input id="cmdkInput" placeholder="Search records, jump to a screen, or run an action…" autocomplete="off" spellcheck="false" aria-label="Search">'
+    + '<span class="cmdk-esc">esc</span></div>'
+    + '<div class="cmdk-body" id="cmdkBody"></div>'
+    + '<div class="cmdk-foot"><span><b>↑↓</b> move</span><span><b>↵</b> open</span><span><b>esc</b> close</span></div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) closeCmdk(); });
+  document.body.appendChild(ov);
+  const inp = ov.querySelector('#cmdkInput');
+  inp.addEventListener('input', e=>palInput(e.target.value));
+  inp.addEventListener('keydown', palKey);
+  return ov;
+}
+function openCmdk(seed){
+  const ov = ensureCmdk(); ov.classList.add('on'); PAL.open=true;
+  const inp = document.getElementById('cmdkInput');
+  inp.value = seed || ''; palInput(inp.value);
+  setTimeout(()=>{ inp.focus(); inp.select(); }, 20);
+}
+function closeCmdk(){ const ov=document.getElementById('cmdk'); if(ov) ov.classList.remove('on'); PAL.open=false; }
+function palInput(v){
+  PAL.q = v; const q = v.trim();
+  clearTimeout(PAL._t);
+  if(q.length < 2){ PAL.loading=false; PAL.last=[]; palRender(q, []); return; }
+  PAL.loading = true; palRender(q, PAL.last);          // instant: actions + nav, with a "searching" spinner
+  PAL._t = setTimeout(()=>palSearch(q), 170);
+}
+async function palSearch(q){
+  const seq = ++PAL.seq;
+  const ents = CMD_ENTITIES.filter(e=>capHas(e.list));
+  const results = await Promise.all(ents.map(async e=>{
+    try{ const r = await post('/api/v1/workspace/'+e.list+'/_/search', { q }); return { e, items: (r && r.ok && Array.isArray(r.items)) ? r.items : [] }; }
+    catch(_){ return { e, items: [] }; }
+  }));
+  if(seq !== PAL.seq) return;                          // a newer keystroke already superseded this query
+  PAL.loading = false; PAL.last = results; palRender(q, results);
+}
+function palSection(t, busy){ return '<div class="cmdk-sec">'+esc(t)+(busy?'<span class="cmdk-busy"></span>':'')+'</div>'; }
+function palRow(i, ic, title, sub, tag){
+  return '<button class="cmdk-row" data-i="'+i+'" onmouseenter="PAL.sel='+i+';palHighlight()" onclick="palActivate('+i+')">'
+    + '<span class="cmdk-ic">'+icon(ic)+'</span>'
+    + '<span class="cmdk-txt"><span class="cmdk-t">'+esc(title)+'</span>'+(sub?'<span class="cmdk-s">'+esc(sub)+'</span>':'')+'</span>'
+    + (tag?'<span class="cmdk-tag">'+esc(tag)+'</span>':'') + '</button>';
+}
+function palRender(q, results){
+  const ql = q.toLowerCase();
+  const rows = []; let html = '';
+  const acts = CMD_ACTIONS.filter(a=>a.gate() && (!ql || a.label.toLowerCase().indexOf(ql)>=0 || a.hint.toLowerCase().indexOf(ql)>=0));
+  if(acts.length){
+    html += palSection('Quick actions');
+    acts.forEach(a=>{ const i=rows.length; rows.push({ kind:'action', run:a.run }); html += palRow(i, a.icon, a.label, a.hint, 'Action'); });
+  }
+  if(ql){
+    const navs = cmdkNavTargets().filter(n=>String(n.label).toLowerCase().indexOf(ql)>=0).slice(0,6);
+    if(navs.length){
+      html += palSection('Go to');
+      navs.forEach(n=>{ const i=rows.length; rows.push({ kind:'nav', key:n.key }); html += palRow(i, 'file', n.label, '', 'Screen'); });
+    }
+  }
+  (results||[]).forEach(g=>{
+    if(!g.items.length) return;
+    html += palSection(g.e.label);
+    g.items.slice(0,6).forEach(it=>{ const i=rows.length; rows.push({ kind:'record', obj:g.e.obj, id:it.id }); html += palRow(i, g.e.icon, it.name, it.sub||'', ''); });
+  });
+  if(PAL.loading && ql.length>=2){ html += palSection('Searching…', true); }
+  if(!rows.length && !PAL.loading){
+    html = ql.length>=2
+      ? '<div class="cmdk-empty">No matches for “'+esc(q)+'”.<br>Try a name, number, or phone.</div>'
+      : '<div class="cmdk-empty">Search customers, orders, invoices, products and suppliers —<br>or jump to any screen. Start typing.</div>';
+  }
+  PAL.rows = rows; PAL.sel = rows.length ? 0 : -1;
+  const body = document.getElementById('cmdkBody'); if(body){ body.innerHTML = html; palHighlight(); }
+}
+function palHighlight(){
+  const body = document.getElementById('cmdkBody'); if(!body) return;
+  const els = body.querySelectorAll('.cmdk-row');
+  els.forEach((el,i)=>{ const on = i===PAL.sel; el.classList.toggle('on', on); if(on) el.scrollIntoView({ block:'nearest' }); });
+}
+function palMove(d){ if(!PAL.rows.length) return; PAL.sel = (PAL.sel + d + PAL.rows.length) % PAL.rows.length; palHighlight(); }
+function palActivate(i){
+  const r = PAL.rows[i]; if(!r) return; closeCmdk();
+  if(r.kind==='record') route(r.obj, r.id);
+  else if(r.kind==='nav') route(r.key);
+  else if(r.kind==='action' && typeof r.run==='function') r.run();
+}
+function palKey(e){
+  if(e.key==='ArrowDown'){ e.preventDefault(); palMove(1); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); palMove(-1); }
+  else if(e.key==='Enter'){ e.preventDefault(); if(PAL.sel>=0) palActivate(PAL.sel); }
+  else if(e.key==='Escape'){ e.preventDefault(); closeCmdk(); }
+}
+// ⌘K / Ctrl+K toggles the palette anywhere; Escape closes it when open.
+document.addEventListener('keydown', e=>{
+  if((e.metaKey||e.ctrlKey) && (e.key==='k' || e.key==='K')){ e.preventDefault(); PAL.open ? closeCmdk() : openCmdk(); return; }
+  if(e.key==='Escape' && PAL.open){ closeCmdk(); }
+});
 
 /* ============ quotation builder (multi-line) ============ */
 let QBT=null;
