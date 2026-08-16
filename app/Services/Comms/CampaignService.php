@@ -169,9 +169,13 @@ class CampaignService
                 'customer_profiles.marketing_opted_in_at', 'customer_profiles.marketing_opted_out_at',
             ]);
 
+        // Offer variables ({{product_name}}, {{price}}, {{category}}, {{product_link}}) are campaign-
+        // level — resolved once, merged into every recipient's vars.
+        $offerVars = Marketing\OfferVars::build($tenant, $c->offer);
+
         $made = 0;
         foreach ($rows as $p) {
-            $vars = ['customer_name' => (string) ($p->name ?: 'Customer')];
+            $vars = ['customer_name' => (string) ($p->name ?: 'Customer')] + $offerVars;
             $opts = [
                 'related_type' => 'campaign',
                 'related_id'   => $c->id,
