@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Product;
 use App\Models\Tenant;
+use App\Services\Inventory\CountRecorder;
 use App\Services\Inventory\PurchaseNameMatch;
 use App\Services\Inventory\StockLedger;
 use App\Support\TenantContext;
@@ -123,7 +124,6 @@ final class StockCountCommand extends Command
         $loc      = trim((string) ($this->option('location') ?: '')) ?: $home;
         $atHome   = ($loc === $home);
         $onLedger = StockLedger::readsFromLedger($tenant);
-        $ledger   = StockLedger::forTenant($tenant);
         $this->line('stock home: ' . $home . '   counting at: ' . $loc
             . '   reads from ledger: ' . ($onLedger ? 'yes' : 'no'));
         if (! $atHome) {
@@ -286,55 +286,18 @@ final class StockCountCommand extends Command
                     . '  — replacing the count already recorded on ' . $date);
             }
 
-            $onHand = ($onLedger || ! $atHome)
-                ? (float) DB::table('stock_movements')->where('tenant_id', $tid)
-                    ->where('product_id', $p->id)->where('location', $loc)->sum('qty')
-                : (float) ($p->stock ?? 0);
-            $diff = round($row['counted'] - $onHand, 3);
-
-            // $countedAt IS USED INSIDE — a closure captures nothing by default, and `php -l` cannot
-            // see the difference between a variable that is missing from this list and one that is
-            // simply null. It passed the lint and died on the live server at the insert.
-            DB::transaction(function () use ($ledger, $p, $loc, $diff, $row, $onHand, $by, $tid, $onLedger, $atHome, $countedAt) {
-                if (abs($diff) > 0.0005) {
-                    $ledger->adjust([
-                        'product_id' => (int) $p->id, 'location' => $loc, 'qty' => $diff,
-                        'ref_type' => 'trust_count', 'ref_id' => null,
-                        'note' => 'physical count ' . $row['counted'] . ' vs book ' . $onHand
-                                . ' (documents say ' . $row['doc'] . ')',
-                        'created_by' => $by,
-                    ]);
-                }
-                // v5.08 — THE OPENING. This is the row Juba Stock anchors on: an absolute
-                // statement with a date, not a delta. Written for every count regardless of
-                // location, because the shelf it describes is real wherever the config says home is.
-                if (\Illuminate\Support\Facades\Schema::hasTable('stock_openings')) {
-                    DB::table('stock_openings')->insert([
-                        'tenant_id' => $tid, 'product_id' => (int) $p->id, 'location' => $loc,
-                        'qty' => $row['counted'], 'counted_at' => $countedAt, 'counted_by' => $by,
-                        'note' => 'documents said ' . $row['doc'] . ' at the time of the count',
-                        'created_at' => now(), 'updated_at' => now(),
-                    ]);
-                }
-
-                if (! $atHome) {
-                    return;                      // the ledger holds it; products.stock is home's
-                }
-                if ($onLedger) {
-                    // The ledger is the authority here, and the adjustment above already made it
-                    // equal the count. Sync FIRST, then stamp - the other way round the sync
-                    // overwrote the number we had just written.
-                    $ledger->syncProductStockCache((int) $p->id);
-                    Product::where('tenant_id', $tid)->where('id', $p->id)->update([
-                        'stock_confidence' => 'exact', 'stock_checked_at' => now(), 'stock_source' => 'count',
-                    ]);
-                } else {
-                    Product::where('tenant_id', $tid)->where('id', $p->id)->update([
-                        'stock' => (int) round($row['counted']),
-                        'stock_confidence' => 'exact', 'stock_checked_at' => now(), 'stock_source' => 'count',
-                    ]);
-                }
-            });
+            // v5.15 — ONE WRITER. The count write (ledger trust_count delta + stock_openings anchor +
+            // products.stock cache/stamp) now lives in CountRecorder, shared with the panel's "Record
+            // count" action, so the CLI and the button can never drift apart. The same-day guard and
+            // all messaging stay here; recount is forced because the guard above already decided to
+            // proceed. book is the on-hand before the count — the delta shown below is derived from it.
+            $res = CountRecorder::record(
+                $tenant, $p, (float) $row['counted'], $loc, $by, $countedAt,
+                recount: true,
+                openingNote: 'documents said ' . $row['doc'] . ' at the time of the count',
+                provenance: 'documents say ' . $row['doc'],
+            );
+            $diff = round((float) $row['counted'] - (float) $res['book'], 3);
 
             $done++;
             $this->line('  RECORDED  ' . str_pad(mb_substr((string) $p->name, 0, 46), 48)

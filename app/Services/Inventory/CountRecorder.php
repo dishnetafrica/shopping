@@ -41,6 +41,10 @@ final class CountRecorder
     public const COUNTED   = 'counted';    // first count today
 
     /**
+     * @param  ?string  $openingNote  stored on the stock_openings anchor (the count's own note).
+     * @param  ?string  $provenance   optional context for the ledger movement note — appended as
+     *                                "physical count N vs book M (<provenance>)". The CLI passes the
+     *                                document-derived figure here; the panel leaves it null.
      * @return array{status:string,book:float,moved:float,counted:float,location:string}
      *         status one of the constants above; book = on-hand before the count; moved = the ADJUST
      *         delta written (0.0 when skipped or when the count agreed with the book).
@@ -53,7 +57,8 @@ final class CountRecorder
         string $by = 'Stock count',
         ?Carbon $countedAt = null,
         bool $recount = false,
-        ?string $note = null,
+        ?string $openingNote = null,
+        ?string $provenance = null,
     ): array {
         $tid       = (int) $tenant->id;
         $counted   = round(max(0.0, $counted), 3);
@@ -81,12 +86,14 @@ final class CountRecorder
             : (float) ($product->stock ?? 0);
         $diff = round($counted - $onHand, 3);
 
-        DB::transaction(function () use ($ledger, $product, $loc, $diff, $counted, $onHand, $by, $tid, $onLedger, $atHome, $countedAt, $note) {
+        DB::transaction(function () use ($ledger, $product, $loc, $diff, $counted, $onHand, $by, $tid, $onLedger, $atHome, $countedAt, $openingNote, $provenance) {
             if (abs($diff) > 0.0005) {
+                $adjustNote = 'physical count ' . $counted . ' vs book ' . $onHand
+                    . ($provenance !== null && $provenance !== '' ? ' (' . $provenance . ')' : '');
                 $ledger->adjust([
                     'product_id' => (int) $product->id, 'location' => $loc, 'qty' => $diff,
                     'ref_type' => 'trust_count', 'ref_id' => null,
-                    'note' => $note ?: ('physical count ' . $counted . ' vs book ' . $onHand),
+                    'note' => $adjustNote,
                     'created_by' => $by,
                 ]);
             }
@@ -95,7 +102,7 @@ final class CountRecorder
                 DB::table('stock_openings')->insert([
                     'tenant_id' => $tid, 'product_id' => (int) $product->id, 'location' => $loc,
                     'qty' => $counted, 'counted_at' => $countedAt, 'counted_by' => $by,
-                    'note' => $note, 'created_at' => now(), 'updated_at' => now(),
+                    'note' => $openingNote, 'created_at' => now(), 'updated_at' => now(),
                 ]);
             }
 
