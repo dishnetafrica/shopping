@@ -99,13 +99,17 @@ class FollowupEngineTest extends TestCase
         $u = User::factory()->create(['tenant_id' => $t->id, 'role' => 'owner']);
         $this->actingAs($u);
 
-        $gw = new class {
+        $gw = new class implements \App\Contracts\WhatsAppGateway {
             public array $sent = [];
-            public function sendText($i, $to, $m, $q = null) { $this->sent[] = [$to, $m]; return ['ok' => true]; }
+            public function sendText(string $i, string $to, string $m, ?array $q = null): array { $this->sent[] = [$to, $m]; return ['ok' => true]; }
+            public function sendImage(string $i, string $to, string $m, string $c = ''): array { return ['ok' => true]; }
+            public function markRead(string $i, string $id): void {}
+            public function parseIncoming(array $payload): ?array { return null; }
+            public function fetchContacts(string $i): array { return []; }
         };
         $mgr = new class($gw) extends WhatsAppManager {
-            public function __construct(private object $g) {}
-            public function forTenant(Tenant $t): object { return $this->g; }
+            public function __construct(private \App\Contracts\WhatsAppGateway $g) {}
+            public function forTenant(Tenant $t): \App\Contracts\WhatsAppGateway { return $this->g; }
         };
         $this->app->instance(WhatsAppManager::class, $mgr);
 
