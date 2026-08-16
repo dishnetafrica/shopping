@@ -134,6 +134,16 @@ ok('query "sugar", qty 5, text "5 sugar" → no false size (legit count)', UnitG
 ok('query "sugar", qty 2, text "2kg sugar" → recovers 2kg (catches C4 on LLM path)', UnitGuard::sizeForItem('sugar', 2, '2kg sugar') === '2kg');
 ok('qty 1 is never treated as an inflated size', UnitGuard::sizeFoldedIntoQty('add 1kg rice', 1) === null);
 
+G('LLM-path guard — a size DROPPED with qty normalised to 1 is still caught (staging case)');
+// The model returned {query:"ajinomoto", qty:1} for "add 250g ajinomoto" — the size never inflated
+// qty, so it must be recovered from its position beside the item words, or it is silently substituted.
+ok('"add 250g ajinomoto" (qty 1) → recovers 250g beside the item', UnitGuard::sizeForItem('ajinomoto', 1, 'add 250g ajinomoto') === '250g');
+ok('"250g Ajinomoto 500gm" → clarify (250g not fulfillable from a 500g pack)', UnitGuard::decide(['name' => 'Ajinomoto 500gm', 'sold_by_weight' => false, 'size' => '250g', 'count' => null])['mode'] === 'clarify');
+ok('"500gm ajinomoto" (exact pack) → count 1, adds the 500gm', UnitGuard::decide(['name' => 'Ajinomoto 500gm', 'sold_by_weight' => false, 'size' => '500g', 'count' => null]) === ['mode' => 'count', 'qty' => 1]);
+ok('multi-word item "aluminium foil" beside 250g → recovered', UnitGuard::sizeForItem('aluminium foil', 1, 'add 250g aluminium foil') === '250g');
+ok('count units are not sizes: "5 cartons glasses" (qty 5) → no size, count kept', UnitGuard::sizeForItem('glasses', 5, 'add 5 cartons glasses') === null);
+ok('no false steal across items: "250g sugar and 3 oil" → oil gets no size', UnitGuard::sizeForItem('oil', 3, 'add 250g sugar and 3 oil') === null);
+
 // ---------------------------------------------------------------------------
 echo "\n" . str_repeat('─', 60) . "\n";
 echo $fail === 0
