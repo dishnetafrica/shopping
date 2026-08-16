@@ -221,16 +221,19 @@ class ChatsWorkspaceTest extends TestCase
 
     private function fakeGateway(): object
     {
-        $gw = new class {
+        $gw = new class implements \App\Contracts\WhatsAppGateway {
             public array $docs = []; public array $locs = [];
             public function sendDocument($i, $to, $media, $name, $cap = '') { $this->docs[] = [$to, $media, $name, $cap]; return ['ok' => true]; }
             public function sendLocation($i, $to, $lat, $lng, $name = '', $addr = '') { $this->locs[] = [$to, $lat, $lng, $name]; return ['ok' => true]; }
-            public function sendImage($i, $to, $m, $c = '') { return ['ok' => true]; }
-            public function sendText($i, $to, $m, $q = null) { return ['ok' => true]; }
+            public function sendImage(string $i, string $to, string $m, string $c = ''): array { return ['ok' => true]; }
+            public function sendText(string $i, string $to, string $m, ?array $q = null): array { return ['ok' => true]; }
+            public function markRead(string $i, string $id): void {}
+            public function parseIncoming(array $payload): ?array { return null; }
+            public function fetchContacts(string $i): array { return []; }
         };
         $mgr = new class($gw) extends \App\Services\WhatsApp\WhatsAppManager {
-            public function __construct(private object $g) {}
-            public function forTenant(\App\Models\Tenant $t): object { return $this->g; }
+            public function __construct(private \App\Contracts\WhatsAppGateway $g) {}
+            public function forTenant(\App\Models\Tenant $t): \App\Contracts\WhatsAppGateway { return $this->g; }
         };
         $this->app->instance(\App\Services\WhatsApp\WhatsAppManager::class, $mgr);
         return $gw;
@@ -299,14 +302,17 @@ class ChatsWorkspaceTest extends TestCase
     public function test_send_media_endpoint_sends_logs_and_takes_over(): void
     {
         $t = $this->login();
-        $gw = new class {
+        $gw = new class implements \App\Contracts\WhatsAppGateway {
             public array $sent = [];
-            public function sendImage($i, $to, $media, $cap = '') { $this->sent[] = [$to, $media, $cap]; return ['ok' => true]; }
-            public function sendText($i, $to, $m, $q = null) { return ['ok' => true]; }
+            public function sendImage(string $i, string $to, string $media, string $cap = ''): array { $this->sent[] = [$to, $media, $cap]; return ['ok' => true]; }
+            public function sendText(string $i, string $to, string $m, ?array $q = null): array { return ['ok' => true]; }
+            public function markRead(string $i, string $id): void {}
+            public function parseIncoming(array $payload): ?array { return null; }
+            public function fetchContacts(string $i): array { return []; }
         };
         $mgr = new class($gw) extends \App\Services\WhatsApp\WhatsAppManager {
-            public function __construct(private object $g) {}
-            public function forTenant(\App\Models\Tenant $t): object { return $this->g; }
+            public function __construct(private \App\Contracts\WhatsAppGateway $g) {}
+            public function forTenant(\App\Models\Tenant $t): \App\Contracts\WhatsAppGateway { return $this->g; }
         };
         $this->app->instance(\App\Services\WhatsApp\WhatsAppManager::class, $mgr);
 
