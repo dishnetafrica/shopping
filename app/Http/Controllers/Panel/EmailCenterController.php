@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SendCommEmail;
 use App\Models\CommEvent;
 use App\Models\CommMessage;
 use App\Models\CommProvider;
@@ -183,12 +182,15 @@ class EmailCenterController extends Controller
             return response()->json(['ok' => false, 'error' => 'only failed/cancelled can be retried'], 422);
         }
 
-        $m->status = CommMessage::ST_PENDING;
+        // Re-queue as RETRY with an immediate next_attempt_at; the comms sweep (CommsEmailSweep) re-sends
+        // it through the CORRECT channel dispatcher. Sending inline here made a manual retry depend on a
+        // live provider (a failed send flipped straight back to 'failed') and always dispatched the email
+        // job even for a WhatsApp row.
+        $m->status = CommMessage::ST_RETRY;
         $m->attempts = 0;
-        $m->next_attempt_at = null;
+        $m->next_attempt_at = now();
         $m->last_error = null;
         $m->save();
-        SendCommEmail::dispatch($m->id);
 
         return response()->json(['ok' => true]);
     }
@@ -566,10 +568,20 @@ class EmailCenterController extends Controller
     /** v3 New-campaign form (flat fields incl. audience + offer) → campaignSave. */
     public function campaignSaveSimple(Request $request)
     {
-        $request->merge([
+        $merge = [
             'segment' => $this->segmentFromSimple($request),
             'offer'   => $this->offerFromSimple($request),
-        ]);
+        ];
+        // The v3 flat form carries a single content field (text_body). An email campaign needs an
+        // html_body, so when the channel includes email and none was supplied, use the text as the body
+        // (the whatsapp side keeps text_body). Without this the simple form 422s on every email campaign.
+        $channel = strtolower(trim((string) $request->input('channel', 'email')));
+        if (in_array($channel, ['email', 'both'], true)
+            && trim((string) $request->input('html_body', '')) === ''
+            && trim((string) $request->input('text_body', '')) !== '') {
+            $merge['html_body'] = (string) $request->input('text_body');
+        }
+        $request->merge($merge);
 
         return $this->campaignSave($request);
     }
