@@ -20,7 +20,7 @@ class ListContractTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function seed(): Tenant
+    private function seedFixture(): Tenant
     {
         $t = Tenant::factory()->create();
         $u = User::factory()->create(['tenant_id' => $t->id, 'role' => 'owner', 'name' => 'Owner']);
@@ -49,14 +49,14 @@ class ListContractTest extends TestCase
 
     public function test_search_matches_whitelisted_columns(): void
     {
-        $t = $this->seed();
+        $t = $this->seedFixture();
         $res = ListBuilder::apply(Product::where('tenant_id', $t->id), $this->req(['q' => 'rice']), $this->spec());
         $this->assertSame(2, $res->total); // Rice + Brown Rice
     }
 
     public function test_filter_and_aggregate_over_full_set(): void
     {
-        $t = $this->seed();
+        $t = $this->seedFixture();
         $res = ListBuilder::apply(Product::where('tenant_id', $t->id), $this->req(['filter' => ['active' => '1']]), $this->spec());
         $this->assertSame(2, $res->total);
         $this->assertSame(150.0, $res->aggregates['stock_total']); // 100 + 50, active only
@@ -64,14 +64,14 @@ class ListContractTest extends TestCase
 
     public function test_unknown_filter_field_is_ignored(): void
     {
-        $t = $this->seed();
+        $t = $this->seedFixture();
         $res = ListBuilder::apply(Product::where('tenant_id', $t->id), $this->req(['filter' => ['evil' => 'x']]), $this->spec());
         $this->assertSame(3, $res->total); // filter dropped, all rows
     }
 
     public function test_sort_and_pagination(): void
     {
-        $t = $this->seed();
+        $t = $this->seedFixture();
         $res = ListBuilder::apply(Product::where('tenant_id', $t->id),
             $this->req(['sort' => 'price', 'dir' => 'desc', 'per_page' => 2, 'page' => 1]), $this->spec());
         $this->assertSame(3, $res->total);
