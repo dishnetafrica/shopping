@@ -140,11 +140,14 @@ final class CommunicationCapability implements ProcessCapability
         if ($campIds) {
             foreach (\Illuminate\Support\Facades\DB::table('comm_messages')->where('tenant_id', $tid)
                 ->where('related_type', 'campaign')->whereIn('related_id', $campIds)
-                ->selectRaw("related_id,
+                ->selectRaw("related_id, count(*) as total,
                     sum(case when status = 'sent' then 1 else 0 end) as sent,
                     sum(case when delivered_at is not null then 1 else 0 end) as delivered,
                     sum(case when opened_at is not null then 1 else 0 end) as rd,
-                    sum(case when status = 'skipped' then 1 else 0 end) as skipped")
+                    sum(case when replied_at is not null then 1 else 0 end) as replied,
+                    sum(case when status = 'failed' then 1 else 0 end) as failed,
+                    sum(case when status = 'skipped' then 1 else 0 end) as skipped,
+                    sum(case when skip_reason = 'opted_out' then 1 else 0 end) as opted_out")
                 ->groupBy('related_id')->get() as $r) {
                 $campAgg[(int) $r->related_id] = $r;
             }
@@ -155,28 +158,43 @@ final class CommunicationCapability implements ProcessCapability
         foreach ($camps as $c) {
             $tone = ['draft' => 'default', 'scheduled' => 'info', 'sending' => 'warn', 'paused' => 'warn', 'done' => 'ok', 'cancelled' => 'default'][$c->status] ?? 'default';
             $seg = (array) ($c->segment ?? []);
-            $aud = 'All customers';
-            if (! empty($seg['segment'])) $aud = 'Tag: '.$seg['segment'];
-            elseif (! empty($seg['city'])) $aud = 'City: '.$seg['city'];
-            elseif (! empty($seg['ordered_within_days'])) $aud = 'Ordered ≤ '.$seg['ordered_within_days'].'d';
-            elseif (! empty($seg['not_ordered_within_days'])) $aud = 'Winback > '.$seg['not_ordered_within_days'].'d';
+            $aud = self::audienceLabel($seg);
             $a = $campAgg[$c->id] ?? null;
             $skipped = (int) ($a->skipped ?? 0);
+
+            // Health is DISPLAY ONLY — rates from the live metrics, no automatic action.
+            $sent = (int) ($a->sent ?? 0); $failed = (int) ($a->failed ?? 0);
+            $delivered = (int) ($a->delivered ?? 0); $optedOut = (int) ($a->opted_out ?? 0);
+            $total = (int) ($a->total ?? 0);
+            $health = \App\Services\Comms\Marketing\CampaignHealth::assess([
+                'sent'          => $sent,
+                'failure_rate'  => ($sent + $failed) > 0 ? round($failed / ($sent + $failed) * 100, 1) : 0.0,
+                'opt_out_rate'  => $total > 0 ? round($optedOut / $total * 100, 1) : 0.0,
+                'delivery_rate' => $sent > 0 ? round($delivered / $sent * 100, 1) : 0.0,
+            ], $t);
+
             $campRows[] = [
                 (string) $c->name, strtoupper((string) $c->channel), $aud,
                 ['value' => ucfirst((string) $c->status), 'tone' => $tone],
-                number_format((int) ($a->sent ?? 0)),
-                number_format((int) ($a->delivered ?? 0)),
+                number_format($sent),
+                number_format($delivered),
                 number_format((int) ($a->rd ?? 0)),
+                number_format((int) ($a->replied ?? 0)),
                 ['value' => number_format($skipped), 'tone' => $skipped > 0 ? 'warn' : 'default'],
+                ['value' => $health['label'], 'tone' => $health['tone']],
                 Carbon::parse($c->created_at)->format('d M'),
             ];
-            if ($isOwner && count($campActions) < 8) {
+            if ($isOwner && count($campActions) < 12) {
                 $ep = '/papi/comms/campaigns/'.$c->id;
+                if (in_array($c->status, ['draft', 'scheduled', 'paused'], true)) {
+                    // A true dry run — the funnel + a rendered example, sending nothing.
+                    $campActions[] = ['key' => 'camp_prev_'.$c->id, 'label' => 'Preview — '.$c->name,
+                        'method' => 'POST', 'endpoint' => $ep.'/preview', 'actor' => 'human', 'tone' => 'default'];
+                }
                 if (in_array($c->status, ['draft', 'paused'], true)) {
                     $campActions[] = ['key' => 'camp_go_'.$c->id, 'label' => ($c->status === 'draft' ? 'Launch — ' : 'Resume — ').$c->name,
                         'method' => 'POST', 'endpoint' => $ep.($c->status === 'draft' ? '/launch' : '/resume'), 'actor' => 'human', 'tone' => 'primary',
-                        'confirm' => ($c->status === 'draft' ? 'Launch' : 'Resume').' campaign "'.$c->name.'" now?'];
+                        'confirm' => ($c->status === 'draft' ? 'Launch' : 'Resume').' campaign "'.$c->name.'" now? Phase-1 safety controls (opt-in, opt-out, daily cap, frequency) are enforced automatically.'];
                 }
                 if (in_array($c->status, ['scheduled', 'sending'], true)) {
                     $campActions[] = ['key' => 'camp_pause_'.$c->id, 'label' => 'Pause — '.$c->name,
@@ -185,10 +203,11 @@ final class CommunicationCapability implements ProcessCapability
                 }
             }
         }
-        $campCard = ['kind' => 'table', 'title' => 'Campaigns', 'sub' => count($campRows).' most recent · WhatsApp needs explicit opt-in',
+        $campCard = ['kind' => 'table', 'title' => 'Campaigns', 'sub' => count($campRows).' most recent · WhatsApp needs explicit opt-in · counts from available order data',
             'columns' => [['label' => 'Name'], ['label' => 'Ch'], ['label' => 'Audience'], ['label' => 'Status'],
                 ['label' => 'Sent', 'align' => 'right'], ['label' => 'Delivered', 'align' => 'right'],
-                ['label' => 'Read', 'align' => 'right'], ['label' => 'Skipped', 'align' => 'right'],
+                ['label' => 'Read', 'align' => 'right'], ['label' => 'Replies', 'align' => 'right'],
+                ['label' => 'Skipped', 'align' => 'right'], ['label' => 'Health'],
                 ['label' => 'Created', 'align' => 'right']],
             'rows' => $campRows, 'empty' => 'No campaigns yet — "New campaign" creates a draft you can launch.'];
 
@@ -197,6 +216,12 @@ final class CommunicationCapability implements ProcessCapability
         $waLimit = \App\Services\Comms\Marketing\DailyLimiter::limit($t);
         $waSent  = \App\Services\Comms\Marketing\DailyLimiter::sentToday($t);
         $waLeft  = \App\Services\Comms\Marketing\DailyLimiter::remaining($t);
+
+        // Consent visibility at a glance — how many customers may be marketed to at all.
+        $optInCount = (int) \Illuminate\Support\Facades\DB::table('customer_profiles')->where('tenant_id', $tid)
+            ->whereNotNull('marketing_opted_in_at')->whereNull('marketing_opted_out_at')->count();
+        $optOutCount = (int) \Illuminate\Support\Facades\DB::table('customer_profiles')->where('tenant_id', $tid)
+            ->whereNotNull('marketing_opted_out_at')->count();
 
         // ---- Suppressions tab (closes the M1 gap) --------------------------
         $supps = CommSuppression::withoutGlobalScope('tenant')->where('tenant_id', $tid)
@@ -301,14 +326,22 @@ final class CommunicationCapability implements ProcessCapability
                     'confirm' => 'Send a test email through "'.$p->name.'" to the owner address?'];
             }
 
+            $segEnum = 'enum:all,tag,city,customer_type,ordered_within_days,not_ordered_within_days,ordered_between,not_ordered_between,bought_product,bought_category,not_bought_category';
+            $segHelp = 'Audience value: tag / city / customer type (wholesale…) / number of days / product id / category name / a "from..to" date range';
             $quick[] = ['key' => 'new_campaign', 'label' => 'New campaign (draft)', 'method' => 'POST', 'endpoint' => '/papi/comms/campaigns/save-simple', 'actor' => 'human',
-                'schema' => ['name' => 'text', 'channel' => 'enum:email,whatsapp,both', 'segment_type' => 'enum:all,tag,city,ordered_within_days,not_ordered_within_days', 'segment_value' => 'text', 'subject' => 'text', 'text_body' => 'textarea', 'throttle_per_minute' => 'number'],
-                'labels' => ['name' => 'Campaign name', 'channel' => 'Channel', 'segment_type' => 'Audience', 'segment_value' => 'Audience value (tag name / city / number of days — blank for all)', 'subject' => 'Subject (email)', 'text_body' => 'Message body ({{name}} etc.)', 'throttle_per_minute' => 'Send rate per minute'],
-                'prefill' => ['channel' => 'email', 'segment_type' => 'all', 'throttle_per_minute' => 60]];
+                'schema' => ['name' => 'text', 'channel' => 'enum:email,whatsapp,both', 'segment_type' => $segEnum, 'segment_value' => 'text',
+                    'offer_product_id' => 'number', 'offer_category' => 'text', 'offer_promo' => 'text',
+                    'subject' => 'text', 'text_body' => 'textarea', 'throttle_per_minute' => 'number'],
+                'labels' => ['name' => 'Campaign name', 'channel' => 'Channel', 'segment_type' => 'Audience', 'segment_value' => $segHelp,
+                    'offer_product_id' => 'Promote product id (optional — fills {{product_name}} / {{price}})',
+                    'offer_category' => 'Promote category (optional — fills {{category}})',
+                    'offer_promo' => 'Promo line (optional — fills {{promo}})',
+                    'subject' => 'Subject (email)', 'text_body' => 'Message body ({{customer_name}}, {{product_name}}, {{price}} …)', 'throttle_per_minute' => 'Send rate per minute'],
+                'prefill' => ['channel' => 'whatsapp', 'segment_type' => 'all', 'throttle_per_minute' => 60]];
             $quick[] = ['key' => 'estimate_audience', 'label' => 'Estimate an audience', 'method' => 'POST', 'endpoint' => '/papi/comms/campaigns/estimate-simple', 'actor' => 'human',
-                'schema' => ['channel' => 'enum:email,whatsapp,both', 'segment_type' => 'enum:all,tag,city,ordered_within_days,not_ordered_within_days', 'segment_value' => 'text'],
-                'labels' => ['channel' => 'Channel', 'segment_type' => 'Audience', 'segment_value' => 'Audience value (tag name / city / number of days — blank for all)'],
-                'prefill' => ['channel' => 'email', 'segment_type' => 'all']];
+                'schema' => ['channel' => 'enum:email,whatsapp,both', 'segment_type' => $segEnum, 'segment_value' => 'text'],
+                'labels' => ['channel' => 'Channel', 'segment_type' => 'Audience', 'segment_value' => $segHelp],
+                'prefill' => ['channel' => 'whatsapp', 'segment_type' => 'all']];
             $quick = array_merge($quick, $campActions);
 
             $quick[] = ['key' => 'suppress_add', 'label' => 'Suppress an address', 'method' => 'POST', 'endpoint' => '/papi/comms/suppressions/add', 'actor' => 'human',
@@ -338,6 +371,10 @@ final class CommunicationCapability implements ProcessCapability
                     'value' => number_format($waSent).' / '.number_format($waLimit),
                     'tone' => $waLeft > 0 ? 'ok' : 'warn',
                     'foot' => number_format($waLeft).' left today · internal cap, not a WhatsApp-guaranteed limit'],
+                ['key' => 'optin', 'label' => 'Marketing opt-in',
+                    'value' => number_format($optInCount),
+                    'tone' => $optInCount > 0 ? 'ok' : 'default',
+                    'foot' => $optOutCount > 0 ? (number_format($optOutCount).' opted out') : 'explicit consent only'],
             ])
             ->quickActions($quick)
             ->tabSections([
@@ -361,6 +398,23 @@ final class CommunicationCapability implements ProcessCapability
                 ['key' => 'setup', 'label' => 'Setup'],
             ])
             ->meta(['capability' => 'communication', 'ttl' => 20, 'layout' => 'record', 'permissions' => ['menu:settings']]);
+    }
+
+    /** Short human label for a campaign's audience definition (for the campaigns list). */
+    private static function audienceLabel(array $seg): string
+    {
+        if (! empty($seg['bought_category']))     return 'Bought: '.$seg['bought_category'];
+        if (! empty($seg['not_bought_category'])) return 'Not bought: '.$seg['not_bought_category'];
+        if (! empty($seg['bought_product']))      return 'Bought product #'.$seg['bought_product'];
+        if (! empty($seg['customer_type']))       return ucfirst((string) $seg['customer_type']);
+        if (! empty($seg['segment']))             return 'Tag: '.$seg['segment'];
+        if (! empty($seg['city']))                return 'City: '.$seg['city'];
+        if (! empty($seg['ordered_within_days'])) return 'Ordered ≤ '.$seg['ordered_within_days'].'d';
+        if (! empty($seg['not_ordered_within_days'])) return 'Winback > '.$seg['not_ordered_within_days'].'d';
+        if (! empty($seg['ordered_between']))     return 'Ordered in range';
+        if (! empty($seg['not_ordered_between'])) return 'Not ordered in range';
+
+        return 'All opted-in';
     }
 
     public function summary(CapabilityContext $ctx, array $scope = []): array

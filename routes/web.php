@@ -207,6 +207,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::post('/papi/comms/campaigns/{id}/pause',  [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignPause']);
     Route::post('/papi/comms/campaigns/{id}/resume', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignResume']);
     Route::post('/papi/comms/campaigns/{id}/cancel', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignCancel']);
+    Route::post('/papi/comms/campaigns/{id}/preview', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignPreview']);
     // v3 CommunicationCapability adapters (G2) — flat-form endpoints delegating to the handlers above.
     Route::post('/papi/comms/messages/retry',        [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageRetryBody']);
     Route::post('/papi/comms/messages/cancel',       [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageCancelBody']);

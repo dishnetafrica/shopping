@@ -521,16 +521,55 @@ class EmailCenterController extends Controller
         return match ($type) {
             'tag'                     => $val !== '' ? ['segment' => $val] : [],
             'city'                    => $val !== '' ? ['city' => $val] : [],
+            'customer_type'           => $val !== '' ? ['customer_type' => $val] : [],
             'ordered_within_days'     => (int) $val > 0 ? ['ordered_within_days' => (int) $val] : [],
             'not_ordered_within_days' => (int) $val > 0 ? ['not_ordered_within_days' => (int) $val] : [],
+            'ordered_between'         => self::rangeSeg($val, 'ordered_between'),
+            'not_ordered_between'     => self::rangeSeg($val, 'not_ordered_between'),
+            'bought_product'          => (int) $val > 0 ? ['bought_product' => (int) $val] : [],
+            'bought_category'         => $val !== '' ? ['bought_category' => $val] : [],
+            'not_bought_category'     => $val !== '' ? ['not_bought_category' => $val] : [],
             default                   => [],
         };
     }
 
-    /** v3 New-campaign form (flat fields incl. audience) → campaignSave. */
+    /** Parse "2026-06-01..2026-06-30" (or " to ") into a date-range segment. */
+    private static function rangeSeg(string $val, string $key): array
+    {
+        $parts = preg_split('/\s*(?:\.\.|\bto\b)\s*/i', $val, 2) ?: [];
+        $from  = trim($parts[0] ?? '');
+        $to    = trim($parts[1] ?? '');
+        if ($from === '' && $to === '') {
+            return [];
+        }
+
+        return [$key => ['from' => $from, 'to' => $to]];
+    }
+
+    /** Flat offer fields → the campaign's `offer` (product being promoted, for template vars). */
+    private function offerFromSimple(Request $request): array
+    {
+        $offer = [];
+        if ((int) $request->input('offer_product_id', 0) > 0) {
+            $offer['product_id'] = (int) $request->input('offer_product_id');
+        }
+        if (trim((string) $request->input('offer_category', '')) !== '') {
+            $offer['category'] = trim((string) $request->input('offer_category'));
+        }
+        if (trim((string) $request->input('offer_promo', '')) !== '') {
+            $offer['promo'] = trim((string) $request->input('offer_promo'));
+        }
+
+        return $offer;
+    }
+
+    /** v3 New-campaign form (flat fields incl. audience + offer) → campaignSave. */
     public function campaignSaveSimple(Request $request)
     {
-        $request->merge(['segment' => $this->segmentFromSimple($request)]);
+        $request->merge([
+            'segment' => $this->segmentFromSimple($request),
+            'offer'   => $this->offerFromSimple($request),
+        ]);
 
         return $this->campaignSave($request);
     }
@@ -687,6 +726,7 @@ class EmailCenterController extends Controller
             'html_body'           => 'nullable|string',
             'text_body'           => 'nullable|string',
             'segment'             => 'nullable|array',
+            'offer'               => 'nullable|array',
             'throttle_per_minute' => 'nullable|integer|min:1|max:600',
         ]);
 
@@ -716,13 +756,17 @@ class EmailCenterController extends Controller
         }
 
         $seg = array_intersect_key((array) ($data['segment'] ?? []),
-            array_flip(['segment', 'city', 'ordered_within_days', 'not_ordered_within_days']));
+            array_flip(['segment', 'city', 'customer_type', 'ordered_within_days', 'not_ordered_within_days',
+                'ordered_between', 'not_ordered_between', 'bought_product', 'bought_category', 'not_bought_category']));
+        $offer = array_intersect_key((array) ($data['offer'] ?? []),
+            array_flip(['product_id', 'product_ids', 'category', 'promo', 'link']));
 
         $c->fill([
             'name' => $data['name'], 'channel' => $data['channel'],
             'template_key' => $tplKey, 'subject' => $data['subject'] ?? null,
             'html_body' => $data['html_body'] ?? null, 'text_body' => $data['text_body'] ?? null,
             'segment' => $seg ?: null,
+            'offer' => $offer ?: null,
             'throttle_per_minute' => (int) ($data['throttle_per_minute'] ?? 60),
         ]);
         $c->tenant_id = $t->id;
@@ -737,11 +781,42 @@ class EmailCenterController extends Controller
         if (! $t) return response()->json(['ok' => false], 401);
 
         $seg = array_intersect_key((array) $request->input('segment', []),
-            array_flip(['segment', 'city', 'ordered_within_days', 'not_ordered_within_days']));
+            array_flip(['segment', 'city', 'customer_type', 'ordered_within_days', 'not_ordered_within_days',
+                'ordered_between', 'not_ordered_between', 'bought_product', 'bought_category', 'not_bought_category']));
         $ch  = (string) $request->input('channel', 'email');
         if (! in_array($ch, \App\Models\CommCampaign::CHANNELS, true)) $ch = 'email';
 
         return response()->json(['ok' => true, 'estimate' => $svc->estimate($t, $seg, $ch)]);
+    }
+
+    /**
+     * Dry-run preview of a saved campaign: the eligibility funnel + a rendered example, sending nothing.
+     * Uses the same CampaignSafetyGuard as the real send (via CampaignPreview), so it can't mislead.
+     */
+    public function campaignPreview(Request $request, int $id)
+    {
+        if ($resp = $this->ownerGate($request)) return $resp;
+        $c = $this->campaignFor($request, $id);
+        if ($c instanceof \Illuminate\Http\JsonResponse) return $c;
+
+        $t = $this->tenant($request);
+        $p = \App\Services\Comms\Marketing\CampaignPreview::for($t, $c);
+
+        $msg = sprintf(
+            "Audience: %s\nMatched from available order data: %s\nOpted-in: %s\nSuppressed: %s · Frequency-held: %s\n".
+            "Daily capacity: %s of %s left today\nEligible now: %s%s\n\nExample:\n%s\n\n%s",
+            $p['audience_def'],
+            number_format($p['total_matching']),
+            number_format($p['opted_in']),
+            number_format($p['suppressed']), number_format($p['frequency_capped']),
+            number_format($p['daily_remaining']), number_format($p['daily_limit']),
+            number_format($p['eligible_now']),
+            $p['sampled'] ? ' (sampled from first '.number_format($p['sample_cap']).')' : '',
+            $p['example'],
+            $p['data_caveat']
+        );
+
+        return response()->json(['ok' => true, 'message' => $msg, 'preview' => $p]);
     }
 
     protected function campaignFor(Request $request, int $id): \App\Models\CommCampaign|\Illuminate\Http\JsonResponse
