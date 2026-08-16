@@ -41,7 +41,7 @@ class CashServiceTest extends TestCase
         ], $o));
     }
 
-    private function seed(Tenant $t): void
+    private function seedCosts(Tenant $t): void
     {
         // cash-in stages (+), across currencies + holders
         $this->cost($t, ['stage' => 'funding',          'currency' => 'USD', 'native_amount' => 1000, 'paid_native' => 1000, 'holder' => 'Ann']);
@@ -61,7 +61,7 @@ class CashServiceTest extends TestCase
     public function test_matches_trade_cashbook_total_no_divergence(): void
     {
         $t = Tenant::factory()->create();
-        $this->seed($t);
+        $this->seedCosts($t);
 
         $this->assertSame(
             $this->tradeCashbookBalances($t),
@@ -73,7 +73,7 @@ class CashServiceTest extends TestCase
     public function test_matches_per_holder(): void
     {
         $t = Tenant::factory()->create();
-        $this->seed($t);
+        $this->seedCosts($t);
 
         foreach (['Ann', 'Bob'] as $h) {
             $this->assertSame(
@@ -87,7 +87,7 @@ class CashServiceTest extends TestCase
     public function test_credit_and_unapproved_rows_are_excluded(): void
     {
         $t = Tenant::factory()->create();
-        $this->seed($t);
+        $this->seedCosts($t);
         $b = CashService::forTenant($t)->balances();
 
         // USD: +1000 funding − 300 purchase = 700 (999 credit + nothing else excluded)
@@ -101,7 +101,7 @@ class CashServiceTest extends TestCase
     public function test_single_currency_balance_helper(): void
     {
         $t = Tenant::factory()->create();
-        $this->seed($t);
+        $this->seedCosts($t);
         $svc = CashService::forTenant($t);
         $this->assertSame(700.0, $svc->balance(['currency' => 'USD']));
         $this->assertSame(380000.0, $svc->balance(['currency' => 'UGX']));

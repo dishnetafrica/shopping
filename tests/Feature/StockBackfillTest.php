@@ -22,7 +22,7 @@ class StockBackfillTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function seed(): Tenant
+    private function seedFixture(): Tenant
     {
         $t = Tenant::factory()->create();
         $u = User::factory()->create(['tenant_id' => $t->id, 'role' => 'owner', 'name' => 'Owner']);
@@ -42,7 +42,7 @@ class StockBackfillTest extends TestCase
 
     public function test_projection_matches_current_stock(): void
     {
-        $t = $this->seed();
+        $t = $this->seedFixture();
         (new StockBackfill())->runForTenant($t->id);
 
         $l = StockLedger::forTenant($t);
@@ -62,14 +62,14 @@ class StockBackfillTest extends TestCase
 
     public function test_zero_stock_products_are_skipped(): void
     {
-        $t = $this->seed();
+        $t = $this->seedFixture();
         (new StockBackfill())->runForTenant($t->id);
         $this->assertSame(0, StockMovement::where('tenant_id', $t->id)->where('sku', 'ZERO')->count());
     }
 
     public function test_backfill_is_idempotent(): void
     {
-        $t = $this->seed();
+        $t = $this->seedFixture();
         $first = (new StockBackfill())->runForTenant($t->id);
         $countAfterFirst = StockMovement::where('tenant_id', $t->id)->count();
 
