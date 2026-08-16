@@ -66,7 +66,7 @@ class AudienceSegmentsTest extends TestCase
         }
     }
 
-    private function count(Tenant $t, array $segment): int
+    private function audienceCount(Tenant $t, array $segment): int
     {
         return app(CampaignService::class)->audienceQuery($t, $segment, 'whatsapp')->count();
     }
@@ -82,7 +82,7 @@ class AudienceSegmentsTest extends TestCase
         $this->order($t, '256700000001', [$foil => 2]);
         $this->order($t, '256700000002', [$rice => 1]);
 
-        $this->assertSame(1, $this->count($t, ['bought_product' => $foil]), 'only the foil buyer');
+        $this->assertSame(1, $this->audienceCount($t, ['bought_product' => $foil]), 'only the foil buyer');
     }
 
     public function test_bought_and_not_bought_category(): void
@@ -98,8 +98,8 @@ class AudienceSegmentsTest extends TestCase
         $this->order($t, '256700000002', [$film => 1]);   // Kitchen
         $this->order($t, '256700000003', [$rice => 1]);   // Grocery
 
-        $this->assertSame(2, $this->count($t, ['bought_category' => 'Kitchen']), 'foil + film buyers');
-        $this->assertSame(1, $this->count($t, ['not_bought_category' => 'Kitchen']), 'only the rice buyer');
+        $this->assertSame(2, $this->audienceCount($t, ['bought_category' => 'Kitchen']), 'foil + film buyers');
+        $this->assertSame(1, $this->audienceCount($t, ['not_bought_category' => 'Kitchen']), 'only the rice buyer');
     }
 
     public function test_items_json_fallback_catches_buyer_missing_from_order_items(): void
@@ -110,7 +110,7 @@ class AudienceSegmentsTest extends TestCase
         // Order recorded ONLY in items_json (order_items never mirrored) — the sparse case.
         $this->order($t, '256700000001', [$foil => 1], writeOrderItems: false);
 
-        $this->assertSame(1, $this->count($t, ['bought_product' => $foil]),
+        $this->assertSame(1, $this->audienceCount($t, ['bought_product' => $foil]),
             'buyer is found via items_json even when order_items is empty');
     }
 
@@ -123,9 +123,9 @@ class AudienceSegmentsTest extends TestCase
         $this->customer($t, '256700000001');
         $this->order($t, '256700000001', [$big => 1], writeOrderItems: false); // items_json only
 
-        $this->assertSame(0, $this->count($t, ['bought_product' => $small]),
+        $this->assertSame(0, $this->audienceCount($t, ['bought_product' => $small]),
             'a buyer of the big product must not match the small product id');
-        $this->assertSame(1, $this->count($t, ['bought_product' => $big]));
+        $this->assertSame(1, $this->audienceCount($t, ['bought_product' => $big]));
     }
 
     public function test_customer_type_wholesale(): void
@@ -135,8 +135,8 @@ class AudienceSegmentsTest extends TestCase
         $this->customer($t, '256700000002', ['segment' => 'wholesale']);
         $this->customer($t, '256700000003', ['segment' => 'retail']);
 
-        $this->assertSame(2, $this->count($t, ['customer_type' => 'wholesale']), 'dealer_tier OR segment tag');
-        $this->assertSame(1, $this->count($t, ['customer_type' => 'retail']));
+        $this->assertSame(2, $this->audienceCount($t, ['customer_type' => 'wholesale']), 'dealer_tier OR segment tag');
+        $this->assertSame(1, $this->audienceCount($t, ['customer_type' => 'retail']));
     }
 
     public function test_ordered_between_date_range(): void
@@ -148,7 +148,7 @@ class AudienceSegmentsTest extends TestCase
         $this->order($t, '256700000001', [$rice => 1], when: '2026-06-15');
         $this->order($t, '256700000002', [$rice => 1], when: '2026-01-10');
 
-        $c = $this->count($t, ['ordered_between' => ['from' => '2026-06-01', 'to' => '2026-06-30']]);
+        $c = $this->audienceCount($t, ['ordered_between' => ['from' => '2026-06-01', 'to' => '2026-06-30']]);
         $this->assertSame(1, $c, 'only the June buyer');
     }
 
@@ -163,6 +163,6 @@ class AudienceSegmentsTest extends TestCase
         DB::table('customer_profiles')->insert(['tenant_id' => $bId, 'phone' => '256700000001',
             'marketing_opted_in_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
 
-        $this->assertSame(1, $this->count($a, ['bought_product' => $foilA]), 'only tenant A rows');
+        $this->assertSame(1, $this->audienceCount($a, ['bought_product' => $foilA]), 'only tenant A rows');
     }
 }

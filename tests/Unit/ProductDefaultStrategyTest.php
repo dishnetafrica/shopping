@@ -28,35 +28,35 @@ class ProductDefaultStrategyTest extends TestCase
     {
         return new ShoppingEngine(new ShoppingParser(), new CatalogueMatcher(), new ClarificationFlow(), 'UGX', $defaults, $strategy);
     }
-    private function name(array $r, string $kw): ?string { foreach ($r['cart'] as $l) if (stripos($l['name'], $kw) !== false) return $l['name']; return null; }
+    private function matchName(array $r, string $kw): ?string { foreach ($r['cart'] as $l) if (stripos($l['name'], $kw) !== false) return $l['name']; return null; }
     private function qty(array $r, string $kw): int { foreach ($r['cart'] as $l) if (stripos($l['name'], $kw) !== false) return $l['qty']; return 0; }
     private function opts(array $r): int { return count($r['state']['options'] ?? []); }
 
     public function test_default_applied_to_generic_word(): void
     {
         $r = $this->eng($this->def)->handle('Rice', $this->cat, [], []);
-        $this->assertSame('Pakistan Rice 5kg', $this->name($r, 'Rice'));
+        $this->assertSame('Pakistan Rice 5kg', $this->matchName($r, 'Rice'));
         $this->assertSame(1, $this->qty($r, 'Rice'));
     }
 
     public function test_quantity_with_default(): void
     {
         $r = $this->eng($this->def)->handle('5 rice', $this->cat, [], []);
-        $this->assertSame('Pakistan Rice 5kg', $this->name($r, 'Rice'));
+        $this->assertSame('Pakistan Rice 5kg', $this->matchName($r, 'Rice'));
         $this->assertSame(5, $this->qty($r, 'Rice'));
     }
 
     public function test_stated_size_beats_default(): void
     {
         $r = $this->eng($this->def)->handle('rice 2kg', $this->cat, [], []);
-        $this->assertSame('Pearl Rice 2kg', $this->name($r, 'Rice'));
+        $this->assertSame('Pearl Rice 2kg', $this->matchName($r, 'Rice'));
         $this->assertSame(1, $this->qty($r, 'Rice'));
     }
 
     public function test_count_and_size_together(): void
     {
         $r = $this->eng($this->def)->handle('2 5kg rice', $this->cat, [], []);
-        $this->assertSame('Pakistan Rice 5kg', $this->name($r, 'Rice'));
+        $this->assertSame('Pakistan Rice 5kg', $this->matchName($r, 'Rice'));
         $this->assertSame(2, $this->qty($r, 'Rice'));
     }
 
@@ -117,9 +117,9 @@ class ProductDefaultStrategyTest extends TestCase
             ['id'=>5,'name'=>'Kinyara Sugar 5kg','category'=>'Sugar','keywords'=>'','price'=>20000,'stock'=>10],
         ];
         $r = $this->eng(['rice'=>3,'sugar'=>4])->handle('2 Rice and 3 Sugar', $cat, [], []);
-        $this->assertSame('Pakistan Rice 5kg', $this->name($r,'Rice'));
+        $this->assertSame('Pakistan Rice 5kg', $this->matchName($r,'Rice'));
         $this->assertSame(2, $this->qty($r,'Rice'));
-        $this->assertSame('Kinyara Sugar 1kg', $this->name($r,'Sugar'));
+        $this->assertSame('Kinyara Sugar 1kg', $this->matchName($r,'Sugar'));
         $this->assertSame(3, $this->qty($r,'Sugar'));
     }
 
@@ -135,8 +135,8 @@ class ProductDefaultStrategyTest extends TestCase
         ];
         $a = $this->eng(['rice'=>3])->handle('Rice', $catA, [], []);
         $b = $this->eng(['rice'=>101])->handle('Rice', $catB, [], []);
-        $this->assertSame('Pakistan Rice 5kg', $this->name($a,'Rice'));
-        $this->assertSame('Local Rice 1kg', $this->name($b,'Rice'));
+        $this->assertSame('Pakistan Rice 5kg', $this->matchName($a,'Rice'));
+        $this->assertSame('Local Rice 1kg', $this->matchName($b,'Rice'));
         $this->assertSame(3, $a['cart'][0]['product_id']);
         $this->assertSame(101, $b['cart'][0]['product_id']);
     }
