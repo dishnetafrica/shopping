@@ -27,11 +27,21 @@ namespace App\Services\Storefront;
 final class WholesaleHome
 {
     public const MODE = 'wholesale';
+    public const MODE_SOLAR = 'solar';
 
-    /** Is the wholesale home switched on for this settings map? */
+    /** Is a configured home (wholesale or the dedicated solar layout) switched on for this settings map? */
     public static function enabled(array $settings): bool
     {
-        return strtolower(trim((string) ($settings['storefront_home'] ?? ''))) === self::MODE;
+        $m = strtolower(trim((string) ($settings['storefront_home'] ?? '')));
+
+        return $m === self::MODE || $m === self::MODE_SOLAR;
+    }
+
+    /** Which home layout the SPA should render: 'solar' for the dedicated solar page, else 'wholesale'. */
+    public static function layout(array $settings): string
+    {
+        return strtolower(trim((string) ($settings['storefront_home'] ?? ''))) === self::MODE_SOLAR
+            ? self::MODE_SOLAR : self::MODE;
     }
 
     /**
@@ -55,6 +65,7 @@ final class WholesaleHome
 
         return [
             'enabled' => true,
+            'layout'  => self::layout($settings),   // 'solar' → the SPA renders the dedicated solar home
             'hero'    => [
                 'title'  => $str('home_hero_title', 'Your Trusted Wholesale Partner'),
                 'title2' => $str('home_hero_title2', $city !== '' ? 'in ' . $city : ''),
