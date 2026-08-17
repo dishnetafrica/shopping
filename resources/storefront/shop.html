@@ -1806,7 +1806,11 @@ var SHOP = window.SHOP || {};
 /* Vertical-driven storefront mode. 'snacks' = advance-booking pickup (no delivery). */
 var VERTICAL  = SHOP.vertical || 'grocery';
 var IS_PICKUP = (VERTICAL === 'snacks');
+var IS_SOLARHOME = !!(SHOP.home && SHOP.home.enabled && SHOP.home.layout === 'solar');
 function applyVertical(){
+  // Solar is quote \u2192 site survey \u2192 install, not a same-day grocery delivery ETA, so the
+  // "Set your location for delivery time" bar is grocery chrome that doesn't belong here.
+  if(IS_SOLARHOME){ var db=document.getElementById('delvBar'); if(db) db.style.display='none'; }
   if(!IS_PICKUP) return;                       // grocery/restaurant: unchanged
   var bar=document.getElementById('delvBar'); if(bar) bar.style.display='none';
   var sub=document.getElementById('hdrSub');   if(sub) sub.textContent='Order ahead \u00B7 collect on WhatsApp';
