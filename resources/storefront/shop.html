@@ -4460,8 +4460,9 @@ function solarHome(){
   var t1=hero.title||'Power Your Future', t2=hero.title2||'', t3=hero.title3||'', hsub=hero.sub||'';
   var beIc=['🛡️','🎧','✅','🔧','🚚'];
   var beHtml=ben.slice(0,5).map(function(b,i){return '<div class="sol-be"><span class="sol-bei">'+(beIc[i]||'✅')+'</span><div><b>'+esc(b.t||'')+'</b><span>'+esc(b.s||'')+'</span></div></div>';}).join('');
-  function catImg(nm){ for(var i=0;i<PRODUCTS.length;i++){ if((PRODUCTS[i].category||'')===nm && PRODUCTS[i].image) return PRODUCTS[i].image; } return ''; }
-  var catHtml=(CATS||[]).slice(0,6).map(function(nm){ var im=catImg(nm); var pic=im?('<img src="'+esc(im)+'" alt="'+esc(nm)+'" loading="lazy">'):'<div class="sol-catph">☀</div>'; return '<a class="sol-cat" onclick="setCat(\''+String(nm).replace(/'/g,"\\'")+'\')">'+pic+'<b>'+esc(nm)+'</b></a>'; }).join('');
+  // CATS entries are {name,img,count} objects (built from the live catalogue), not strings —
+  // the category already carries its own representative image.
+  var catHtml=(CATS||[]).slice(0,6).map(function(c){ var nm=(c&&c.name)?String(c.name):''; if(!nm)return ''; var im=(c&&c.img)?c.img:''; var pic=im?('<img src="'+esc(im)+'" alt="'+esc(nm)+'" loading="lazy">'):'<div class="sol-catph">☀</div>'; return '<a class="sol-cat" onclick="setCat('+jk(nm)+')">'+pic+'<b>'+esc(nm)+'</b></a>'; }).join('');
   var sols=[['home','Residential','Reliable power for your home'],['business','Commercial','Clean energy for your business'],['business','Industrial','High-performance systems for industry'],['institution','Institutions','Schools, clinics &amp; offices'],['farm','Farms &amp; Agriculture','Solar for pumps &amp; irrigation']];
   var solHtml=sols.map(function(s){return '<a class="sol-sol" href="'+base+'/solar?customer_type='+s[0]+'"><b>'+s[1]+'</b><span>'+s[2]+'</span><em>Explore →</em></a>';}).join('');
   var pop=PRODUCTS.slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,8);
