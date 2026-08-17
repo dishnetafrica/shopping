@@ -317,7 +317,9 @@ class StorefrontController extends Controller
 
         // Solar Experience Center CTA — a top strip on solar shops linking to the guided assessment.
         if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SOLAR) {
-            $cta = '<a href="' . e($base) . '/solar" style="display:block;background:linear-gradient(135deg,#d97706,#f59e0b);'
+            // Themed from the shop's palette (var --green-d/--green, set by the SPA applyTheme) with the
+            // original amber as the fallback, so this solar-only strip follows each solar shop's colours.
+            $cta = '<a href="' . e($base) . '/solar" style="display:block;background:linear-gradient(135deg,var(--green-d,#0A6E1A),var(--green,#0C831F));'
                 . 'color:#fff;text-align:center;padding:11px 14px;font-weight:700;text-decoration:none;'
                 . 'font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px">'
                 . '☀️ Design your solar system in 3 minutes — Start my free assessment →</a>';

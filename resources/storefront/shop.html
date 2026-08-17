@@ -4417,9 +4417,37 @@ function whCats(){
   var more=CATS.length>12?'<button class="whallcats" onclick="showCategories()">All '+CATS.length+' categories →</button>':'';
   return '<div class="whsec"><div class="section-title">📦 Browse categories</div><div class="catgrid">'+tiles+'</div>'+more+'</div>';
 }
+/* Solar guided-shopping band ("Not sure what you need?") — solar-vertical tenants only. Pure entry
+   affordance into the EXISTING /solar advisor (StorefrontSolarController); no sizing/logic here.
+   Styled from the theme tokens so it follows each solar shop's palette. Hidden for every other shop. */
+function solarGuide(){
+  if((SHOP.vertical||'')!=='solar') return '';
+  var base=(SHOP.base||'');
+  var tiles=[['home','🏠','Home'],['business','🏢','Business'],['farm','🌾','Farm'],['institution','🏫','Institution'],['other','⚡','Other']];
+  var opts=tiles.map(function(t){
+    return '<a class="sg-opt" href="'+base+'/solar?customer_type='+t[0]+'"><span class="sg-ic">'+t[1]+'</span><span>'+esc(t[2])+'</span></a>';
+  }).join('');
+  return '<style id="sgCss">'
+    +'.solarGuide{padding:12px 14px}'
+    +'.sg-in{max-width:1100px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:14px;padding:16px 18px;display:flex;flex-wrap:wrap;align-items:center;gap:14px}'
+    +'.sg-head{flex:1 1 260px}.sg-head h2{margin:0 0 4px;font-size:19px;color:var(--green)}.sg-head p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.4}'
+    +'.sg-opts{display:flex;flex-wrap:wrap;gap:8px}'
+    +'.sg-opt{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:72px;padding:9px 8px;border:1px solid var(--line);border-radius:12px;background:var(--bg);font-size:12px;font-weight:600;color:var(--ink);text-decoration:none;transition:.12s}'
+    +'.sg-opt:hover{border-color:var(--green);color:var(--green)}.sg-ic{font-size:20px;line-height:1}'
+    +'.sg-cta{white-space:nowrap;background:var(--green);color:#fff;font-weight:800;padding:12px 18px;border-radius:12px;text-decoration:none}.sg-cta:hover{background:var(--green-d)}'
+    +'@media(max-width:640px){.sg-in{flex-direction:column;align-items:stretch}.sg-opts{justify-content:space-between}.sg-cta{text-align:center}}'
+    +'</style>'
+    +'<section class="solarGuide"><div class="sg-in">'
+    +'<div class="sg-head"><h2>Not sure what you need?</h2><p>Tell us what you want to power and we’ll help you choose the right solar solution.</p></div>'
+    +'<div class="sg-opts">'+opts+'</div>'
+    +'<a class="sg-cta" href="'+base+'/solar">Find My Solar Solution →</a>'
+    +'</div></section>';
+}
+
 function whHome(){
   return wsBar()
     +whHero()
+    +solarGuide()
     +'<div id="whBiz">'+whBizGrid()+'</div>'
     +'<div id="whBest">'+trendingRail()+popularRail('🔥 Wholesale Best Sellers')+'</div>'
     +'<div id="whPromo">'+whPromoSec()+'</div>'
