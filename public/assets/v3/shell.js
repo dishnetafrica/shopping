@@ -6,7 +6,7 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
   jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping',
-  tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence' };
+  tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence', engagement:'Customer Engagement' };
 // Navigation IA (2026-08) — grouped around the operator's question in the moment (Am I selling? buying?
 // counting stock? handling money?), each screen under exactly one group. Group HEADERS live here; item
 // LABELS live in LABELS above; has() gates by key regardless of group, so moving a key between groups
@@ -17,7 +17,7 @@ const GROUPS = [ ['Home',['briefing','worklist','setup','guide']],
   ['Buy',['purchase.process','suppliers','procurement.hub','demand.plans','juba.stock']],
   ['Stock',['products','categories','suggestions','warehouse','consignments']],
   ['Money',['finance','cashbook','partners']],
-  ['Communication',['chats','communication','campaigns','ai.campaign','ads','diagnostics']],
+  ['Communication',['chats','communication','campaigns','engagement','ai.campaign','ads','diagnostics']],
   ['Operations',['jobs','maintenance','claims','tasks','dispatch','transport','scheduled']],
   ['Reports',['pnl','books','storefront.insights']],
   ['Settings',['settings','team','modules','billing','storefront.collections','storefront.kits','storefront.delivery']] ];
@@ -26,7 +26,7 @@ const NAVCOUNT = { growth:'growth', demand:'demand', discovery:'discovery', visi
 // DOCUMENTATION ONLY — read by nothing. What actually gates a menu item is has() below,
 // via the permission keys the server sends. Left here as a list of what has been built,
 // and labelled because four test contracts were written against it as though it were a gate.
-const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence']);
+const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence','engagement']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -85,6 +85,7 @@ const P = {
   ads:'M11 5 6 9H2v6h4l5 4V5zM19 12a7 7 0 0 0-2-4.9M15.5 8.5a3 3 0 0 1 0 5',
   demand:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z', discovery:'M21 21l-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z', visits:'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', growth:'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6', leads:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8M19 8v6M22 11h-6',
   campaigns:'M22 2 11 13M22 2l-7 20-4-9-9-4z',
+  engagement:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z',
   'storefront.insights':'M3 3v18h18M7 15l3-4 3 3 4-6',
   'storefront.collections':'M3 9l1-5h16l1 5M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 9a3 3 0 0 0 6 0',
   'storefront.kits':'M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
@@ -442,7 +443,7 @@ function renderNav(caps){
      this gate can only ever reveal too much, never hide a tool someone is using. */
   const vert = (CFG.flags && typeof CFG.flags.vertical === 'string') ? CFG.flags.vertical : '';
   const solarish = k => k!=='advisor' || vert==='' || vert==='solar';
-  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
+  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || (k==='engagement' && keys.has('campaigns')) || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';
@@ -633,6 +634,8 @@ async function route(key, id){
   if(key==='consignments'){ document.getElementById('view').innerHTML='<iframe title="Consignments" src="/panel/consignment?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // AI Campaign generator (v4.5) — owner tool; embedded like settings/pos.
   if(key==='ai.campaign'){ document.getElementById('view').innerHTML='<iframe title="AI Campaign" src="/panel/ai-campaign?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // Customer Engagement (re-engagement plan) — read-only dashboard, embedded like the other owner tools.
+  if(key==='engagement'){ document.getElementById('view').innerHTML='<iframe title="Customer Engagement" src="/panel/engagement?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // TenderBot (v4.21) — the AI bid desk; owner tool, embedded like POS/AI Campaign. Menu entry only
   // appears when Settings → Tenders → Watch for tenders is ON (server flag), but the route always works.
   if(key==='evidence'){ document.getElementById('view').innerHTML='<iframe title="Evidence" src="/papi/evidence?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
