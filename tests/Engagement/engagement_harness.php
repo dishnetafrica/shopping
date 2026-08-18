@@ -17,6 +17,7 @@ $base = dirname(__DIR__, 2) . '/app/Services/Engagement/';
 require $base . 'ContactScore.php';
 require $base . 'EngagementEligibility.php';
 require $base . 'CampaignType.php';
+require $base . 'EngagementMessage.php';
 require dirname(__DIR__, 2) . '/app/Services/Comms/Marketing/OptInKeywords.php';
 require dirname(__DIR__, 2) . '/app/Services/Comms/Marketing/OptOutKeywords.php';
 
@@ -25,6 +26,7 @@ use App\Services\Comms\Marketing\OptOutKeywords;
 use App\Services\Engagement\CampaignType;
 use App\Services\Engagement\ContactScore;
 use App\Services\Engagement\EngagementEligibility as EE;
+use App\Services\Engagement\EngagementMessage;
 
 $pass = 0; $fail = 0;
 function ok(string $n, bool $c): void {
@@ -94,6 +96,19 @@ ok('bare YES is NOT opt-in (ambiguous)',          OptInKeywords::isOptIn('yes') 
 ok('STOP is not misread as opt-in',               OptInKeywords::isOptIn('STOP') === false);
 ok('STOP still detected as opt-out',              OptOutKeywords::isStop('STOP') === true);
 ok('opt-in word is not an opt-out',               OptOutKeywords::isStop('SUBSCRIBE') === false);
+
+echo "\n\033[1mEngagementMessage — fixed, personalised, always opt-out-able\033[0m\n";
+$m1 = EngagementMessage::compose(['name'=>'John Doe','shop'=>'Family Shoppers','product'=>'Kabras Sugar','campaign_type'=>CampaignType::REPLENISHMENT]);
+ok('greets by FIRST name only',                   strpos($m1,'Hi John') !== false && strpos($m1,'Doe') === false);
+ok('includes the shop name',                      strpos($m1,'Family Shoppers') !== false);
+ok('includes the suggested product',              strpos($m1,'Kabras Sugar') !== false);
+ok('always carries a STOP opt-out line',          strpos($m1,'STOP') !== false);
+$m2 = EngagementMessage::compose(['name'=>'','shop'=>'Shop','campaign_type'=>CampaignType::NEW_STOCK]);
+ok('no name → neutral greeting',                  strpos($m2,'Hello') === 0 || strpos($m2,'Hello')!==false);
+ok('a phone-number "name" is not used',           strpos(EngagementMessage::compose(['name'=>'+256772123456','shop'=>'Shop','campaign_type'=>CampaignType::NEW_STOCK]),'256') === false);
+$mw = EngagementMessage::compose(['name'=>'Amina','shop'=>'Shop','campaign_type'=>CampaignType::DORMANT_WINBACK]);
+ok('win-back copy differs from new-stock copy',   $mw !== EngagementMessage::compose(['name'=>'Amina','shop'=>'Shop','campaign_type'=>CampaignType::NEW_STOCK]));
+ok('composes without a product too',              strpos(EngagementMessage::compose(['name'=>'Amina','shop'=>'Shop','campaign_type'=>CampaignType::REPLENISHMENT]),'STOP') !== false);
 
 echo "\n" . str_repeat('─', 60) . "\n";
 echo $fail === 0

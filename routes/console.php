@@ -17,6 +17,9 @@ Schedule::command('relationship:plan')->dailyAt('07:30')->timezone('Africa/Nairo
 // Phase 1 — Customer Re-engagement Engine: build the daily "who to contact today" plan (NO sending).
 // Runs after relationship:stages (03:15) so RFM health is fresh. No-ops unless engagement_enabled is ON.
 Schedule::command('reengage:plan')->dailyAt('06:20')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
+// Phase 2b — PACED sender for the daily plan. Small batches, daytime-gated inside the command.
+// No-ops unless BOTH engagement_enabled AND engagement_send_enabled are ON (the latter is OFF by default).
+Schedule::command('reengage:send-tick')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:review')->monthlyOn(1, '08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 // Weekly WhatsApp to the owner: items customers asked for that we don't stock + bot gaps (purchasing signal).
 Schedule::command('demand:weekly')->weeklyOn(1, '08:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();
