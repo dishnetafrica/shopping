@@ -717,6 +717,7 @@ class EmailCenterController extends Controller
                     'finished_at' => optional($c->finished_at)->toDateTimeString(),
                     'total_estimated' => $c->total_estimated, 'enqueued_count' => $c->enqueued_count,
                     'throttle_per_minute' => $c->throttle_per_minute,
+                    'daily_send_cap' => $c->daily_send_cap,
                     'stats' => $s,
                 ];
             });
@@ -740,6 +741,7 @@ class EmailCenterController extends Controller
             'segment'             => 'nullable|array',
             'offer'               => 'nullable|array',
             'throttle_per_minute' => 'nullable|integer|min:1|max:600',
+            'daily_send_cap'      => 'nullable|integer|min:0|max:100000',
         ]);
 
         if (! empty($data['id'])) {
@@ -780,6 +782,8 @@ class EmailCenterController extends Controller
             'segment' => $seg ?: null,
             'offer' => $offer ?: null,
             'throttle_per_minute' => (int) ($data['throttle_per_minute'] ?? 60),
+            // 0 / null → no per-campaign daily limit (only the tenant-wide cap applies).
+            'daily_send_cap' => (int) ($data['daily_send_cap'] ?? 0) > 0 ? (int) $data['daily_send_cap'] : null,
         ]);
         $c->tenant_id = $t->id;
         $c->save();
@@ -798,7 +802,18 @@ class EmailCenterController extends Controller
         $ch  = (string) $request->input('channel', 'email');
         if (! in_array($ch, \App\Models\CommCampaign::CHANNELS, true)) $ch = 'email';
 
-        return response()->json(['ok' => true, 'estimate' => $svc->estimate($t, $seg, $ch)]);
+        $est = $svc->estimate($t, $seg, $ch);
+
+        // Weekly-plan maths: how many days at the chosen per-day pace, and the per-day breakdown.
+        $perDay   = (int) $request->input('daily_send_cap', 0);
+        $audience = $ch === 'both'
+            ? max((int) ($est['email'] ?? 0), (int) ($est['whatsapp'] ?? 0))
+            : (int) ($est[$ch] ?? 0);
+        $est['per_day']   = $perDay > 0 ? $perDay : null;
+        $est['days']      = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::days($audience, $perDay) : 1;
+        $est['breakdown'] = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::breakdown($audience, $perDay) : [];
+
+        return response()->json(['ok' => true, 'estimate' => $est]);
     }
 
     /**

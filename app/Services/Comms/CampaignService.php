@@ -79,6 +79,23 @@ class CampaignService
         return $out;
     }
 
+    /** How many messages THIS campaign has enqueued today (tenant-local day) — the per-campaign batch meter. */
+    protected function campaignSentToday(CommCampaign $c, Tenant $tenant): int
+    {
+        $tz = (string) ($tenant->setting('timezone', config('app.timezone', 'UTC')) ?: 'UTC');
+        try {
+            $start = \Illuminate\Support\Carbon::now($tz)->startOfDay();
+        } catch (\Throwable $e) {
+            $start = \Illuminate\Support\Carbon::now()->startOfDay();
+        }
+
+        return (int) DB::table('comm_messages')
+            ->where('tenant_id', $c->tenant_id)
+            ->where('related_type', 'campaign')->where('related_id', $c->id)
+            ->where('created_at', '>=', $start)
+            ->count();
+    }
+
     // ------------------------------------------------------------ lifecycle
 
     /** Launch (now or at $when). Locks in the estimate; the sweep does the rest. */
@@ -161,6 +178,19 @@ class CampaignService
                 return 0;
             }
             $batchLimit = min($batchLimit, $remaining);
+        }
+
+        // Per-campaign daily batch — "send X/day, spread over the week." Caps THIS campaign to its own
+        // daily_send_cap regardless of channel; when today's share is spent, enqueue nothing and DON'T
+        // advance the cursor, so it resumes tomorrow until the audience is exhausted.
+        $perDay = (int) ($c->daily_send_cap ?? 0);
+        if ($perDay > 0) {
+            $campaignLeft = $perDay - $this->campaignSentToday($c, $tenant);
+            if ($campaignLeft <= 0) {
+                $c->save();
+                return 0;
+            }
+            $batchLimit = min($batchLimit, $campaignLeft);
         }
 
         // ONE cursor walk over profiles (union of both channel audiences when
