@@ -26,6 +26,38 @@ class Product extends Model
     {
         return $this->hasMany(\App\Models\KitComponent::class, 'kit_product_id');
     }
+
+    /**
+     * The primary/featured photo for cards, listings and the catalogue feed — the ONE resolver
+     * for "which photo shows first".
+     *
+     * A product's first photo may live in image_url (the hero) OR — when photos were uploaded into
+     * the gallery slots without a hero being set — in gallery_1..3. The storefront product-detail
+     * gallery already falls back through these columns (StorefrontProductController::gallery), but the
+     * card/listing feed read image_url alone, so a product whose only photos were in the gallery
+     * rendered a placeholder ("first photo not showing after multiple photos"). Both paths now resolve
+     * the primary through here: the first non-empty of hero → gallery_1 → gallery_2 → gallery_3.
+     *
+     * Note: this is a DISPLAY resolver, not an authoring one — the seller panel deliberately shows the
+     * raw hero/gallery columns so the owner can see and set each slot.
+     */
+    public function primaryImage(): ?string
+    {
+        return self::firstImage($this->image_url, $this->gallery_1, $this->gallery_2, $this->gallery_3);
+    }
+
+    /** First non-empty image among the given candidates (hero, then gallery slots), or null. Pure. */
+    public static function firstImage(?string ...$candidates): ?string
+    {
+        foreach ($candidates as $c) {
+            $c = trim((string) $c);
+            if ($c !== '') {
+                return $c;
+            }
+        }
+
+        return null;
+    }
     protected $casts = ['price'=>'decimal:2','base_price'=>'decimal:2','cost_price'=>'decimal:2','active'=>'boolean','serialized'=>'boolean','warranty_manufacturer_months'=>'integer','warranty_company_months'=>'integer','is_kit'=>'boolean','sold_by_weight'=>'boolean','reference_weight_grams'=>'integer','reference_price'=>'decimal:2','display_order'=>'integer','is_fresh_today'=>'boolean','archived_at'=>'datetime','hidden'=>'boolean','reorder_point'=>'integer'];
 
     /** E6.4 (prereq) — mirror catalog stock changes into the one stock ledger (gated on stock_ledger). */

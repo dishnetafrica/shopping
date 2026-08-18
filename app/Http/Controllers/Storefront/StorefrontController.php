@@ -1060,7 +1060,10 @@ class StorefrontController extends Controller
                         // To show it again once the two screens agree:
                         //   Tenant::find(17)->update(['settings' => [...$s, 'storefront_show_stock' => true]])
                         'Stock'        => $showStock ? ($p->stock === null ? null : (int) $p->stock) : null,
-                        'Image'        => $this->imageUrl($p->image_url),
+                        // Primary card photo. Falls back hero → gallery_1..3 (Product::primaryImage) so a
+                        // product whose only photos are in the gallery still shows its first photo on the
+                        // card, matching the detail page instead of rendering a placeholder.
+                        'Image'        => $this->imageUrl($p->primaryImage()),
                         'Modifiers'    => $mods[$p->id] ?? [],
                         'MOQ'          => $p->moq === null ? null : (int) $p->moq,
                         'PackSize'     => $p->pack_size === null ? null : (int) $p->pack_size,
