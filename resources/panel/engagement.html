@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Engagement</title>
+<link rel="stylesheet" href="/panel/shared/tokens.css">
+<style>
+  :root{ --g:#0C831F; --g-d:#0A6E1A; --line:#e5e7eb; --muted:#6b7280; --ink:#14201a; --card:#fff; --bg:#f6f7f8; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:22px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .phase{display:inline-block;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;margin-bottom:16px}
+  .cfg{color:var(--muted);font-size:12.5px;margin:4px 0 18px}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px}
+  @media(max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .tile .n{font-size:26px;font-weight:800;line-height:1.1}
+  .tile .l{font-size:12px;color:var(--muted);margin-top:3px}
+  .tile.step{position:relative}
+  .tile.hi .n{color:var(--g)}
+  .flow{color:var(--muted);font-size:12px;text-align:center;margin:4px 0 18px}
+  .warn{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.5;margin:0 0 18px}
+  .blocked{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12px;color:#374151}
+  .chip b{color:var(--ink)}
+  h2{font-size:15px;margin:22px 0 10px}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid #eef1ee;vertical-align:top}
+  th{background:#fafbfa;color:#6b7280;font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+  tr:last-child td{border-bottom:0}
+  .score{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#e8f5ec;color:var(--g-d);font-weight:800;font-size:13px}
+  .ctype{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:7px;padding:2px 8px;font-size:11.5px;font-weight:700;white-space:nowrap}
+  .prod{color:#374151}
+  .why{color:var(--muted);font-size:12px}
+  .empty{background:#fff;border:1px dashed var(--line);border-radius:14px;padding:28px;text-align:center;color:var(--muted)}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Customer Engagement</h1>
+  <p class="sub">Who ShopBot would contact today, and why — scored from your real customer history.</p>
+  <div class="phase">PHASE 1 · PLANNING ONLY — no messages are sent</div>
+  <div class="cfg" id="cfg"></div>
+
+  <div class="tiles" id="tiles"></div>
+  <div class="flow">past buyers → opted-in → eligible → today’s list</div>
+
+  <div id="warn"></div>
+  <div class="blocked" id="blocked"></div>
+
+  <h2>Today’s list</h2>
+  <div id="queue"></div>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function tile(n,l,hi){return '<div class="tile step'+(hi?' hi':'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>';}
+var BLABEL={not_opted_in:'Not opted in',opted_out:'Opted out',suppressed:'Suppressed',cooldown:'In cooldown',active_conversation:'Active chat'};
+
+async function load(){
+  var d;
+  try{ var r=await fetch('/papi/engagement-plan',{cache:'no-store'}); d=await r.json(); }
+  catch(e){ document.getElementById('queue').innerHTML='<div class="empty">Couldn’t load the plan.</div>'; return; }
+  if(!d||!d.ok){ document.getElementById('queue').innerHTML='<div class="empty">Couldn’t load the plan.</div>'; return; }
+
+  var c=d.counts||{};
+  document.getElementById('cfg').innerHTML =
+    'Target <b>'+ (d.target||0) +'</b>/day · cooldown <b>'+ (d.cooldown_days||0) +'</b> days · plan '
+    + (d.plan_date? esc(d.plan_date) : '<i>not built yet</i>')
+    + ' · daily plan is currently <b>'+ (d.enabled?'ON':'OFF') +'</b>';
+
+  document.getElementById('tiles').innerHTML =
+      tile(c.past_buyers||0,'Past buyers')
+    + tile(c.opted_in||0,'Opted in to marketing')
+    + tile(c.eligible||0,'Eligible today')
+    + tile(c.chosen||0,'On today’s list',true);
+
+  // consent cold-start callout
+  var w='';
+  if((c.past_buyers||0)>0 && (c.opted_in||0)===0){
+    w='<div class="warn"><b>Consent cold-start:</b> none of your '+(c.past_buyers||0)+' past buyers have opted in to marketing yet, so nothing is eligible to contact. The scoring is working — the audience is empty until opt-in is collected. This is expected and safe: ShopBot will not message anyone without explicit consent.</div>';
+  } else if((c.eligible||0)===0 && d.plan_date){
+    w='<div class="warn">No customers are eligible today. Check the “not eligible” breakdown below.</div>';
+  }
+  document.getElementById('warn').innerHTML=w;
+
+  // blocked breakdown
+  var b=d.blocked||{}, chips=[];
+  Object.keys(b).forEach(function(k){ chips.push('<span class="chip">'+esc(BLABEL[k]||k)+': <b>'+b[k]+'</b></span>'); });
+  document.getElementById('blocked').innerHTML = chips.length? ('<div style="width:100%;color:#6b7280;font-size:12px;margin-bottom:2px">Not eligible</div>'+chips.join('')) : '';
+
+  // queue
+  var q=d.candidates||[];
+  if(!q.length){
+    document.getElementById('queue').innerHTML='<div class="empty">'+(d.plan_date?'No customers on today’s list.':'The daily plan has not been built yet. Once it runs, today’s picks appear here.')+'</div>';
+  } else {
+    var rows=q.map(function(x,i){
+      return '<tr><td>'+(i+1)+'</td>'
+        +'<td><span class="score">'+ (x.score||0) +'</span></td>'
+        +'<td><b>'+esc(x.name)+'</b><div class="why">••••'+esc(x.phone_tail||'')+'</div></td>'
+        +'<td><span class="ctype">'+esc(x.campaign_label||x.campaign_type||'')+'</span></td>'
+        +'<td class="prod">'+esc(x.product||'—')+'</td>'
+        +'<td class="why">'+esc(x.reason||'')+'</td></tr>';
+    }).join('');
+    document.getElementById('queue').innerHTML =
+      '<table><thead><tr><th>#</th><th>Score</th><th>Customer</th><th>Campaign</th><th>Suggested product</th><th>Why</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+
+  document.getElementById('foot').innerHTML =
+    'Phase 1 is planning only — this screen never sends a message. Sending stays off until you enable it and the consent & approved-template work is complete.';
+}
+load();
+</script>
+</body>
+</html>

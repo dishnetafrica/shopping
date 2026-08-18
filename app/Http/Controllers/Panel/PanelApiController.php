@@ -5300,6 +5300,64 @@ class PanelApiController extends Controller
         return response()->json(['ok' => true, 'events' => $rows]);
     }
 
+    /**
+     * Customer Engagement dashboard data (Phase 1, read-only). Returns the latest re-engagement plan
+     * snapshot for this tenant — the eligibility funnel + today's chosen list + why each was picked.
+     * It only READS engagement_candidates; it never builds a plan or sends anything.
+     */
+    public function engagementPlan(Request $r)
+    {
+        $tid = $r->user()->tenant->id;
+
+        $latest = \App\Models\EngagementCandidate::withoutGlobalScopes()
+            ->where('tenant_id', $tid)->max('plan_date');
+
+        if (! $latest) {
+            return response()->json([
+                'ok' => true, 'plan_date' => null, 'enabled' => (bool) $r->user()->tenant->setting('engagement_enabled', false),
+                'target' => (int) $r->user()->tenant->setting('engagement_daily_target', 40),
+                'cooldown_days' => (int) $r->user()->tenant->setting('engagement_cooldown_days', 14),
+                'counts' => ['past_buyers' => 0, 'opted_in' => 0, 'eligible' => 0, 'chosen' => 0],
+                'blocked' => (object) [], 'candidates' => [],
+            ]);
+        }
+
+        $all = \App\Models\EngagementCandidate::withoutGlobalScopes()
+            ->where('tenant_id', $tid)->where('plan_date', $latest)->get();
+
+        $blocked = [];
+        foreach ($all as $c) {
+            if ($c->blocked_reason) { $blocked[$c->blocked_reason] = ($blocked[$c->blocked_reason] ?? 0) + 1; }
+        }
+
+        $candidates = $all->where('chosen', true)->sortByDesc('score')->values()->map(fn ($c) => [
+            'name'          => (string) ($c->name ?: $c->phone),
+            'phone_tail'    => substr((string) $c->phone, -4),
+            'score'         => (int) $c->score,
+            'campaign_type' => $c->campaign_type,
+            'campaign_label' => \App\Services\Engagement\CampaignType::LABEL[$c->campaign_type] ?? $c->campaign_type,
+            'product'       => $c->product_name,
+            'reason'        => $c->reason,
+            'next_eligible' => optional($c->next_eligible_at)->toDateString(),
+        ])->all();
+
+        return response()->json([
+            'ok'            => true,
+            'plan_date'     => $latest,
+            'enabled'       => (bool) $r->user()->tenant->setting('engagement_enabled', false),
+            'target'        => (int) $r->user()->tenant->setting('engagement_daily_target', 40),
+            'cooldown_days' => (int) $r->user()->tenant->setting('engagement_cooldown_days', 14),
+            'counts'        => [
+                'past_buyers' => $all->count(),
+                'opted_in'    => $all->filter(fn ($c) => ! in_array($c->blocked_reason, ['not_opted_in', 'opted_out', 'suppressed'], true))->count(),
+                'eligible'    => $all->where('eligible', true)->count(),
+                'chosen'      => $all->where('chosen', true)->count(),
+            ],
+            'blocked'       => (object) $blocked,
+            'candidates'    => $candidates,
+        ]);
+    }
+
     // AI bot setup — owner describes the business in plain words, we generate the persona.
     public function botGenerate(Request $r)
     {
