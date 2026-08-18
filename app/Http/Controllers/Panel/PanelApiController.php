@@ -5125,6 +5125,7 @@ class PanelApiController extends Controller
                 'audience'   => $c->audience,
                 'status'     => $c->status,
                 'when'       => optional($c->scheduled_for)->toIso8601String(),
+                'daily_send_cap' => $c->daily_send_cap,
                 'stats'      => is_array($c->stats) ? $c->stats : [],
             ])->values();
 
@@ -5153,6 +5154,8 @@ class PanelApiController extends Controller
             'image_url'   => trim((string) $r->input('image_url', '')) ?: null,
             'product_ids' => array_values(array_filter(array_map('intval', (array) $r->input('product_ids', [])))),
             'cta'         => trim((string) $r->input('cta', '')) ?: 'Reply BUY to order instantly.',
+            // 0/blank → no per-campaign daily limit (send straight through, as before).
+            'daily_send_cap' => (int) $r->input('daily_send_cap', 0) > 0 ? (int) $r->input('daily_send_cap') : null,
         ];
         if ($data['message'] === '' && ! $data['product_ids']) {
             return response()->json(['ok' => false, 'error' => 'empty'], 422);
@@ -5204,7 +5207,16 @@ class PanelApiController extends Controller
         // v4.32 — count() already has the do-not-message list applied, so this is the number
         // that will actually be contacted. `excluded` says how many were removed.
         $count = $aud->count((string) $r->input('audience', 'all'), $r->input('category'));
-        return response()->json(['ok' => true, 'count' => $count, 'excluded' => $aud->lastRemoved()]);
+
+        // Weekly-plan maths for "send X/day": how many days at that pace, and the per-day breakdown.
+        $perDay = (int) $r->input('daily_send_cap', 0);
+        $days      = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::days($count, $perDay) : 1;
+        $breakdown = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::breakdown($count, $perDay) : [];
+
+        return response()->json([
+            'ok' => true, 'count' => $count, 'excluded' => $aud->lastRemoved(),
+            'per_day' => $perDay > 0 ? $perDay : null, 'days' => $days, 'breakdown' => $breakdown,
+        ]);
     }
 
     /** AI suggests a promotion the owner can review and approve. */

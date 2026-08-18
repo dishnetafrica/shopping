@@ -104,6 +104,10 @@
     <label>Call to action</label>
     <input id="cCta" value="Reply BUY to order instantly.">
 
+    <label>Send per day <span class="hint" style="font-weight:400">(0 = send all at once)</span></label>
+    <input id="cPerDay" type="number" min="0" max="100000" value="0" placeholder="e.g. 40" oninput="previewAudience()">
+    <div class="hint" id="cPlan">Spread a big list over days so you don't message everyone at once — safer for your number.</div>
+
     <label>Schedule (optional)</label>
     <div class="rowf"><input id="cDate" type="date"><input id="cTime" type="time"></div>
     <div class="hint">Leave blank to send now or save as a draft.</div>
@@ -162,11 +166,19 @@
   }
   async function previewAudience(){
     var a=$('cAud').value,cat=a==='category'?$('cCat').value:null;
+    var perDay=parseInt(($('cPerDay')||{}).value||'0',10)||0;
     $('audCount').textContent='Counting customers…';
     try{
-      var r=await fetch('/papi/campaign/audience',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({audience:a,category:cat})});
+      var r=await fetch('/papi/campaign/audience',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({audience:a,category:cat,daily_send_cap:perDay})});
       var d=await r.json();
       $('audCount').textContent=d.ok?('≈ '+d.count+' customer'+(d.count===1?'':'s')+' will receive this'):'';
+      var plan=$('cPlan');
+      if(plan&&d.ok){
+        if(perDay>0&&d.days){
+          var bd=(d.breakdown||[]);var shown=bd.slice(0,7).join(' + ')+(bd.length>7?(' + … ('+(bd.length-7)+' more days)'):'');
+          plan.innerHTML='📅 ~<b>'+d.days+' day'+(d.days===1?'':'s')+'</b> at '+perDay+'/day — '+shown;
+        } else { plan.textContent='Spread a big list over days so you don’t message everyone at once — safer for your number.'; }
+      }
     }catch(e){$('audCount').textContent='';}
   }
   $('cCat')&&$('cCat').addEventListener('change',previewAudience);
@@ -180,7 +192,8 @@
   }
   function payload(){
     return {id:EDIT_ID,type:$('cType').value,audience:$('cAud').value,category:$('cAud').value==='category'?$('cCat').value:null,
-      message:$('cMsg').value,image_url:$('cImg').value,product_ids:selectedProducts(),cta:$('cCta').value,scheduled_for:schedISO()};
+      message:$('cMsg').value,image_url:$('cImg').value,product_ids:selectedProducts(),cta:$('cCta').value,scheduled_for:schedISO(),
+      daily_send_cap:parseInt(($('cPerDay')||{}).value||'0',10)||0};
   }
 
   async function save(silent){

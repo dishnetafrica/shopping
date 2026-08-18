@@ -63,12 +63,26 @@ class SendCampaign implements ShouldQueue
         }
         $c->update(['status' => 'sending', 'stats' => $stats]);
 
+        // Per-campaign daily batching — "send X/day, spread over the week." 0/null = send straight
+        // through as before. When a day's share is spent, hand off to a copy delayed to the next
+        // tenant-local midnight, so a big audience trickles out over days instead of a single blast.
+        $perDay  = (int) ($c->daily_send_cap ?? 0);
+        $sentDay = $perDay > 0 ? self::sentToday($c->id, $t) : 0;
+        if ($perDay > 0 && $sentDay >= $perDay) {
+            $c->update(['status' => 'sending', 'stats' => array_merge($stats, self::tally($c->id))]);
+            self::dispatch($this->tenantId, $this->campaignId)->delay(self::nextDayStart($t));
+
+            return;
+        }
+
         $startedAt = time();
         $moreToDo  = false;
+        $dayCapHit = false;
         foreach ($phones as $to) {
             // Hand off rather than run to the timeout. Everything already claimed is skipped
             // instantly by the next copy, so it resumes exactly where this one stopped.
             if (time() - $startedAt >= self::BUDGET_SECONDS) { $moreToDo = true; break; }
+            if ($perDay > 0 && $sentDay >= $perDay) { $dayCapHit = true; $moreToDo = true; break; }
             $recipient = \App\Support\Idempotency::recipient((string) $to);
             // 2D — claim this recipient. A retried/restarted job skips anyone already handled.
             if (! \App\Models\CampaignMessage::claim($t->id, $c->id, $recipient)) {
@@ -85,6 +99,7 @@ class SendCampaign implements ShouldQueue
             } catch (\Throwable $e) {
                 \App\Models\CampaignMessage::markSent($c->id, $recipient, null, 'failed');
             }
+            $sentDay++;   // an attempt this day counts toward the daily cap (a message left the building)
             // Throttle: 4–9s jitter between messages (ban-risk mitigation).
             usleep(random_int(4, 9) * 1000000);
         }
@@ -94,6 +109,13 @@ class SendCampaign implements ShouldQueue
         // one — the single reason a campaign that reached most of its audience reported a third of it.
         $stats = array_merge($stats, self::tally($c->id));
 
+        if ($dayCapHit) {
+            // Today's batch is done and the audience isn't exhausted — resume at the next tenant-local day.
+            $c->update(['status' => 'sending', 'stats' => $stats]);
+            self::dispatch($this->tenantId, $this->campaignId)->delay(self::nextDayStart($t));
+
+            return;
+        }
         if ($moreToDo) {
             $c->update(['status' => 'sending', 'stats' => $stats]);
             self::dispatch($this->tenantId, $this->campaignId)->delay(now()->addSeconds(5));
@@ -112,6 +134,33 @@ class SendCampaign implements ShouldQueue
      * surfaced rather than folded into anything else, because a number nobody can explain is how a
      * campaign report stops being believed.
      */
+    /** Attempts claimed for this campaign since the tenant's local midnight — the daily-batch meter. */
+    public static function sentToday(int $campaignId, Tenant $t): int
+    {
+        $tz = (string) ($t->setting('timezone', config('app.timezone', 'UTC')) ?: 'UTC');
+        try {
+            $start = \Illuminate\Support\Carbon::now($tz)->startOfDay();
+        } catch (\Throwable $e) {
+            $start = \Illuminate\Support\Carbon::now()->startOfDay();
+        }
+
+        return (int) \Illuminate\Support\Facades\DB::table('campaign_messages')
+            ->where('campaign_id', $campaignId)
+            ->where('created_at', '>=', $start)
+            ->count();
+    }
+
+    /** The next tenant-local midnight, as a delay target for resuming tomorrow's batch. */
+    public static function nextDayStart(Tenant $t): \Illuminate\Support\Carbon
+    {
+        $tz = (string) ($t->setting('timezone', config('app.timezone', 'UTC')) ?: 'UTC');
+        try {
+            return \Illuminate\Support\Carbon::now($tz)->addDay()->startOfDay();
+        } catch (\Throwable $e) {
+            return \Illuminate\Support\Carbon::now()->addDay()->startOfDay();
+        }
+    }
+
     public static function tally(int $campaignId): array
     {
         $by = \Illuminate\Support\Facades\DB::table('campaign_messages')
