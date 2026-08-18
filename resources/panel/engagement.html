@@ -37,6 +37,15 @@
   .why{color:var(--muted);font-size:12px}
   .empty{background:#fff;border:1px dashed var(--line);border-radius:14px;padding:28px;text-align:center;color:var(--muted)}
   .foot{color:var(--muted);font-size:11.5px;margin-top:14px}
+  .capbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 16px}
+  .capbox .t{font-size:13px;font-weight:800;margin-bottom:2px}
+  .capbox .h{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .pd{display:flex;gap:8px;flex-wrap:wrap}
+  .pd .b{border:1.5px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:800;cursor:pointer;user-select:none}
+  .pd .b:hover{border-color:var(--g)}
+  .pd .b.on{background:var(--g);border-color:var(--g);color:#fff}
+  .pd .b.saving{opacity:.55;pointer-events:none}
+  .savemsg{font-size:12px;color:var(--g);font-weight:700;margin-top:8px;min-height:15px}
 </style>
 </head>
 <body>
@@ -45,6 +54,18 @@
   <p class="sub">Who ShopBot would contact today, and why — scored from your real customer history.</p>
   <div class="phase" id="phaseBadge">PLANNING ONLY — no messages are sent</div>
   <div class="cfg" id="cfg"></div>
+
+  <div class="capbox">
+    <div class="t">Daily send volume</div>
+    <div class="h">How many opted-in customers the engine may message per day. Keep it small on an unofficial WhatsApp number to avoid blocks.</div>
+    <div class="pd" id="capBtns">
+      <span class="b" data-v="10" onclick="setCap(10,this)">10 / day</span>
+      <span class="b" data-v="15" onclick="setCap(15,this)">15 / day</span>
+      <span class="b" data-v="25" onclick="setCap(25,this)">25 / day</span>
+      <span class="b" data-v="40" onclick="setCap(40,this)">40 / day</span>
+    </div>
+    <div class="savemsg" id="capMsg"></div>
+  </div>
 
   <div class="tiles" id="tiles"></div>
   <div class="flow">past buyers → opted-in → eligible → today’s list</div>
@@ -63,6 +84,27 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 function tile(n,l,hi){return '<div class="tile step'+(hi?' hi':'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>';}
 var BLABEL={not_opted_in:'Not opted in',opted_out:'Opted out',suppressed:'Suppressed',cooldown:'In cooldown',active_conversation:'Active chat'};
 
+// Highlight the preset button matching the saved daily cap (none if it's a custom value).
+function reflectCap(v){
+  var btns=document.querySelectorAll('#capBtns .b');
+  for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('on',(+btns[i].getAttribute('data-v'))===(+v)); }
+}
+// Owner taps a preset -> save it as the engine's daily send cap.
+async function setCap(v,el){
+  var msg=document.getElementById('capMsg'); msg.textContent='';
+  el.classList.add('saving');
+  try{
+    var r=await fetch('/papi/engagement-cap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({send_daily_cap:v})});
+    var d=await r.json();
+    el.classList.remove('saving');
+    if(d&&d.ok){
+      reflectCap(d.send_cap);
+      msg.textContent='Saved — up to '+d.send_cap+' per day.';
+      setTimeout(function(){ load(); }, 400);
+    } else { msg.style.color='#b42318'; msg.textContent='Could not save.'; }
+  }catch(e){ el.classList.remove('saving'); msg.style.color='#b42318'; msg.textContent='Network error.'; }
+}
+
 async function load(){
   var d;
   try{ var r=await fetch('/papi/engagement-plan',{cache:'no-store'}); d=await r.json(); }
@@ -70,6 +112,7 @@ async function load(){
   if(!d||!d.ok){ document.getElementById('queue').innerHTML='<div class="empty">Couldn’t load the plan.</div>'; return; }
 
   var c=d.counts||{};
+  reflectCap(d.send_cap==null?15:d.send_cap);
   var pb=document.getElementById('phaseBadge');
   if(pb){ if(d.send_enabled){ pb.textContent='SENDING ON — opted-in customers only, capped daily'; pb.style.background='#e8f5ec'; pb.style.color='#0A6E1A'; pb.style.borderColor='#abdfbc'; } else { pb.textContent='PLANNING ONLY — no messages are sent'; } }
   document.getElementById('cfg').innerHTML =
