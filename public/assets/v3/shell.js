@@ -2514,6 +2514,13 @@ function formModal(a){
         '<div class="mp-chips" id="mpchips_'+k+'"></div></div>'; }
     else if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
       fields+='<div class="fld"><label>'+lbl+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></div>'; }
+    else if(String(type).startsWith('perday:')){ const opts=String(type).slice(7).split(','); const cur=String(val==null?'0':val);
+      /* Preset "send X per day" buttons — write a hidden f_<k> the generic save already reads, so a big
+         audience trickles out over days instead of a single blast (safer for the number). */
+      fields+='<div class="fld"><label>'+lbl+'</label>'+
+        '<div class="set-segs" id="pd_'+k+'">'+opts.map(function(o){ var lb=(o==='0')?'All at once':(o+' / day'); return '<button type="button" class="set-seg'+(o===cur?' on':'')+'" data-v="'+esc(o)+'" onclick="pdPick(\''+k+'\',\''+esc(o)+'\')">'+esc(lb)+'</button>'; }).join('')+'</div>'+
+        '<input type="hidden" id="f_'+k+'" value="'+esc(cur)+'">'+
+        '<div class="mut" id="pdplan_'+k+'" style="font-size:12px;margin-top:6px"></div></div>'; }
     else if(String(type).startsWith('combo:')){ const opts=String(type).slice(6).split('|').filter(Boolean);
       fields+='<div class="fld"><label>'+lbl+' <span class="mut" style="font-weight:400">(type a new one or pick existing)</span></label>'+
         '<input id="f_'+k+'" list="dl_'+k+'" autocomplete="off" value="'+esc(val)+'" placeholder="Type or choose…">'+
@@ -2728,6 +2735,25 @@ async function mpUpload(k){
     }catch(e){ if(st) st.textContent='Upload failed'; }
   };
   reader.readAsDataURL(f);
+}
+/* Preset "send per day" picker — sets the hidden value and (on the campaign form, which has an
+   audience field) shows a live "~N days at X/day" plan from the same endpoint the classic screen uses. */
+async function pdPick(k,v){
+  var h=document.getElementById('f_'+k); if(h) h.value=String(v);
+  var box=document.getElementById('pd_'+k);
+  if(box){ var bs=box.querySelectorAll('.set-seg'); for(var i=0;i<bs.length;i++){ bs[i].classList.toggle('on', bs[i].getAttribute('data-v')===String(v)); } }
+  var plan=document.getElementById('pdplan_'+k); if(!plan) return;
+  var audEl=document.getElementById('f_audience'); var perDay=parseInt(v,10)||0;
+  if(!audEl){ plan.textContent=''; return; }
+  if(perDay<=0){ plan.textContent='Sends the whole list at once.'; return; }
+  var catEl=document.getElementById('f_category');
+  plan.textContent='Counting…';
+  try{
+    var d=await post('/papi/campaign/audience',{audience:audEl.value,category:catEl?catEl.value:null,daily_send_cap:perDay});
+    if(d&&d.ok&&d.days){ var bd=(d.breakdown||[]); var shown=bd.slice(0,7).join(' + ')+(bd.length>7?(' + … ('+(bd.length-7)+' more days)'):'');
+      plan.innerHTML='📅 ~<b>'+d.days+' day'+(d.days===1?'':'s')+'</b> at '+perDay+'/day — '+esc(shown)+' · '+(d.count||0)+' customers'; }
+    else { plan.textContent=''; }
+  }catch(e){ plan.textContent=''; }
 }
 /* ===== Live WhatsApp preview (mobile frame) for the campaign form ===== */
 var __WAPV=null;
