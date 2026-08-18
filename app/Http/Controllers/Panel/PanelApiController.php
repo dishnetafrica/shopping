@@ -2787,7 +2787,11 @@ class PanelApiController extends Controller
             $shotList = $shots[$pid];
             usort($shotList, fn ($a, $b) => $a['idx'] <=> $b['idx']);
 
-            $hasMain = trim((string) $p->image_url) !== '';
+            // A bare-filename image_url ("Diamond Solar Lawn Light.jpg") is a broken value that resolves
+            // to a dead /storage path — it must NOT count as an existing main photo, or the importer
+            // would skip the product and leave it permanently photo-less. Only a real stored path/URL
+            // counts (Product::isUsableImageRef), so a re-import heals broken links without needing override.
+            $hasMain = Product::isUsableImageRef($p->image_url);
             $hasMain ? $withPhoto++ : $withoutPhoto++;
 
             $mainShot = $shotList[0];                 // lowest index = the main photo
@@ -2806,7 +2810,8 @@ class PanelApiController extends Controller
             // Gallery slots: fill the first open slots (empty, or all if override).
             $openSlots = [];
             foreach (['gallery_1', 'gallery_2', 'gallery_3'] as $col) {
-                if ($override || trim((string) ($p->$col ?? '')) === '') $openSlots[] = $col;
+                // Same rule as the main photo: a broken bare-filename gallery value is an open slot.
+                if ($override || ! Product::isUsableImageRef($p->$col)) $openSlots[] = $col;
             }
             foreach ($galShots as $shot) {
                 if (! $openSlots) break;

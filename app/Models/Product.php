@@ -58,6 +58,27 @@ class Product extends Model
 
         return null;
     }
+
+    /**
+     * Does this image reference point at a real stored file (or remote URL), rather than a bare
+     * filename that resolves to a dead /storage/<name> path?
+     *
+     * Every photo the app stores lands under products/{tenant}/… (uploadImage, the CSV/ZIP importers,
+     * gallery resolution) — so a usable reference is either an absolute URL, a root-relative path, or
+     * a storage path that CONTAINS a slash. A bare "Diamond Solar Lawn Light.jpg" (no slash, not a URL)
+     * is a broken value: imageUrl() turns it into /storage/Diamond Solar Lawn Light.jpg, which never
+     * exists. This lets the photo re-importer treat such a value as "no real photo" and heal it, instead
+     * of mistaking it for an existing main and skipping the product.
+     */
+    public static function isUsableImageRef(?string $v): bool
+    {
+        $v = trim((string) $v);
+        if ($v === '') {
+            return false;
+        }
+
+        return preg_match('#^https?://#i', $v) === 1 || str_contains($v, '/');
+    }
     protected $casts = ['price'=>'decimal:2','base_price'=>'decimal:2','cost_price'=>'decimal:2','active'=>'boolean','serialized'=>'boolean','warranty_manufacturer_months'=>'integer','warranty_company_months'=>'integer','is_kit'=>'boolean','sold_by_weight'=>'boolean','reference_weight_grams'=>'integer','reference_price'=>'decimal:2','display_order'=>'integer','is_fresh_today'=>'boolean','archived_at'=>'datetime','hidden'=>'boolean','reorder_point'=>'integer'];
 
     /** E6.4 (prereq) — mirror catalog stock changes into the one stock ledger (gated on stock_ledger). */
