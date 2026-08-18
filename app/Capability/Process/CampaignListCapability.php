@@ -164,10 +164,12 @@ final class CampaignListCapability implements ProcessCapability
             'method' => 'POST', 'endpoint' => '/papi/campaign/save', 'actor' => 'human', 'tone' => 'primary',
             'schema' => [
                 'name' => 'text', 'type' => 'enum:' . self::TYPES, 'audience' => 'enum:' . self::AUDIENCES,
+                'daily_send_cap' => 'perday:0,20,40,60,100',
                 'category' => $comboCats, 'message' => 'textarea', 'cta' => 'text', 'image_url' => 'mediapick', 'scheduled_for' => 'datetime',
             ],
             'labels' => [
                 'name' => 'Campaign name', 'type' => 'Type', 'audience' => 'Send to (audience)',
+                'daily_send_cap' => 'Send per day (spread a big list over days)',
                 'category' => 'Category (only if audience = "Bought a category")', 'message' => 'Message',
                 'cta' => 'Call to action', 'image_url' => 'Photo (pick a product, upload, or paste a link)',
                 'scheduled_for' => 'Schedule for (pick a date & time · leave blank to save as draft)',
@@ -189,8 +191,8 @@ final class CampaignListCapability implements ProcessCapability
                 'dec'          => $curDec,
             ],
             'prefill' => $src
-                ? ['name' => (string) $src->name, 'type' => (string) ($src->type ?: 'promotion'), 'audience' => (string) ($src->audience ?: 'all'), 'category' => (string) $src->category, 'message' => (string) $src->message, 'cta' => (string) ($src->cta ?: 'Reply BUY to order instantly.'), 'image_url' => (string) $src->image_url, 'scheduled_for' => $asCopy ? '' : $whenPrefill]
-                : ['type' => 'promotion', 'audience' => 'all', 'cta' => 'Reply BUY to order instantly.'],
+                ? ['name' => (string) $src->name, 'type' => (string) ($src->type ?: 'promotion'), 'audience' => (string) ($src->audience ?: 'all'), 'daily_send_cap' => (string) (int) ($src->daily_send_cap ?? 0), 'category' => (string) $src->category, 'message' => (string) $src->message, 'cta' => (string) ($src->cta ?: 'Reply BUY to order instantly.'), 'image_url' => (string) $src->image_url, 'scheduled_for' => $asCopy ? '' : $whenPrefill]
+                : ['type' => 'promotion', 'audience' => 'all', 'daily_send_cap' => '0', 'cta' => 'Reply BUY to order instantly.'],
             // No id when copying — that is what makes the save create a new campaign with its own
             // number and its own recipient claims, instead of overwriting the one being copied.
             'body' => $isEdit ? ['id' => $c->id] : [],
