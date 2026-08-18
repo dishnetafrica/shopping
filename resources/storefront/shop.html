@@ -4955,7 +4955,9 @@ function openCheckout(){
   var extras='<div class="cosec"><button class="colink" onclick="toggleEl(\'coNoteWrap\')">+ Add a note</button>'
     +'<div id="coNoteWrap" style="display:none"><textarea id="coNote" rows="2" placeholder="e.g. leave at gate, call on arrival"></textarea></div>'
     +'<button class="colink" onclick="toggleEl(\'coWhenWrap\')">+ Schedule for later</button>'
-    +'<div id="coWhenWrap" style="display:none"><input id="coWhen" type="datetime-local"></div></div>';
+    +'<div id="coWhenWrap" style="display:none"><input id="coWhen" type="datetime-local"></div>'
+    +'<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:12.5px;color:#475467;cursor:pointer;line-height:1.4"><input type="checkbox" id="coOptIn" style="width:auto;margin-top:2px;flex:none"><span>Keep me updated on WhatsApp — occasional offers &amp; restock alerts. Reply STOP any time.</span></label>'
+    +'</div>';
   /* Quotation-first: this is a Quotation request, not a payment. The bill shows an
      estimated total; final pricing (discounts, VAT, freight) is confirmed on the quotation. */
   var bill='<div class="billbox"><div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
@@ -4997,7 +4999,7 @@ async function placeOrder(){
   if(!IS_PICKUP && !addr && !GEO){toast('Add your delivery address or share your location','err');return;}
   var onCredit=/credit/i.test(pay);
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
@@ -5029,7 +5031,7 @@ async function requestQuotation(){
   if(!name){toast('Please enter your name','err');return;}
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
+  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
   if(GEO){payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');if(btn){btn.disabled=true;btn.textContent='Preparing your quotation…';}
   try{

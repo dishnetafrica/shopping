@@ -1442,6 +1442,15 @@ class StorefrontController extends Controller
             }
         });
 
+        // Checkout opt-in: a "keep me updated on WhatsApp" tick records explicit marketing consent for
+        // this number. Best-effort and never lifts a prior opt-out (recordOptIn is one-way). Only acts
+        // when the customer actively ticked it — an absent/false flag records nothing.
+        if ($o->wasRecentlyCreated && $r->boolean('marketing_opt_in')) {
+            try {
+                \App\Services\Comms\Marketing\MarketingConsent::recordOptIn($tenant, $phone, 'checkout');
+            } catch (\Throwable $e) { /* consent capture must never fail an order */ }
+        }
+
         return response()->json([
             'ok'        => true,
             'order_no'  => (string) $o->order_no,
@@ -1548,6 +1557,14 @@ class StorefrontController extends Controller
                 'ok'    => false,
                 'error' => (string) ($res['message'] ?? 'Could not create the quotation. Please try again shortly.'),
             ], 422);
+        }
+
+        // Checkout opt-in (quotation path): a ticked "keep me updated" records explicit marketing consent.
+        // Best-effort; never lifts a prior opt-out; never fails the quotation.
+        if ($r->boolean('marketing_opt_in')) {
+            try {
+                \App\Services\Comms\Marketing\MarketingConsent::recordOptIn($tenant, $phone, 'checkout');
+            } catch (\Throwable $e) { /* consent capture must never fail a quotation */ }
         }
 
         // Stamp storefront extras (delivery address, note, source) onto the persisted record and
