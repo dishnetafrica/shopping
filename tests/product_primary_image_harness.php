@@ -25,6 +25,17 @@ function firstImage(?string ...$candidates): ?string
     return null;
 }
 
+// --- mirror of App\Models\Product::isUsableImageRef() ---
+function isUsableImageRef(?string $v): bool
+{
+    $v = trim((string) $v);
+    if ($v === '') {
+        return false;
+    }
+
+    return preg_match('#^https?://#i', $v) === 1 || str_contains($v, '/');
+}
+
 $pass = 0;
 $fail = 0;
 function ok(string $n, bool $c): void
@@ -52,6 +63,15 @@ ok('no candidates → null',                    firstImage() === null);
 // the exact reported scenario: 3 photos uploaded to the gallery, no hero
 $img = firstImage('', 'photo1.jpg', 'photo2.jpg', 'photo3.jpg');
 ok('Photo 1 is the primary (not skipped)',    $img === 'photo1.jpg');
+
+echo "\n\033[1mUsable image reference (broken bare filename must not count as a real photo)\033[0m\n";
+ok('https URL is usable',                     isUsableImageRef('https://cdn.example.com/x.jpg') === true);
+ok('root-relative path is usable',            isUsableImageRef('/storage/products/19/imp_x.jpg') === true);
+ok('storage path with slash is usable',       isUsableImageRef('products/19/imp_x.jpg') === true);
+ok('bare filename (GSL case) is NOT usable',  isUsableImageRef('Diamond Solar Lawn Light.jpg') === false);
+ok('bare filename photo.png is NOT usable',   isUsableImageRef('photo.png') === false);
+ok('empty / whitespace is NOT usable',        isUsableImageRef('  ') === false && isUsableImageRef('') === false);
+ok('null is NOT usable',                      isUsableImageRef(null) === false);
 
 echo "\n" . str_repeat('─', 56) . "\n";
 echo $fail === 0

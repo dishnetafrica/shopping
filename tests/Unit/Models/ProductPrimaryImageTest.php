@@ -53,4 +53,24 @@ class ProductPrimaryImageTest extends TestCase
         $this->assertNull(Product::firstImage('', null, '   '));
         $this->assertNull(Product::firstImage());
     }
+
+    /**
+     * Regression: a broken bare-filename image_url must not count as a real stored photo, so the photo
+     * re-importer heals it instead of skipping the product (the exact GSL case: "Diamond Solar Lawn Light.jpg").
+     */
+    public function test_usable_image_ref(): void
+    {
+        // Real references — a URL, a root-relative path, or a storage path with a slash.
+        $this->assertTrue(Product::isUsableImageRef('https://cdn.example.com/x.jpg'));
+        $this->assertTrue(Product::isUsableImageRef('http://x/y.png'));
+        $this->assertTrue(Product::isUsableImageRef('/storage/products/19/imp_abc.jpg'));
+        $this->assertTrue(Product::isUsableImageRef('products/19/imp_abc.jpg'));
+
+        // Broken references — a bare filename (no slash, not a URL) or empty.
+        $this->assertFalse(Product::isUsableImageRef('Diamond Solar Lawn Light.jpg'));
+        $this->assertFalse(Product::isUsableImageRef('photo.png'));
+        $this->assertFalse(Product::isUsableImageRef('   '));
+        $this->assertFalse(Product::isUsableImageRef(''));
+        $this->assertFalse(Product::isUsableImageRef(null));
+    }
 }
