@@ -5327,6 +5327,8 @@ class PanelApiController extends Controller
         if (! $latest) {
             return response()->json([
                 'ok' => true, 'plan_date' => null, 'enabled' => (bool) $r->user()->tenant->setting('engagement_enabled', false),
+                'send_enabled' => (bool) $r->user()->tenant->setting('engagement_send_enabled', false),
+                'send_cap' => (int) $r->user()->tenant->setting('engagement_send_daily_cap', 15),
                 'target' => (int) $r->user()->tenant->setting('engagement_daily_target', 40),
                 'cooldown_days' => (int) $r->user()->tenant->setting('engagement_cooldown_days', 14),
                 'counts' => ['past_buyers' => 0, 'opted_in' => 0, 'eligible' => 0, 'chosen' => 0],
@@ -5371,6 +5373,37 @@ class PanelApiController extends Controller
             ],
             'blocked'       => (object) $blocked,
             'candidates'    => $candidates,
+        ]);
+    }
+
+    /**
+     * Owner picks the daily send volume for the re-engagement engine right on the
+     * Customer Engagement screen (the same idea as a campaign's "Send per day", but here
+     * it's the engine's paced daily cap). Writes the single `engagement_send_daily_cap`
+     * setting the sender already reads — no new knob. The planner target is nudged up to
+     * match so enough candidates are chosen to actually fill the cap (planner clamps at 50).
+     */
+    public function engagementSaveCap(Request $r)
+    {
+        $t   = $r->user()->tenant;
+        $cap = (int) $r->input('send_daily_cap', -1);
+        if ($cap < 0 || $cap > 100) {
+            return response()->json(['ok' => false, 'error' => 'bad_value'], 422);
+        }
+
+        $s = $t->settings ?? [];
+        $s['engagement_send_daily_cap'] = $cap;
+        $curTarget = (int) ($s['engagement_daily_target'] ?? 40);
+        if ($cap > $curTarget) {
+            $s['engagement_daily_target'] = min($cap, 50);   // planner never marks more than 50 chosen
+        }
+        $t->settings = $s;
+        $t->save();
+
+        return response()->json([
+            'ok'       => true,
+            'send_cap' => $cap,
+            'target'   => (int) ($s['engagement_daily_target'] ?? 40),
         ]);
     }
 

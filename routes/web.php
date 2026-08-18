@@ -655,6 +655,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
 
         // customer re-engagement (Phase 1, read-only plan)
         Route::get('engagement-plan',    [PanelApiController::class, 'engagementPlan']);
+        Route::post('engagement-cap',    [PanelApiController::class, 'engagementSaveCap']);
 
         // bot pipeline diagnostics
         Route::get('diagnostics',        [PanelApiController::class, 'diagnostics']);
