@@ -724,4 +724,20 @@ HTML;
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
     }
+
+    /** Customer Engagement dashboard (Phase 1, read-only review of the daily re-engagement plan). */
+    public function engagement(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/engagement.html');
+        if (! is_file($path)) {
+            abort(500, 'Engagement asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
 }

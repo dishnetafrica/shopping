@@ -114,6 +114,7 @@ return [
             ['key' => 'chats',     'label' => 'Chats',     'route' => '/panel/chats',     'icon' => '💬', 'menu' => 'whatsapp'],
             ['key' => 'leads',     'label' => 'Leads',     'route' => '/panel/leads',     'icon' => '🎯', 'menu' => 'marketing'],
             ['key' => 'campaigns', 'label' => 'Campaigns', 'route' => '/panel/marketing', 'icon' => '📣', 'menu' => 'marketing'],
+            ['key' => 'engagement', 'label' => 'Customer Engagement', 'route' => '/panel/engagement', 'icon' => '🎯', 'menu' => 'marketing'],
             // nav_v2 pre-flight additions:
             ['key' => 'scheduled', 'label' => 'Scheduled', 'route' => '/panel/scheduled', 'icon' => '⏰', 'menu' => 'whatsapp'],
             ['key' => 'ads',       'label' => 'Ads',       'route' => '/panel/ads',       'icon' => '📢', 'menu' => 'marketing'],
