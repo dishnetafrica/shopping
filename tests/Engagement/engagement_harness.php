@@ -17,7 +17,11 @@ $base = dirname(__DIR__, 2) . '/app/Services/Engagement/';
 require $base . 'ContactScore.php';
 require $base . 'EngagementEligibility.php';
 require $base . 'CampaignType.php';
+require dirname(__DIR__, 2) . '/app/Services/Comms/Marketing/OptInKeywords.php';
+require dirname(__DIR__, 2) . '/app/Services/Comms/Marketing/OptOutKeywords.php';
 
+use App\Services\Comms\Marketing\OptInKeywords;
+use App\Services\Comms\Marketing\OptOutKeywords;
 use App\Services\Engagement\CampaignType;
 use App\Services\Engagement\ContactScore;
 use App\Services\Engagement\EngagementEligibility as EE;
@@ -80,6 +84,16 @@ ok('VIP (nothing urgent) → VIP offer',            CampaignType::decide(['flags
 ok('has recommendation → recommendation',         CampaignType::decide(['has_recommendation'=>true]) === CampaignType::RECOMMENDATION);
 ok('nothing special → new stock',                 CampaignType::decide([]) === CampaignType::NEW_STOCK);
 ok('win-back beats VIP when both apply',           CampaignType::decide(['stage'=>'DORMANT','flags'=>['VIP']]) === CampaignType::DORMANT_WINBACK);
+
+echo "\n\033[1mConsent keywords (Phase 2 opt-in / opt-out)\033[0m\n";
+ok('SUBSCRIBE → opt-in',                          OptInKeywords::isOptIn('SUBSCRIBE') === true);
+ok('JOIN / OPT IN → opt-in',                      OptInKeywords::isOptIn('join') && OptInKeywords::isOptIn('opt in'));
+ok('opt-in tolerates case/punctuation',           OptInKeywords::isOptIn('  Subscribe! '));
+ok('ordinary order text is NOT opt-in',           OptInKeywords::isOptIn('yes 2kg') === false && OptInKeywords::isOptIn('start with rice') === false);
+ok('bare YES is NOT opt-in (ambiguous)',          OptInKeywords::isOptIn('yes') === false);
+ok('STOP is not misread as opt-in',               OptInKeywords::isOptIn('STOP') === false);
+ok('STOP still detected as opt-out',              OptOutKeywords::isStop('STOP') === true);
+ok('opt-in word is not an opt-out',               OptOutKeywords::isStop('SUBSCRIBE') === false);
 
 echo "\n" . str_repeat('─', 60) . "\n";
 echo $fail === 0

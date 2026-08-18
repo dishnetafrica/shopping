@@ -143,6 +143,22 @@ class ProcessIncomingMessage implements ShouldQueue
                 return;   // an opt-out is not routed into the ordering bot
             }
 
+            // Marketing opt-IN (SUBSCRIBE / JOIN / OPT IN) — the mirror of STOP. Records explicit consent
+            // and confirms. recordOptIn deliberately does NOT lift a prior opt-out (that stays admin-only),
+            // so an unsubscribed customer texting SUBSCRIBE is acknowledged but not silently re-enabled.
+            if ($body !== '' && \App\Services\Comms\Marketing\OptInKeywords::isOptIn($body)) {
+                \App\Services\Comms\Marketing\MarketingConsent::recordOptIn($tenant, $digits, 'inbound-optin');
+                try {
+                    $gateway->sendText($replyInst, $digits,
+                        "You're subscribed ✅ — we'll send you occasional offers and restock alerts. "
+                        . "Reply STOP any time to unsubscribe.");
+                } catch (\Throwable $e) {
+                    // A failed confirmation must not undo the opt-in — the consent stamp is already written.
+                }
+                BotTrace::log($this->tenantId, (string) $mid, $from, 'marketing_opt_in', 'inbound opt-in: ' . mb_substr($body, 0, 40));
+                return;   // handled — not routed into the ordering bot
+            }
+
             // Not a STOP — if we recently sent this number a marketing message, credit the reply.
             try {
                 \App\Services\Comms\WhatsAppStatusIngest::recordReply($this->tenantId, $digits);
