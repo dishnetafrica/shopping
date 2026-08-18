@@ -29,6 +29,10 @@
   .warn a{color:var(--red);font-weight:700}
   .ai{display:flex;gap:8px;flex-wrap:wrap}
   .ai .b{border:1px dashed var(--green);background:#f1f9f4;color:var(--green-d);border-radius:20px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer}
+  .pd{display:flex;gap:8px;flex-wrap:wrap}
+  .pd .b{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:20px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;user-select:none}
+  .pd .b:hover{border-color:var(--green)}
+  .pd .b.on{background:var(--green);border-color:var(--green);color:#fff}
   .plist{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px}
   .pi{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px}
   .pi:hover{background:var(--bg)}.pi input{width:auto}
@@ -104,9 +108,16 @@
     <label>Call to action</label>
     <input id="cCta" value="Reply BUY to order instantly.">
 
-    <label>Send per day <span class="hint" style="font-weight:400">(0 = send all at once)</span></label>
-    <input id="cPerDay" type="number" min="0" max="100000" value="0" placeholder="e.g. 40" oninput="previewAudience()">
-    <div class="hint" id="cPlan">Spread a big list over days so you don't message everyone at once — safer for your number.</div>
+    <label>Send per day <span class="hint" style="font-weight:400">(spread a big list over days — safer for your number)</span></label>
+    <div class="pd" id="cPerDayBtns">
+      <span class="b on" data-v="0" onclick="setPerDay(0,this)">All at once</span>
+      <span class="b" data-v="20" onclick="setPerDay(20,this)">20 / day</span>
+      <span class="b" data-v="40" onclick="setPerDay(40,this)">40 / day</span>
+      <span class="b" data-v="60" onclick="setPerDay(60,this)">60 / day</span>
+      <span class="b" data-v="100" onclick="setPerDay(100,this)">100 / day</span>
+    </div>
+    <input id="cPerDay" type="hidden" value="0">
+    <div class="hint" id="cPlan">Pick a daily pace, or send the whole list at once.</div>
 
     <label>Schedule (optional)</label>
     <div class="rowf"><input id="cDate" type="date"><input id="cTime" type="time"></div>
@@ -162,6 +173,12 @@
 
   function audChange(){
     var a=$('cAud').value;$('catRow').style.display=a==='category'?'block':'none';
+    previewAudience();
+  }
+  function setPerDay(v,el){
+    var h=$('cPerDay');if(h)h.value=String(v);
+    var btns=document.querySelectorAll('#cPerDayBtns .b');
+    for(var i=0;i<btns.length;i++){btns[i].classList.toggle('on',(el?btns[i]===el:(+btns[i].getAttribute('data-v')===+v)));}
     previewAudience();
   }
   async function previewAudience(){
