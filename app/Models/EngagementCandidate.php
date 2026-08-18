@@ -18,6 +18,7 @@ class EngagementCandidate extends Model
         'tenant_id', 'plan_date', 'phone', 'customer_profile_id', 'name',
         'score', 'campaign_type', 'reason', 'product_id', 'product_name',
         'eligible', 'blocked_reason', 'chosen', 'next_eligible_at', 'signals',
+        'send_status', 'send_detail', 'sent_at', 'comm_message_id',
     ];
 
     protected $casts = [
@@ -27,5 +28,6 @@ class EngagementCandidate extends Model
         'eligible'         => 'boolean',
         'chosen'           => 'boolean',
         'signals'          => 'array',
+        'sent_at'          => 'datetime',
     ];
 }

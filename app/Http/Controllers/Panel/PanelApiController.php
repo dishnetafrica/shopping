@@ -5339,12 +5339,15 @@ class PanelApiController extends Controller
             'product'       => $c->product_name,
             'reason'        => $c->reason,
             'next_eligible' => optional($c->next_eligible_at)->toDateString(),
+            'send_status'   => $c->send_status,          // null=not sent, queued|sent|blocked|skipped|failed
         ])->all();
 
         return response()->json([
             'ok'            => true,
             'plan_date'     => $latest,
             'enabled'       => (bool) $r->user()->tenant->setting('engagement_enabled', false),
+            'send_enabled'  => (bool) $r->user()->tenant->setting('engagement_send_enabled', false),
+            'send_cap'      => (int) $r->user()->tenant->setting('engagement_send_daily_cap', 15),
             'target'        => (int) $r->user()->tenant->setting('engagement_daily_target', 40),
             'cooldown_days' => (int) $r->user()->tenant->setting('engagement_cooldown_days', 14),
             'counts'        => [
@@ -5352,6 +5355,7 @@ class PanelApiController extends Controller
                 'opted_in'    => $all->filter(fn ($c) => ! in_array($c->blocked_reason, ['not_opted_in', 'opted_out', 'suppressed'], true))->count(),
                 'eligible'    => $all->where('eligible', true)->count(),
                 'chosen'      => $all->where('chosen', true)->count(),
+                'sent'        => $all->whereIn('send_status', ['queued', 'sent'])->count(),
             ],
             'blocked'       => (object) $blocked,
             'candidates'    => $candidates,
