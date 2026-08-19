@@ -264,6 +264,10 @@ class EvolutionGateway implements WhatsAppGateway
             ?? data_get($ctx, 'quotedMessage.extendedTextMessage.text')
             ?? data_get($ctx, 'quotedMessage.imageMessage.caption')
             ?? data_get($ctx, 'quotedMessage.videoMessage.caption')
+            // A quotation goes out as a PDF whose caption carries "Quotation ORD-Q… Total USD …
+            // Reply to confirm". A reply to that bubble must keep the caption, or the bot loses
+            // the quote reference the customer is replying about.
+            ?? data_get($ctx, 'quotedMessage.documentMessage.caption')
             ?? ''
         ) : '';
 

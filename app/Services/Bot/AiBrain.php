@@ -109,6 +109,7 @@ class AiBrain
             : '';
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant, $channel)
             .\App\Services\Relationship\ProfileContext::block($tenant, $from)
+            .$this->outstandingQuoteBlock($tenant, $from)
             .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')
             .$photoBlock]], $prior, [$current]);
 
@@ -776,7 +777,45 @@ class AiBrain
      * saved so it appears under Quotations in v3 for staff to convert), instead of creating a sales
      * order. Reuses the same OrderCalculator-priced $quote and the QuotationService the AI bot already
      * uses for price requests — no new quoting logic. Best-effort send; the quotation is always saved.
-     */    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean, string $channel = 'whatsapp', ?WhatsAppGateway $gateway = null): string
+     */
+    /**
+     * Ground the model in the customer's most recent OPEN quotation, so a reply like "please deliver
+     * today" / "confirm" is understood as accepting THAT quote instead of starting a new order and
+     * asking "which items?". Reuses the Quotation model, its isOpen() status set, and the digits-only
+     * phone format already used on the write side — no new quote logic. Best-effort: never breaks the
+     * brain, returns '' when there is no open quote.
+     */
+    private function outstandingQuoteBlock(Tenant $tenant, string $from): string
+    {
+        try {
+            $digits = preg_replace('/[^0-9]/', '', $from);
+            if ($digits === '') return '';
+
+            $q = \App\Models\Quotation::where('tenant_id', $tenant->id)
+                ->where('customer_phone', $digits)
+                ->whereNotIn('status', ['converted', 'declined', 'expired', 'archived'])
+                ->with('items')
+                ->orderByDesc('id')->first();
+            if (! $q) return '';
+
+            $cur   = strtoupper((string) ($q->currency ?: 'USD'));
+            $total = number_format((float) $q->total, \App\Services\Pricing::decimalsForCurrency($cur));
+            $items = [];
+            foreach ($q->items as $it) {
+                $items[] = '• ' . trim((string) $it->name) . ' ×' . (int) $it->qty;
+            }
+            $itemsTxt = $items ? implode('; ', $items) : '(the items already listed on the quotation)';
+            $valid    = $q->valid_until ? (' valid until ' . $q->valid_until->toDateString()) : '';
+
+            return "\n\nOUTSTANDING QUOTATION FOR THIS CUSTOMER: {$q->quote_no} — {$cur} {$total}{$valid}. Items: {$itemsTxt}. "
+                . 'If the customer replies about delivery, confirming, accepting, or paying (e.g. "please deliver today", "confirm", "yes", "ok send it"), THIS is the quotation they mean — do NOT ask what items they want. '
+                . 'Acknowledge it by its number, treat it as confirmed, and ask only for anything still missing (such as their exact delivery area). Only start a fresh order if they clearly ask for different or additional items.';
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean, string $channel = 'whatsapp', ?WhatsAppGateway $gateway = null): string
     {
         $svc = app(\App\Services\Bot\QuotationService::class);
         $cur = (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX'));
