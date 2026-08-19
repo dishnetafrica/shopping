@@ -227,6 +227,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
     Route::get('/panel/engagement', [SellerPanelController::class, 'engagement']);
+    Route::get('/panel/vision-review', [SellerPanelController::class, 'visionReview']);
     Route::get('/panel/tasks', [SellerPanelController::class, 'tasks']);
     Route::get('/panel/operations', [SellerPanelController::class, 'tasks']);
     Route::get('/panel/diagnostics', [SellerPanelController::class, 'diagnostics']);
@@ -656,6 +657,9 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         // customer re-engagement (Phase 1, read-only plan)
         Route::get('engagement-plan',    [PanelApiController::class, 'engagementPlan']);
         Route::post('engagement-cap',    [PanelApiController::class, 'engagementSaveCap']);
+
+        // Vision Stock & Loss — read-only movement-exception review feed
+        Route::get('vision-review',      [PanelApiController::class, 'visionReview']);
 
         // bot pipeline diagnostics
         Route::get('diagnostics',        [PanelApiController::class, 'diagnostics']);

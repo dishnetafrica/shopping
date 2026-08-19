@@ -5407,6 +5407,59 @@ class PanelApiController extends Controller
         ]);
     }
 
+    /**
+     * Vision Stock & Loss — read-only review feed of movement exceptions. Lists the reconciliation
+     * outcomes that need a human eye (🔴 review-required first, then 🟠 pending), straight from the
+     * vision_events recon columns + the self-contained evidence block. Read-only for now — the
+     * confirm/investigate/false-positive actions are the next step.
+     */
+    public function visionReview(Request $r)
+    {
+        $tid = (int) $r->user()->tenant->id;
+
+        $rows = \App\Models\VisionEvent::withoutGlobalScopes()
+            ->where('tenant_id', $tid)
+            ->whereNotNull('recon_result')
+            ->whereIn('recon_result', ['UNRECONCILED', 'QTY_DISCREPANCY', 'ACCESS_VIOLATION', 'PENDING'])
+            ->orderByRaw('CASE WHEN review_required THEN 0 ELSE 1 END')
+            ->orderByDesc('occurred_at')
+            ->limit(100)->get();
+
+        $items = $rows->map(function ($e) {
+            $pl  = is_array($e->payload) ? $e->payload : [];
+            $rec = (array) ($pl['reconciliation'] ?? []);
+            $ev  = (array) ($rec['evidence'] ?? []);
+
+            return [
+                'id'          => (int) $e->id,
+                'time'        => optional($e->occurred_at)->toIso8601String(),
+                'camera'      => (string) ($e->camera ?? ''),
+                'zone'        => (string) ($e->zone ?? ''),
+                'direction'   => (string) ($ev['direction'] ?? ($pl['direction'] ?? '')),
+                'qty'         => (int) ($ev['qty'] ?? data_get($pl, 'object.qty', 0)),
+                'confidence'  => $ev['confidence'] ?? ($rec['confidence'] ?? null),
+                'result'      => (string) $e->recon_result,
+                'severity'    => (string) ($rec['severity'] ?? ''),
+                'review'      => (bool) $e->review_required,
+                'attribution' => (string) ($rec['attribution'] ?? ''),
+                'track'       => $ev['track_id'] ?? data_get($pl, 'assoc.track_id'),
+                'assoc_conf'  => data_get($pl, 'assoc.assoc_conf'),
+                'reason'      => (string) ($rec['reason'] ?? ''),
+                'matched'     => $rec['matched'] ?? null,
+            ];
+        })->values();
+
+        return response()->json([
+            'ok'      => true,
+            'enabled' => (bool) config('vision.reconcile.enabled', false),
+            'counts'  => [
+                'review'  => $rows->where('review_required', true)->count(),
+                'pending' => $rows->where('recon_result', 'PENDING')->count(),
+            ],
+            'items'   => $items,
+        ]);
+    }
+
     // AI bot setup — owner describes the business in plain words, we generate the persona.
     public function botGenerate(Request $r)
     {

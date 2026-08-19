@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock &amp; Loss — Movement Review</title>
+<link rel="stylesheet" href="/panel/shared/tokens.css">
+<style>
+  :root{ --g:#0C831F; --red:#b42318; --red-bg:#fef2f2; --amber:#9a6a00; --amber-bg:#fff7ed;
+         --line:#e5e7eb; --muted:#6b7280; --ink:#14201a; --card:#fff; --bg:#f6f7f8; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:22px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .phase{display:inline-block;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;margin-bottom:16px;border:1px solid}
+  .phase.on{background:#e8f5ec;color:#0A6E1A;border-color:#abdfbc}
+  .phase.off{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+  .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:420px;margin-bottom:18px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .tile .n{font-size:26px;font-weight:800;line-height:1.1}
+  .tile .l{font-size:12px;color:var(--muted);margin-top:3px}
+  .tile.red .n{color:var(--red)} .tile.amber .n{color:var(--amber)}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid #eef1ee;vertical-align:middle}
+  th{background:#fafbfa;color:#6b7280;font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+  tr:last-child td{border-bottom:0}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:#fafbfa}
+  tbody tr.sel{background:#eef4ff}
+  .mono{font-family:"Space Mono",ui-monospace,monospace;font-size:12px}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+  .c-red{background:var(--red-bg);color:var(--red)} .c-amber{background:var(--amber-bg);color:var(--amber)}
+  .empty{background:#fff;border:1px dashed var(--line);border-radius:14px;padding:28px;text-align:center;color:var(--muted)}
+  .detail{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:0;margin-top:16px;overflow:hidden;display:none}
+  .detail.on{display:block}
+  .detail .dh{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  .detail .dh .t{font-weight:800;font-size:15px}
+  .drow{display:grid;grid-template-columns:180px 1fr;gap:10px 18px;padding:10px 18px;border-bottom:1px solid #f1f3f5;font-size:13.5px}
+  .drow:last-child{border-bottom:0}
+  .drow .k{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  .ledger-none{color:var(--red);font-weight:600}
+  .foot{color:var(--muted);font-size:12px;margin-top:16px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stock &amp; Loss — Movement Review</h1>
+  <p class="sub">Physical stock movements the system could not reconcile against the inventory ledger. Every red needs a human to decide — the camera observed, the books didn&rsquo;t match.</p>
+  <div class="phase off" id="phase">Reconciliation status…</div>
+
+  <div class="tiles">
+    <div class="tile red"><div class="n" id="cRed">0</div><div class="l">🔴 Needs review</div></div>
+    <div class="tile amber"><div class="n" id="cPending">0</div><div class="l">🟠 Pending paperwork</div></div>
+  </div>
+
+  <div id="list"><div class="empty">Loading…</div></div>
+  <div class="detail" id="detail"></div>
+
+  <p class="foot" id="foot">Read-only. This flags <b>unreconciled stock movement</b> — never an accusation of theft. Review actions (confirm legitimate · investigate · false positive) are the next step.</p>
+</div>
+
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function pct(v){return (v==null||v==='')?'—':Math.round(Number(v)*100)+'%';}
+function tm(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}); }catch(e){ return iso; } }
+function dir(d){ return (d||'').toUpperCase()||'—'; }
+var RESLBL={UNRECONCILED:'Unreconciled movement',QTY_DISCREPANCY:'Quantity discrepancy',ACCESS_VIOLATION:'Access violation',PENDING:'Pending paperwork'};
+var DATA=[];
+
+function chip(it){
+  var red = it.review || it.result!=='PENDING';
+  if(it.result==='PENDING') return '<span class="chip c-amber">Pending</span>';
+  return '<span class="chip c-red">Review</span>';
+}
+
+async function load(){
+  var d;
+  try{ var r=await fetch('/papi/vision-review',{cache:'no-store'}); d=await r.json(); }
+  catch(e){ document.getElementById('list').innerHTML='<div class="empty">Couldn&rsquo;t load the review feed.</div>'; return; }
+  if(!d||!d.ok){ document.getElementById('list').innerHTML='<div class="empty">Couldn&rsquo;t load the review feed.</div>'; return; }
+
+  var ph=document.getElementById('phase');
+  if(d.enabled){ ph.className='phase on'; ph.textContent='Reconciliation ON — movement events are being checked against the ledger'; }
+  else { ph.className='phase off'; ph.textContent='Reconciliation OFF — turn it on to check movements (no camera events flow yet)'; }
+
+  document.getElementById('cRed').textContent=(d.counts&&d.counts.review)||0;
+  document.getElementById('cPending').textContent=(d.counts&&d.counts.pending)||0;
+
+  DATA=d.items||[];
+  var list=document.getElementById('list');
+  if(!DATA.length){
+    list.innerHTML='<div class="empty">No movement exceptions. '+(d.enabled?'Nothing unreconciled right now.':'Reconciliation is off, or no movement events have arrived yet.')+'</div>';
+    return;
+  }
+  var rows=DATA.map(function(it,i){
+    return '<tr onclick="pick('+i+')" id="row'+i+'">'
+      +'<td>'+esc(tm(it.time))+'</td>'
+      +'<td class="mono">'+esc(it.zone||'—')+'</td>'
+      +'<td>'+esc(dir(it.direction))+'</td>'
+      +'<td class="num">'+(it.qty||0)+'</td>'
+      +'<td class="num">'+pct(it.confidence)+'</td>'
+      +'<td>'+chip(it)+'</td></tr>';
+  }).join('');
+  list.innerHTML='<table><thead><tr><th>Time</th><th>Zone</th><th>Movement</th><th class="num">Qty</th><th class="num">Confidence</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+function pick(i){
+  var it=DATA[i]; if(!it) return;
+  [].forEach.call(document.querySelectorAll('tbody tr'),function(tr){tr.classList.remove('sel');});
+  var row=document.getElementById('row'+i); if(row) row.classList.add('sel');
+
+  var isPending=it.result==='PENDING';
+  var track=(it.track!=null)?('Worker track #'+it.track):'—';
+  var attr=(it.attribution==='undetermined')?' (undetermined — not attributed to one worker)':'';
+  var ledger = it.matched
+    ? 'Matched: '+esc(JSON.stringify(it.matched))
+    : '<span class="ledger-none">No matching dispatch / stock movement</span>';
+  var statusLine = isPending
+    ? '<span class="chip c-amber">Pending — awaiting paperwork</span>'
+    : '<span class="chip c-red">Requires human review</span>';
+
+  var d=document.getElementById('detail');
+  d.className='detail on';
+  d.innerHTML=
+    '<div class="dh"><span class="t">'+esc((RESLBL[it.result]||it.result)).toUpperCase()+'</span>'+statusLine+'</div>'
+    +'<div class="drow"><span class="k">Time</span><span>'+esc(tm(it.time))+'</span></div>'
+    +'<div class="drow"><span class="k">Boundary</span><span class="mono">'+esc(it.zone||'—')+' &middot; '+esc(dir(it.direction))+'</span></div>'
+    +'<div class="drow"><span class="k">Quantity</span><span>'+(it.qty||0)+'</span></div>'
+    +'<div class="drow"><span class="k">Camera</span><span>'+esc(it.camera||'—')+'</span></div>'
+    +'<div class="drow"><span class="k">Vision confidence</span><span>'+pct(it.confidence)+'</span></div>'
+    +'<div class="drow"><span class="k">Association</span><span>'+esc(track)+esc(attr)+'</span></div>'
+    +'<div class="drow"><span class="k">Association confidence</span><span>'+pct(it.assoc_conf)+'</span></div>'
+    +'<div class="drow"><span class="k">Ledger</span><span>'+ledger+'</span></div>'
+    +'<div class="drow"><span class="k">Reason</span><span>'+esc(it.reason||'')+'</span></div>'
+    +'<div class="drow"><span class="k">Status</span><span>'+statusLine+'</span></div>';
+  d.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+load();
+</script>
+</body>
+</html>

@@ -73,6 +73,7 @@ return [
             ['key' => 'inventory',    'label' => 'Inventory',    'route' => '/panel/inventory-count', 'icon' => '📦', 'menu' => 'products'],
             // Inventory Trust (T6) — owner's trust queue, shrink waterfall, vision boxes.
             ['key' => 'trust',        'label' => 'Inventory Trust', 'route' => '/panel/trust', 'icon' => '🛡️', 'menu' => 'products'],
+            ['key' => 'vision_review', 'label' => 'Stock &amp; Loss', 'route' => '/panel/vision-review', 'icon' => '🎥', 'menu' => 'products'],
             ['key' => 'consignments', 'label' => 'Consignments', 'route' => '/panel/consignment',     'icon' => '🚚', 'menu' => 'products'],
             ['key' => 'deliveries',   'label' => 'Deliveries',   'route' => '/panel/operations',      'icon' => '📮', 'menu' => 'products'],
         ],

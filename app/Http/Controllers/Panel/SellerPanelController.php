@@ -740,4 +740,19 @@ HTML;
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Cache-Control', 'no-store');
     }
+
+    public function visionReview(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->tenant_id) {
+            return redirect('/app/login');
+        }
+        $path = resource_path('panel/vision-review.html');
+        if (! is_file($path)) {
+            abort(500, 'Vision review asset missing.');
+        }
+        return response($this->brandize(file_get_contents($path), $user->tenant), 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8')
+            ->header('Cache-Control', 'no-store');
+    }
 }
