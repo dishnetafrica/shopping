@@ -70,7 +70,8 @@ class VisionEventController extends Controller
             'event' => $data['event'],
             'store' => $data['store'] ?? ($box->store ?? null),
             'camera' => $data['camera'] ?? null,
-            'zone' => $data['zone'] ?? null,
+            // A movement event carries its instrumented boundary in `zone_uid`; fall back to `zone`.
+            'zone' => $payload['zone_uid'] ?? ($data['zone'] ?? null),
             'from_state' => $data['from_state'] ?? null,
             'to_state' => $data['to_state'] ?? null,
             'fill' => isset($data['fill']) ? (float) $data['fill'] : null,
@@ -78,6 +79,19 @@ class VisionEventController extends Controller
             'occurred_at' => isset($data['timestamp']) ? date('Y-m-d H:i:s', strtotime($data['timestamp']) ?: time()) : now(),
         ]);
 
-        return response()->json(['ok' => true, 'id' => $ev->id]);
+        // Phase-0 Stock & Loss: reconcile MOVEMENT events against the ledger (opt-in; shelf events are
+        // never touched). Best-effort — a reconciliation failure must never drop the event.
+        $decision = null;
+        if (\App\Services\Vision\Reconciliation\VisionReconciler::enabled()
+            && \App\Services\Vision\Reconciliation\VisionReconciler::handles((string) $data['event'])) {
+            try {
+                $decision = app(\App\Services\Vision\Reconciliation\VisionReconciler::class)
+                    ->reconcile($tenantId, $payload, $ev);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('vision reconcile failed: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json(['ok' => true, 'id' => $ev->id, 'reconciliation' => $decision]);
     }
 }
