@@ -16,6 +16,21 @@ downloaded from our server and activated for this one device only.
    boxes/bags past it).
 7. The camera's **IP address, RTSP URL, username and password**.
 
+## The registry pull credential (what you receive)
+
+The ShopBot Vision software is in our **private registry**. For this test we provide a **temporary,
+read-only pull credential** so the box can download the image. This credential:
+
+- can **only download** the `shopbot-vision:edge-v0.1.0` image — nothing else;
+- **cannot** upload, change, or delete anything;
+- **cannot** access our GitHub, source code, servers, database, or any other software;
+- is **revocable**, and we will **revoke it after the test**.
+
+We will either run the installation ourselves over remote access (you don't type anything), or send you
+this pull credential privately to use when the installer asks. **Please do not share it, publish it, or
+keep it after the test.** It is the only credential you receive, and it does nothing except pull this one
+image.
+
 ## What happens next
 
 1. We connect remotely and run **one install command**. Our software downloads and starts automatically.

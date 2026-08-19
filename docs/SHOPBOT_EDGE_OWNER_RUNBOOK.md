@@ -51,15 +51,32 @@ Edit `public/vision/bootstrap.sh` → `DEFAULT_IMAGE="<REGISTRY>/shopbot-vision:
 (it's served statically at `https://mycloudbss.com/vision/bootstrap.sh`). That single line is the only
 per-release edit.
 
-## 4. Registry access for the box — **DECISION NEEDED (see §9)**
+## 4. Registry access for the box — PRIVATE image, read-only pull credential
 
-The box must `docker compose pull` the image. Pick one:
-- **(recommended for the dev box) PUBLIC image** — mark the registry package public. The image holds
-  only app code + the **public** key + no secrets, so a public pull is safe; **licensing (not registry
-  secrecy) is what protects the business.** China needs no registry credential.
-- **(private) short-lived pull token** — keep the package private and give the box a **read-only,
-  pull-scoped, short-lived** token (never `REGISTRY_TOKEN`, never a GitHub/cloud/production credential).
-  This needs a token-minting step we have **not** automated — see §9.
+**Decision: keep the image PRIVATE.** The box authenticates with a dedicated **pull-only** credential —
+never `REGISTRY_TOKEN`, never GitHub, never a cloud/server credential. The installer takes it at run time
+(`REGISTRY_PULL_USER` / `REGISTRY_PULL_TOKEN`, host derived from `IMAGE_REF`) and `docker login`s via
+stdin, so the token never hits logs or the process list. It is **not** baked into the public installer.
+
+**Which registry?** Nothing is committed yet — the workflow reads `vars.REGISTRY`. Pick one and set it;
+the pull-credential recipe differs:
+
+| Registry | Read-only pull credential | Short-lived? | Revoke |
+|---|---|---|---|
+| **Self-hosted Harbor** (best) | **robot account**, `pull` on the `shopbot-vision` repo only, with an **expiry date** | ✅ native | delete the robot account |
+| **AWS ECR** (best for short-lived) | `aws ecr get-login-password` (**12h** token); IAM policy limited to `BatchGetImage`/`GetDownloadUrlForLayer` on that repo | ✅ 12h | rotate IAM / deny |
+| **Docker Hub** (simplest) | Account → Security → **Read-only** access token | revocable | delete the token |
+| **GHCR** (github-native) | dedicated throwaway account or bot with a **classic PAT scoped ONLY `read:packages`**, granted **read** on the `shopbot-vision` package (package kept private) | not native (revocable) | delete the PAT / remove package access |
+
+**Recommendation:** if you run **Harbor** or **ECR**, use their native **short-lived, scoped** tokens —
+that's the ideal (pull-only + auto-expiring). If **GHCR/Docker Hub**, use a dedicated **read-only** token
+you can delete after the test. In all cases the credential does **only** image-pull and nothing else.
+
+**How the box uses it** (you run this during the remote session, or hand China the token privately):
+```bash
+curl -fsSL https://mycloudbss.com/vision/bootstrap.sh -o /tmp/sb.sh
+sudo REGISTRY_PULL_USER=<pull-user> REGISTRY_PULL_TOKEN=<read-only-token> bash /tmp/sb.sh
+```
 
 ## 5. Verify the image before shipping
 
@@ -84,7 +101,9 @@ The box's next poll (≤10 s) receives its signed **development** license + per-
 - **Health:** on the box, `visionctl status` (or `curl -u admin:<pw> http://<ip>:8080/api/health`) shows
   `version / device_id / license {status,type,tenant,expires_at} / queue`.
 - **Revoke:** `php artisan vision:revoke <box_uid>` — stops at next heartbeat (online) or at license
-  expiry (offline). Then remove the supplier's remote access + rotate the box admin password.
+  expiry (offline). Then, to fully cut the supplier off: **revoke the read-only pull credential** (§4:
+  delete the robot account / access token / PAT), remove their remote access (SSH keys / tunnel agent),
+  and rotate the box admin password.
 - **Update:** push a new `edge-vX.Y.Z` tag → edit `DEFAULT_IMAGE` → on the box re-run the installer (it's
   idempotent) or `cd /opt/shopbot-vision && SHOPBOT_EDGE_IMAGE=<new> docker compose pull && docker compose up -d`.
 
@@ -99,13 +118,19 @@ The box's next poll (≤10 s) receives its signed **development** license + per-
 | reconcile not running for 22 | `Tenant::find(22)->setting('vision_reconcile_enabled')` must be `true` |
 | pull denied | registry package private + no pull token — see §4/§9 |
 
-## 9. What is NOT automated yet (STOP / owner decision)
+## 9. Honest limits (read before trusting)
 
-The **registry pull credential** for a private image is **not** minted automatically. I did not invent a
-token mechanism. Choose: **make the dev image public** (simplest, safe — recommended) or tell me you want
-a private-registry short-lived-pull-token flow and I'll design it (it needs a registry that supports
-scoped tokens, e.g. a GHCR PAT with only `read:packages`, or a registry-native robot account). Until then,
-the box can only pull if the image is public or you hand it a pull token manually.
+- **A private registry does NOT make the image uncopyable.** A Docker image of Python app code is
+  **inspectable and copyable by anyone with root on the box** — it is not "compiled" or hidden. Keeping
+  the registry private raises the bar (China can't casually redistribute the image), but the **real
+  protection is elsewhere**: the signed **license** + **cloud authorization** + **device identity** +
+  server-side **reconciliation / business logic** + your **model & data pipeline** — none of which are on
+  the box. Treat the private registry as friction, not a moat.
+- **What stays a manual owner action (by design):** creating and revoking the read-only pull credential
+  (§4) is a one-time step per registry. It is deliberately manual — it's a scoped secret, and auto-minting
+  it would add a credential-issuing surface we don't need for one box. If you later want per-box
+  auto-issued short-lived pull tokens (Harbor robots / ECR), say so and I'll design it.
+- **Do not introduce auto-updates yet.** Pin `edge-v0.1.0` and prove one physical box end-to-end first.
 
 ## 🔒 KEEP SECRET (never to China)
 `VISION_LICENSE_SECRET` · server `.env` · DB credentials · `REGISTRY_TOKEN` · GitHub/Git access · Laravel

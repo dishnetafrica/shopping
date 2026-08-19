@@ -140,10 +140,23 @@ services:
 EOF
 say "Config written ($DEST) — Device ID $DEVICE_ID"
 
-# ── 5. pull the image (matched to this arch by the registry manifest) ─────────────────────────
+# ── 5. private-registry login (read-only PULL credential) ─────────────────────────────────────
+# The image is PRIVATE. A dedicated PULL-ONLY credential is supplied at run time (env) — it is NEVER
+# baked into this public installer. It can only pull shopbot-vision; it has no write, no GitHub, no
+# server access, and is revocable (see the owner runbook). The token is fed to `docker login` via
+# stdin so it never appears in the process list, shell history, or logs.
 cd "$DEST"
+if [ -n "${REGISTRY_PULL_TOKEN:-}" ]; then
+  REG_HOST="${REGISTRY_PULL_HOST:-${IMAGE_REF%%/*}}"     # host = part of IMAGE_REF before the first '/'
+  printf '%s' "$REGISTRY_PULL_TOKEN" | docker login "$REG_HOST" \
+    -u "${REGISTRY_PULL_USER:-shopbot-pull}" --password-stdin >/dev/null 2>&1 \
+    && say "Registry login OK ($REG_HOST, pull-only)" \
+    || die "registry login failed — check the read-only pull credential for $REG_HOST"
+fi
+
+# ── 5b. pull the image (matched to this arch by the registry manifest) ────────────────────────
 say "Downloading Vision Engine ($IMAGE_REF)…"
-docker compose pull || die "image pull failed — check IMAGE_REF and registry access"
+docker compose pull || die "image pull failed — check IMAGE_REF and the pull credential/registry access"
 
 # ── 6. AI model (separate from the image, checksum-verified) ─────────────────────────────────
 if [ -n "${MODEL_URL:-}" ]; then
