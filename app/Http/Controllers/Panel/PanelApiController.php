@@ -5451,7 +5451,7 @@ class PanelApiController extends Controller
 
         return response()->json([
             'ok'      => true,
-            'enabled' => (bool) config('vision.reconcile.enabled', false),
+            'enabled' => \App\Services\Vision\Reconciliation\VisionReconciler::enabledForTenant($tid),
             'counts'  => [
                 'review'  => $rows->where('review_required', true)->count(),
                 'pending' => $rows->where('recon_result', 'PENDING')->count(),
