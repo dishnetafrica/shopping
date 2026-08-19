@@ -157,12 +157,17 @@ final class VisionReconciler
         $zoneMap    = $t ? (array) $t->setting('vision_zone_location_map', []) : [];
         $controlled = $t ? (array) $t->setting('vision_controlled_zones', []) : [];
         $authorized = $t ? (array) $t->setting('vision_authorized_tracks', []) : [];
+        // qty_tolerance is presence-based (wide) by default — carton != SKU-unit. A tenant may opt into
+        // exact quantity reconciliation (0) once its carton↔unit mapping is trustworthy.
+        $qtyTol     = $t && $t->setting('vision_qty_tolerance', null) !== null
+            ? (int) $t->setting('vision_qty_tolerance')
+            : (int) ($base['qty_tolerance'] ?? 1_000_000);
 
         return ReconciliationEngine::defaults([
             'grace_seconds'           => (int) ($base['grace_seconds'] ?? 900),
             'match_window_seconds'    => (int) ($base['match_window_seconds'] ?? 300),
             'net_zero_window_seconds' => (int) ($base['net_zero_window_seconds'] ?? 300),
-            'qty_tolerance'           => (int) ($base['qty_tolerance'] ?? 1_000_000),
+            'qty_tolerance'           => $qtyTol,
             'zone_location_map'       => $zoneMap ?: (array) ($base['zone_location_map'] ?? []),
             'controlled_zones'        => $controlled ?: (array) ($base['controlled_zones'] ?? []),
             'authorized'              => $authorized,
