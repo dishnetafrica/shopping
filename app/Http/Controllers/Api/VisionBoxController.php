@@ -35,10 +35,14 @@ class VisionBoxController extends Controller
     public function hello(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'box_uid'    => 'required|string|min:8|max:64',
-            'secret'     => 'required|string|min:24|max:128',
-            'fw_version' => 'nullable|string|max:40',
-            'hw_model'   => 'nullable|string|max:80',
+            'box_uid'       => 'required|string|min:8|max:64',
+            'secret'        => 'required|string|min:24|max:128',
+            'fw_version'    => 'nullable|string|max:40',
+            'hw_model'      => 'nullable|string|max:80',
+            // Licensing (optional — older boxes omit these and still work): the box's Ed25519 PUBLIC
+            // key (primary identity) + its layered hardware fingerprint (additional binding signal).
+            'device_pubkey' => 'nullable|string|max:128',
+            'fingerprint'   => 'nullable|array',
         ]);
 
         $hash = hash('sha256', $data['secret']);
@@ -124,16 +128,52 @@ class VisionBoxController extends Controller
             'store'         => $box->store,
             'webhook_url'   => rtrim((string) config('app.url'), '/') . '/api/vision/events',
             'webhook_token' => $box->webhook_token,
+            'license'       => $this->issueLicense($box),   // signed Ed25519 license (null until a device_pubkey is registered)
             'poll_seconds'  => 300,
         ]);
+    }
+
+    /**
+     * Issue a signed license to a claimed box that has registered a device keypair, renewing its
+     * expiry each poll (poll IS the heartbeat). Returns null for legacy boxes without a keypair, so the
+     * existing flow is unchanged and edge license enforcement stays opt-in (VISION_LICENSE_ENFORCE).
+     */
+    private function issueLicense(VisionBox $box): ?array
+    {
+        if (empty($box->device_pubkey)) {
+            return null;
+        }
+        $grace = (int) ($box->grace_seconds ?? 1209600);
+        $ttl   = ($box->license_type === 'production') ? 7 * 86400 : 30 * 86400;
+        $box->forceFill(['expires_at' => now()->addSeconds($ttl)])->save();   // renew on each poll
+
+        $payload = [
+            'device_id'          => (string) $box->box_uid,
+            'box_uid'            => (string) $box->box_uid,
+            'device_pubkey'      => (string) $box->device_pubkey,
+            'fingerprint_quorum' => json_decode((string) ($box->fingerprint_hash ?: '[]'), true) ?: [],
+            'license_type'       => (string) $box->license_type,
+            'runtime_authorized' => (string) ($box->runtime_version_authorized ?? ''),
+            'model_authorized'   => (string) ($box->model_version_authorized ?? ''),
+            'tenant'             => (string) ($box->tenant_id ?? ''),
+            'issued_at'          => (int) now()->timestamp,
+            'expires_at'         => (int) $box->expires_at->timestamp,
+            'grace_seconds'      => $grace,
+            'nonce'              => bin2hex(random_bytes(8)),
+        ];
+
+        return app(\App\Services\Vision\LicenseSigner::class)->sign($payload);
     }
 
     private function touch(VisionBox $box, Request $request, array $data = []): void
     {
         $box->last_seen_at = now();
         $box->last_ip      = (string) $request->ip();
-        if (! empty($data['fw_version'])) $box->fw_version = $data['fw_version'];
-        if (! empty($data['hw_model']))   $box->hw_model   = $data['hw_model'];
+        if (! empty($data['fw_version']))    $box->fw_version    = $data['fw_version'];
+        if (! empty($data['hw_model']))      $box->hw_model      = $data['hw_model'];
+        // Register the device keypair + fingerprint on first contact (write-once alongside the secret).
+        if (! empty($data['device_pubkey'])) $box->device_pubkey = $data['device_pubkey'];
+        if (! empty($data['fingerprint']))   $box->fingerprint_hash = json_encode(array_values($data['fingerprint']));
         $box->save();
     }
 

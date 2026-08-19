@@ -153,6 +153,49 @@ dev tenant scoping + single-use dev claim + secret-free/dataset-free image are t
 **Do NOT change:** `ReconciliationEngine`, `MovementStateMachine`, `carton.move` contract, shelf detector,
 ERP layer.
 
+## Implementation notes (as built — edge core done, cloud extended)
+
+**Approved changes folded in:** (#5) the **device-generated Ed25519 keypair is the primary identity**
+(`app/licensing/identity.py`, private key in `/data/device_key` 0600); (#4) the **hardware fingerprint
+is an additional binding signal**, quorum-matched (`app/licensing/fingerprint.py`), never sole identity.
+A license binds BOTH → a fresh-keypair clone fails the keypair check, a storage-copy clone fails the
+fingerprint check.
+
+**Wording correction (H):** *not* "licensing makes copies commercially useless" as an absolute. A root
+attacker can patch a local runtime. The correct statement: **the edge box is only one component; the
+production cloud, credentials, reconciliation, ERP integrations, review system, model lifecycle and data
+remain ShopBot-controlled — so extracting or patching the edge runtime does not obtain the ShopBot
+business.**
+
+### Conflict with the existing `vision_boxes` mechanism (the reuse decision)
+Inspecting the code found that **`VisionBoxController` (`/api/vision/box/hello` + `/poll`) already IS the
+activation + heartbeat flow**: the box invents a secret at first boot, `hello` registers it and returns a
+claim code, `poll` returns config when claimed **and doubles as the heartbeat** ("future hook for signed
+OTA"); `vision:claim` binds tenant + mints the per-box `webhook_token`; revocation already 403s at ingest.
+**So a separate `/activate` endpoint would duplicate it.** Resolution — **extend, don't parallel:**
+- `hello` now also accepts the box's `device_pubkey` + `fingerprint` (optional → legacy boxes unaffected),
+  stored write-once alongside the existing secret.
+- `claimedResponse` (returned by `hello`/`poll`) now also returns the **signed license**, renewing expiry
+  on each poll — the existing poll IS the license heartbeat. No new device-facing endpoint, no new routes.
+- `vision:claim` gains `--type/--model/--runtime/--grace` (default **development** — a supplier box is
+  naturally dev-scoped). `vision:revoke <box_uid>` sets `status=revoked`.
+- The box's existing per-box `webhook_token` stays the delivery credential (already the server's preferred
+  `X-Vision-Token`), so **`events.py` is unchanged** and the global token is only a legacy fallback.
+
+### Verified in the sandbox (real, not claimed)
+- edge licensing tests **9/9** (real PyNaCl): device keypair persistence + 0600, device-signature proof,
+  valid/grace/expired, tampered payload → INVALID_SIG, forged signer → INVALID_SIG, **clone via fresh
+  keypair → WRONG_DEVICE**, **clone via copied storage on different hardware → WRONG_DEVICE**, fingerprint
+  quorum (disk-swap survives, HW-copy rejected).
+- **Cross-language crypto interop proven:** PHP `LicenseSigner` (libsodium) signs → edge PyNaCl verifies;
+  canonical JSON **byte-matches** including nested objects/lists.
+- All cloud PHP `php -l` clean; `app/main.py` compiles with the guarded `check_license()` (nacl lazy).
+
+### What still needs the box + cloud (reported, not claimed)
+Activation/heartbeat/revocation against the real Laravel DB; the physical clone/offline/revoke tests; the
+Ed25519 keypair generation in `edge/Dockerfile`-bundled runtime; wiring `bootstrap.sh` to do
+hello-with-keypair. None are sandbox-runnable (no cloud DB / no box).
+
 ## Acceptance test (eventual)
 - new box → activate → licensed runtime → camera → movement event → cloud; **and**
 - copy runtime to an unlicensed box → **fingerprint mismatch → does not activate**.

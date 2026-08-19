@@ -23,7 +23,11 @@ final class VisionClaimCommand extends Command
     protected $signature = 'vision:claim
         {code : the claim code shown on the box screen}
         {--tenant= : tenant id to bind the box to (required)}
-        {--store=kampala : store/location label the gateway stamps on every event}';
+        {--store=kampala : store/location label the gateway stamps on every event}
+        {--type=development : license type (development|sample|trial|production) — dev is the safe default for a supplier box}
+        {--model= : authorised model version}
+        {--runtime= : authorised runtime version}
+        {--grace=1209600 : offline grace seconds (default 14d)}';
 
     protected $description = 'Bind a pending Vision Gateway box (by its on-screen claim code) to a tenant.';
 
@@ -55,13 +59,20 @@ final class VisionClaimCommand extends Command
         }
 
         $box->forceFill([
-            'status'           => 'claimed',
-            'tenant_id'        => $tenantId,
-            'store'            => (string) $this->option('store'),
-            'webhook_token'    => Str::random(64),
-            'claim_code'       => null,
-            'claim_expires_at' => null,
-            'claimed_at'       => now(),
+            'status'                     => 'claimed',
+            'tenant_id'                  => $tenantId,
+            'store'                      => (string) $this->option('store'),
+            'webhook_token'              => Str::random(64),
+            'claim_code'                 => null,
+            'claim_expires_at'           => null,
+            'claimed_at'                 => now(),
+            // Licensing (fields added by the vision_boxes licensing migration). The signed license
+            // itself is issued to the box on its next poll (VisionBoxController::claimedResponse).
+            'license_type'               => (string) $this->option('type'),
+            'model_version_authorized'   => $this->option('model'),
+            'runtime_version_authorized' => $this->option('runtime'),
+            'grace_seconds'              => (int) $this->option('grace'),
+            'issued_at'                  => now(),
         ])->save();
 
         $this->info("Box {$box->box_uid} claimed → tenant {$tenantId} ({$tenant->name}), store '{$box->store}'.");
