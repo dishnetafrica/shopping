@@ -51,27 +51,31 @@ and — for hard environments — **auxiliary sensors** (weight/barcode/beam-bre
 quantify where a single camera's count degrades so placement vs multi-camera is a *measured* decision,
 not a promise.
 
-## DEFECT found by the mixed scenario (flagged, not yet fixed)
+## DEFECT found by the mixed scenario — FIXED
 
-The simultaneous-crossing test surfaced a real bug in the **frozen** `carton.move` contract:
+The simultaneous-crossing test surfaced (and the approved surgical fix corrected) a real bug in the
+`carton.move` contract:
 
-- **Symptom:** three objects crossing the same direction at one timestamp produce only **2 distinct
-  `uid`s** (one collision).
-- **Root cause:** `carton_move()` derives the `uid` from `track_id=track` — the **associated *person*
-  track** (or `"?"` when unassociated) — not the stock object's own track. `event_uid` therefore
-  collides whenever multiple objects share one worker (or none is attributed).
-- **Impact:** ShopBot ingest has `unique(tenant_id, event_uid)`; colliding events are **dropped as
-  duplicates**, so a genuine multi-object crossing is **undercounted** — directly breaking the primary
-  metric at the ingest layer.
-- **Fix (small, surgical, awaiting approval — touches the frozen contract + `MovementStateMachine`):**
-  key the `uid` on the **stock-object track** (`c.track_id`), and keep the associated person only in
-  `assoc.track_id` (attribution is a separate concern from identity). One extra argument to
-  `carton_move()` and one line in `_handle_crossing`.
-- **Status:** documented as an `xfail` test (`test_mixed_crossings_should_have_distinct_uids`) and a
-  harness KNOWN-ISSUE line so the suite stays green while the defect is on record. **Not fixed here** —
-  the contract is frozen; this needs an explicit go.
+- **Was:** `carton_move()` derived the `uid` from the **associated *person* track** (or `"?"` when
+  unassociated), so three objects crossing the same direction at one timestamp produced only **2
+  distinct `uid`s**. ShopBot ingest has `unique(tenant_id, event_uid)`, so the colliding events would be
+  **dropped as duplicates** and a real multi-object crossing **undercounted**.
+- **Fix (applied):** the `uid` is now keyed on the **stock object's own track** (`object_track_id`); the
+  associated person is retained **only** in `assoc.track_id`. **WHO carried it ≠ WHAT moved** — the
+  worker is attribution, the stock object is the movement-event identity. Changed:
+  `app/movement/contract.py` (`carton_move` signature + uid) and `app/movement/state_machine.py`
+  (passes `object_track_id=c.track_id`). No reconciliation/PHP change — ShopBot reads the uid from the
+  payload; its 32-char format is unchanged.
+- **Regression tests (now passing, xfail removed):** 3 objects + 1 worker → 3 unique uids; 3 objects +
+  no attribution → 3 unique; same object retransmitted → 1 event; two objects simultaneously → 2 events;
+  uid stable for the same object regardless of attribution.
+
+**Permanent principle:** movement-event identity = the stock object's track; the person is attribution
+only. This holds for one worker + 5 bags, two workers + 8 cartons, and pallet + cartons + bags through
+one boundary.
 
 ## Scope
 
-No reconciliation / production movement-code change in this task — only additive tests + this doc. The
-detector remains behind the `Detector` interface; the fix above is recommended but deferred to approval.
+Movement contract + state machine changed **only** for this approved correctness fix (the freeze was
+overridden for it). No reconciliation semantics, ERP architecture, detector architecture, or shelf
+vision changed. The detector remains behind the `Detector` interface.

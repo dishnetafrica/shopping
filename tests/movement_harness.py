@@ -169,12 +169,9 @@ def s10_mixed_simultaneous():
     mv = moves(ev)
     check("10 mixed types crossing at once → exactly one movement each (3)", len(mv) == 3, f"got {len(mv)}")
     check("10 empty worker adds no movement (3, not 4)", len(mv) == 3)
-    # KNOWN DEFECT (flagged, not yet fixed — awaiting approval to touch the frozen contract):
-    # the uid is keyed on the associated PERSON track, so same-direction objects collide. ShopBot's
-    # unique(tenant,event_uid) index would drop the duplicates → undercount. Reported, not asserted.
-    if len({x['uid'] for x in mv}) != 3:
-        print(f"  KNOWN-ISSUE  10 uid collision on simultaneous same-direction crossings "
-              f"({len({x['uid'] for x in mv})} distinct uids for 3 objects) — flagged for fix")
+    # uid = WHAT moved (stock-object track), not WHO carried it → distinct even when one worker carries all
+    check("10 three distinct uids (identity per object, not per worker)",
+          len({x['uid'] for x in mv}) == 3, f"got {len({x['uid'] for x in mv})}")
 
 
 def s11_person_only():

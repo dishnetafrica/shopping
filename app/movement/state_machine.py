@@ -74,7 +74,8 @@ class MovementStateMachine:
         track, candidates, assoc_conf = self._associate(c.track_id, frame)
         payload = contract.carton_move(
             self.store, self.zone_uid, c.direction, frame.ts,
-            track_id=track, candidates=candidates, assoc_conf=assoc_conf,
+            object_track_id=c.track_id,          # WHAT moved — the movement event identity (uid)
+            track_id=track, candidates=candidates, assoc_conf=assoc_conf,  # WHO carried it — attribution
             confidence=c.confidence, occlusion=c.occluded, qty_conf=c.qty_conf,
         )
         self.sink(payload)

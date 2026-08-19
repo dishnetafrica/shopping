@@ -170,22 +170,66 @@ def test_mixed_types_crossing_simultaneously_one_event_each(machine, sink):
     ))
     mv = moves(sink)
     assert len(mv) == 3                                   # one movement per physical object (the metric)
+    assert len({m["uid"] for m in mv}) == 3              # WHAT moved: distinct identity per object
 
 
-@pytest.mark.xfail(strict=True, reason="DEFECT (flagged, not yet fixed): carton.move uid is keyed on the "
-                   "associated PERSON track (or '?' when unassociated), not the stock-object's own "
-                   "track — so multiple same-direction objects at one timestamp collide, and ShopBot's "
-                   "unique(tenant,event_uid) index would drop them as duplicates, undercounting a real "
-                   "multi-object crossing. Fix: key the uid on the stock-object track (touches the frozen "
-                   "contract — awaiting approval).")
-def test_mixed_crossings_should_have_distinct_uids(machine, sink):
+# ── uid identity = WHAT moved (stock object), NOT WHO carried it (person) ─────────────────────
+
+def test_three_objects_one_worker_three_unique_uids(machine, sink):
+    # all three objects associate to the SAME worker — uids must still be distinct
     machine.observe(Frame(
         ts=0.0,
-        carton_boxes={1: (100, 300, 140, 340), 2: (200, 300, 240, 340), 3: (300, 300, 340, 340)},
+        carton_boxes={1: (100, 300, 140, 340), 2: (130, 300, 170, 340), 3: (160, 300, 200, 340)},
+        person_boxes={9: (150, 300, 190, 380)},          # one worker, close to all three
         crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],
     ))
     mv = moves(sink)
-    assert len({m["uid"] for m in mv}) == 3              # SHOULD hold; currently fails (the defect)
+    assert len(mv) == 3 and len({m["uid"] for m in mv}) == 3
+    # every event attributes to the same worker — attribution is shared, identity is not
+    assert {m["assoc"]["track_id"] for m in mv} == {9}
+
+
+def test_three_objects_no_attribution_three_unique_uids(machine, sink):
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (200, 300, 240, 340), 3: (300, 300, 340, 340)},
+        crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],   # no person_boxes
+    ))
+    mv = moves(sink)
+    assert len(mv) == 3 and len({m["uid"] for m in mv}) == 3
+    assert all(m["assoc"]["track_id"] is None for m in mv)   # unattributed, still distinct identities
+
+
+def test_same_object_retransmitted_is_one_event(machine, sink):
+    # the same object re-observed crossing the same way within cooldown is one movement (idempotent)
+    machine.observe(Frame(ts=0.0, crossings=[Crossing(1, "out")]))
+    machine.observe(Frame(ts=0.3, carton_boxes={1: (100, 300, 140, 340)},
+                          crossings=[Crossing(1, "out")]))
+    mv = moves(sink)
+    assert len(mv) == 1
+
+
+def test_two_objects_simultaneously_two_events(machine, sink):
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (300, 300, 340, 340)},
+        crossings=[Crossing(1, "out"), Crossing(2, "out")],
+    ))
+    mv = moves(sink)
+    assert len(mv) == 2 and len({m["uid"] for m in mv}) == 2
+
+
+def test_uid_is_stable_for_the_same_object_crossing():
+    a = contract.carton_move(STORE, ZONE, "out", 1_723_000_000.0, object_track_id=1, track_id=9,
+                             candidates=[9], assoc_conf=0.9, confidence=0.9, occlusion=False)
+    b = contract.carton_move(STORE, ZONE, "out", 1_723_000_000.0, object_track_id=1, track_id=None,
+                             candidates=[], assoc_conf=0.0, confidence=0.9, occlusion=False)
+    # same object + same crossing → same uid regardless of who (or whether anyone) was attributed
+    assert a["uid"] == b["uid"]
+    # different object → different uid
+    c = contract.carton_move(STORE, ZONE, "out", 1_723_000_000.0, object_track_id=2, track_id=9,
+                             candidates=[9], assoc_conf=0.9, confidence=0.9, occlusion=False)
+    assert c["uid"] != a["uid"]
 
 
 def test_person_carrying_nothing_produces_no_movement(machine, sink):
