@@ -158,6 +158,52 @@ def test_frozen_contract_example_is_valid():
     assert contract.validate_carton_move(contract.EXAMPLE_CARTON_MOVE) == []
 
 
+# ── mixed-stock environment: the engine counts a STOCK OBJECT crossing, regardless of type ────
+
+def test_mixed_types_crossing_simultaneously_one_event_each(machine, sink):
+    # carton + bag + sack cross OUT together; an empty-handed worker is present but carries nothing.
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (200, 300, 240, 340), 3: (300, 300, 340, 340)},
+        person_boxes={9: (420, 300, 460, 380)},
+        crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],
+    ))
+    mv = moves(sink)
+    assert len(mv) == 3                                   # one movement per physical object (the metric)
+
+
+@pytest.mark.xfail(strict=True, reason="DEFECT (flagged, not yet fixed): carton.move uid is keyed on the "
+                   "associated PERSON track (or '?' when unassociated), not the stock-object's own "
+                   "track — so multiple same-direction objects at one timestamp collide, and ShopBot's "
+                   "unique(tenant,event_uid) index would drop them as duplicates, undercounting a real "
+                   "multi-object crossing. Fix: key the uid on the stock-object track (touches the frozen "
+                   "contract — awaiting approval).")
+def test_mixed_crossings_should_have_distinct_uids(machine, sink):
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (200, 300, 240, 340), 3: (300, 300, 340, 340)},
+        crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],
+    ))
+    mv = moves(sink)
+    assert len({m["uid"] for m in mv}) == 3              # SHOULD hold; currently fails (the defect)
+
+
+def test_person_carrying_nothing_produces_no_movement(machine, sink):
+    machine.observe(Frame(ts=0.0, person_boxes={9: (400, 300, 440, 380)}))
+    machine.observe(Frame(ts=1.0, person_boxes={9: (400, 320, 440, 400)}))
+    assert sink == []                                    # person is not stock — no movement
+
+
+def test_pallet_crosses_while_empty_worker_does_not(machine, sink):
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={5: (100, 300, 190, 360)},          # pallet as a generic stock object
+        person_boxes={8: (420, 300, 460, 380)},           # empty-handed worker
+        crossings=[Crossing(5, "out")],
+    ))
+    assert len(moves(sink)) == 1                          # exactly one movement, type-agnostic
+
+
 # ── real-Supervision integration: scripted detector through actual ByteTrack + LineZone ──────
 
 sv = pytest.importorskip("supervision", reason="supervision not installed")
