@@ -18,16 +18,23 @@ Ubuntu + Docker + internet + one RTSP/ONVIF camera pointed at the test area. Tha
 
 ### C. The one command (you or China run it on the box)
 ```bash
-curl -fsSL https://mycloudbss.com/vision/bootstrap.sh | sudo bash
+curl -fsSL https://mycloudbss.com/vision/bootstrap.sh -o shopbot-install.sh
+sudo bash shopbot-install.sh
 ```
+The installer prompts for the **read-only GHCR pull token** (username + token you provide), pulls the
+image, then **`docker logout`s** — no registry credential stays on the box.
 
 ### D. Expected output on the box
 ```
 ✓ ARM64 detected     ✓ Docker ready     ✓ Internet reachable
 ✓ Config written  — Device ID SB-UG-XXXXXX
-✓ Downloading Vision Engine (…:edge-v0.1.0)
+  Registry username (ghcr.io): <you enter>
+  Read-only pull token: <you enter, hidden>
+✓ Registry login OK (ghcr.io, pull-only)
+✓ Downloading Vision Engine (ghcr.io/dishnetafrica/shopbot-vision:edge-v0.1.0)
+✓ Pull credential discarded (docker logout ghcr.io)
 ✓ Activating device against ShopBot Cloud…
-CLAIM CODE: ABC123  — on ShopBot Cloud run: php artisan vision:claim ABC123 --tenant=<DEV> --type=development
+CLAIM CODE: ABC123
 …(waits for you to claim)…
 ```
 

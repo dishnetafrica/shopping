@@ -3,11 +3,30 @@
 For **you** (ShopBot owner). Everything needed to build, publish, activate, and revoke a development
 edge box. Anything marked **🔒 KEEP SECRET** must never reach China or a repo.
 
+## Owner quick checklist (GHCR)
+
 ```
-Generate license keypair → set GitHub variables/secrets → push edge-v0.1.0 →
-CI builds amd64+arm64 → registry stores image → China runs one command →
-claim code → vision:claim --tenant=22 --type=development → box activates → connect camera
+GitHub   → set variable SHOPBOT_LICENSE_PUBKEY (§0–§1); keep the package Private
+Registry → GHCR via built-in GITHUB_TOKEN (nothing to create); make a read-only pull PAT (§4)
+Build    → git tag edge-v0.1.0 && git push origin edge-v0.1.0   (§2)
+Verify   → docker buildx imagetools inspect … (digest) + pubkey present, no private key (§5)
+China    → curl -fsSL https://mycloudbss.com/vision/bootstrap.sh -o sb.sh; sudo bash sb.sh
+           (installer prompts China for the read-only pull token)                (§6, China guide)
+Claim    → php artisan vision:claim <CODE> --tenant=22 --type=development         (§6)
+Camera   → box dashboard → add RTSP/ONVIF camera → configure door                (first-box guide H–I)
+Test     → synthetic + real movement, internet off/on                            (first-box guide J–M)
+Revoke   → php artisan vision:revoke <box_uid> + delete the pull PAT + cut access (§7, first-box N–P)
 ```
+
+### What you MUST configure manually (nothing else is automatic)
+**On GitHub:** (1) repo **Variable** `SHOPBOT_LICENSE_PUBKEY`; (2) keep the `shopbot-vision` package
+**Private**; (3) create the **read-only `read:packages` PAT** for pulling (§4). *No push secret needed —
+GHCR uses the built-in `GITHUB_TOKEN`.*
+**On mycloudbss.com:** (1) generate + set `VISION_LICENSE_SECRET` (🔒 server `.env`) and
+`VISION_LICENSE_PUBLIC`; (2) `php artisan config:cache`; (3) tenant 22 `vision_reconcile_enabled=true`
+(already done); (4) run `php artisan vision:claim …` when a box shows its code; (5) deploy the branch so
+`/vision/bootstrap.sh` is served. **`VISION_LICENSE_PUBLIC` on the server must equal the GitHub variable
+`SHOPBOT_LICENSE_PUBKEY`** (same keypair) or every license is rejected.
 
 ## 0. One-time secrets & keys
 
@@ -25,24 +44,28 @@ After editing server `.env`: `php artisan config:cache`. **The public key baked 
 
 ## 1. GitHub configuration (for the `edge-image` workflow)
 
+Registry = **GHCR** (GitHub Container Registry). The push uses the **built-in `GITHUB_TOKEN`** — there is
+**no registry secret to create.** The only thing you set here is one variable:
+
 | Kind | Name | Value | Secret? |
 |---|---|---|---|
-| Variable | `REGISTRY` | e.g. `ghcr.io/dishnetafrica` | no |
-| Variable | `SHOPBOT_LICENSE_PUBKEY` | the `VISION_LICENSE_PUBLIC` value | no (public key) |
-| Secret | `REGISTRY_USER` | registry username | 🔒 |
-| Secret | `REGISTRY_TOKEN` | registry push token (write:packages) | 🔒 |
+| **Variable** | `SHOPBOT_LICENSE_PUBKEY` | the `VISION_LICENSE_PUBLIC` value (base64) | no (public key) |
 
-The workflow **fails fast** if `SHOPBOT_LICENSE_PUBKEY` or `REGISTRY` is missing, and never echoes credentials.
+Set it at: repo → Settings → Secrets and variables → Actions → **Variables** → New variable. The workflow
+**fails fast** if it's missing, and never echoes credentials. (`REGISTRY_USER`/`REGISTRY_TOKEN` are **not**
+needed on GHCR.)
 
-## 2. Build & publish an image
+## 2. Build & publish the image
 
 ```bash
 git tag edge-v0.1.0 && git push origin edge-v0.1.0
 ```
 CI (`.github/workflows/edge-image.yml`) builds `linux/amd64` + `linux/arm64` and pushes:
 ```
-<REGISTRY>/shopbot-vision:edge-v0.1.0
+ghcr.io/dishnetafrica/shopbot-vision:edge-v0.1.0     (PRIVATE by default)
 ```
+The final workflow step prints `IMAGE_REF` and `DIGEST`. **Make sure the package stays Private:** repo →
+Packages → `shopbot-vision` → Package settings → visibility = **Private**.
 The final workflow step prints the exact `IMAGE_REF`. **No `:latest`** — always a version tag.
 
 ## 3. Point the installer at the image
@@ -51,41 +74,41 @@ Edit `public/vision/bootstrap.sh` → `DEFAULT_IMAGE="<REGISTRY>/shopbot-vision:
 (it's served statically at `https://mycloudbss.com/vision/bootstrap.sh`). That single line is the only
 per-release edit.
 
-## 4. Registry access for the box — PRIVATE image, read-only pull credential
+## 4. The read-only pull credential (GHCR, for the box)
 
-**Decision: keep the image PRIVATE.** The box authenticates with a dedicated **pull-only** credential —
-never `REGISTRY_TOKEN`, never GitHub, never a cloud/server credential. The installer takes it at run time
-(`REGISTRY_PULL_USER` / `REGISTRY_PULL_TOKEN`, host derived from `IMAGE_REF`) and `docker login`s via
-stdin, so the token never hits logs or the process list. It is **not** baked into the public installer.
+The image is **private**. The box pulls it with a **read-only PAT** that has **only `read:packages`** —
+no repo write, no admin, not `GITHUB_TOKEN`, not a cloud/server credential. The installer prompts for it,
+uses it once, and **`docker logout`s** — nothing is stored on the box afterward.
 
-**Which registry?** Nothing is committed yet — the workflow reads `vars.REGISTRY`. Pick one and set it;
-the pull-credential recipe differs:
+**Create the pull PAT** (ideally on a **dedicated/throwaway GitHub account** you add as a read-only
+collaborator on the package, so it isn't tied to your main account):
+1. GitHub → Settings → Developer settings → **Personal access tokens (classic)** → Generate new.
+2. Scope: check **only `read:packages`**. Nothing else. Set a short expiry.
+3. If using a separate account: repo → Packages → `shopbot-vision` → Package settings → **Manage Actions
+   access / invite** → add that account with **Read**.
+4. The **username** is that GitHub account's login; the **token** is the PAT (`ghp_…`).
 
-| Registry | Read-only pull credential | Short-lived? | Revoke |
-|---|---|---|---|
-| **Self-hosted Harbor** (best) | **robot account**, `pull` on the `shopbot-vision` repo only, with an **expiry date** | ✅ native | delete the robot account |
-| **AWS ECR** (best for short-lived) | `aws ecr get-login-password` (**12h** token); IAM policy limited to `BatchGetImage`/`GetDownloadUrlForLayer` on that repo | ✅ 12h | rotate IAM / deny |
-| **Docker Hub** (simplest) | Account → Security → **Read-only** access token | revocable | delete the token |
-| **GHCR** (github-native) | dedicated throwaway account or bot with a **classic PAT scoped ONLY `read:packages`**, granted **read** on the `shopbot-vision` package (package kept private) | not native (revocable) | delete the PAT / remove package access |
-
-**Recommendation:** if you run **Harbor** or **ECR**, use their native **short-lived, scoped** tokens —
-that's the ideal (pull-only + auto-expiring). If **GHCR/Docker Hub**, use a dedicated **read-only** token
-you can delete after the test. In all cases the credential does **only** image-pull and nothing else.
-
-**How the box uses it** (you run this during the remote session, or hand China the token privately):
+**Manual login test** (optional, on any machine):
 ```bash
-curl -fsSL https://mycloudbss.com/vision/bootstrap.sh -o /tmp/sb.sh
-sudo REGISTRY_PULL_USER=<pull-user> REGISTRY_PULL_TOKEN=<read-only-token> bash /tmp/sb.sh
+echo <PAT> | docker login ghcr.io -u <github-username> --password-stdin
+docker pull ghcr.io/dishnetafrica/shopbot-vision:edge-v0.1.0
+docker logout ghcr.io
 ```
+**The installer does this for you** — it prompts for the username + token, logs in, pulls, and logs out.
+You give China only this read-only token (or run the install yourself over remote access).
 
-## 5. Verify the image before shipping
+## 5. Verify the image (digest + no secrets) before shipping
 
 ```bash
-docker pull <REGISTRY>/shopbot-vision:edge-v0.1.0
-docker run --rm <REGISTRY>/shopbot-vision:edge-v0.1.0 python -c "import os;print('pubkey len', len(os.environ.get('SHOPBOT_LICENSE_PUBKEY','')))"   # non-zero
-docker run --rm <REGISTRY>/shopbot-vision:edge-v0.1.0 sh -c 'ls /data 2>/dev/null; grep -rl PRIVATE / 2>/dev/null | head'   # no private key
+IMG=ghcr.io/dishnetafrica/shopbot-vision:edge-v0.1.0
+# Digest — record it; the box can pin by digest (…@sha256:…) so it pulls exactly this build:
+docker buildx imagetools inspect "$IMG" | grep -i digest
+# Pubkey baked in is present + matches config('vision.license_public'):
+docker run --rm "$IMG" python -c "import os;print('pubkey', os.environ.get('SHOPBOT_LICENSE_PUBKEY','')[:16],'…')"
+# No signing private key anywhere in the image:
+docker run --rm "$IMG" sh -c "grep -rl PRIVATE / 2>/dev/null | head || echo 'no private key ✓'"
 ```
-Confirm the printed pubkey matches `config('vision.license_public')`.
+Confirm the printed pubkey matches `php artisan tinker --execute='echo config("vision.license_public");'`.
 
 ## 6. Activate a box (claim)
 

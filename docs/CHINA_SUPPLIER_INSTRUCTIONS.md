@@ -40,8 +40,12 @@ image.
 
 The one command (we will run it, or guide you):
 ```bash
-curl -fsSL https://mycloudbss.com/vision/bootstrap.sh | sudo bash
+curl -fsSL https://mycloudbss.com/vision/bootstrap.sh -o shopbot-install.sh
+sudo bash shopbot-install.sh
 ```
+The installer will **ask you for a temporary registry username and pull token** — we provide these to
+you (they only download our software and are removed from the box straight after). Then it shows the
+**Device ID** and **Claim Code**.
 
 ## Please do NOT (without telling us first)
 

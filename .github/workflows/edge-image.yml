@@ -1,14 +1,13 @@
-# Build + push the multi-arch ShopBot Vision EDGE image (our server side).
+# Build + push the multi-arch ShopBot Vision EDGE image to GitHub Container Registry (GHCR).
 #
-# The box never builds — CI produces one manifest covering arm64 (RK3588 / Jetson) and amd64, so
-# `docker compose pull` on any box gets the right architecture. Triggered ONLY on an edge version tag so
-# it never runs on ordinary pushes and never interferes with the Laravel EasyPanel build.
+# The box never builds — CI produces one manifest covering arm64 (RK3588 / Jetson) and amd64, so the box
+# pulls the right architecture. Triggered ONLY on an edge version tag so it never runs on ordinary pushes
+# and never interferes with the Laravel EasyPanel build.
 #
-# GitHub config (see docs/SHOPBOT_EDGE_OWNER_RUNBOOK.md):
-#   Variables (not secret): REGISTRY (e.g. ghcr.io/dishnetafrica), SHOPBOT_LICENSE_PUBKEY (public key)
-#   Secrets:                REGISTRY_USER, REGISTRY_TOKEN
-# The signing PRIVATE key is never referenced here. Registry credentials are only used by the login
-# action (never echoed). The public key and registry host are variables so the image ref can be printed.
+# GHCR needs NO registry secret: the built-in GITHUB_TOKEN (with packages: write below) authenticates the
+# push. The ONLY thing you must configure is the repo VARIABLE SHOPBOT_LICENSE_PUBKEY (the public
+# verification key — safe to expose). The signing PRIVATE key is never referenced here.
+# The published package is PRIVATE by default; a separate read-only PAT is used to pull on the box.
 name: edge-image
 
 on:
@@ -17,12 +16,15 @@ on:
       - 'edge-v*'          # e.g. edge-v0.1.0
   workflow_dispatch: {}
 
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/shopbot-vision   # → ghcr.io/dishnetafrica/shopbot-vision
+
 jobs:
   build-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: write       # lets GITHUB_TOKEN push to GHCR
     steps:
       - uses: actions/checkout@v4
 
@@ -34,9 +36,6 @@ jobs:
             echo "::error::variable SHOPBOT_LICENSE_PUBKEY to config('vision.license_public') and re-run."
             exit 1
           fi
-          if [ -z "${{ vars.REGISTRY }}" ]; then
-            echo "::error::REGISTRY variable is empty (e.g. ghcr.io/dishnetafrica)"; exit 1
-          fi
 
       - name: Set up QEMU (arm64 emulation)
         uses: docker/setup-qemu-action@v3
@@ -44,18 +43,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to registry
+      - name: Log in to GHCR (built-in token — no secret to manage)
         uses: docker/login-action@v3
         with:
-          registry: ${{ vars.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Derive version from tag
-        id: ver
-        run: echo "version=${GITHUB_REF_NAME#edge-v}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push multi-arch image
+      - name: Build and push multi-arch image (pinned to the tag, no :latest)
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -66,11 +62,10 @@ jobs:
             SHOPBOT_VISION_VERSION=${{ github.ref_name }}
           push: true
           provenance: false
-          tags: |
-            ${{ vars.REGISTRY }}/shopbot-vision:${{ github.ref_name }}
-            ${{ vars.REGISTRY }}/shopbot-vision:${{ github.ref_name }}-${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ github.ref_name }}
 
-      - name: Output the image reference the box should pull
+      - name: Output the image reference + digest to pull
         run: |
-          echo "IMAGE_REF=${{ vars.REGISTRY }}/shopbot-vision:${{ github.ref_name }}"
-          echo "Set this as IMAGE_REF / SHOPBOT_EDGE_IMAGE in the installer."
+          echo "IMAGE_REF=${{ env.IMAGE }}:${{ github.ref_name }}"
+          echo "DIGEST=${{ steps.build.outputs.digest }}"
+          echo "Verify on the box before install: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ github.ref_name }}"

@@ -140,23 +140,36 @@ services:
 EOF
 say "Config written ($DEST) — Device ID $DEVICE_ID"
 
-# ── 5. private-registry login (read-only PULL credential) ─────────────────────────────────────
-# The image is PRIVATE. A dedicated PULL-ONLY credential is supplied at run time (env) — it is NEVER
-# baked into this public installer. It can only pull shopbot-vision; it has no write, no GitHub, no
-# server access, and is revocable (see the owner runbook). The token is fed to `docker login` via
-# stdin so it never appears in the process list, shell history, or logs.
+# ── 5. private-registry login → pull → LOGOUT (read-only PULL credential, discarded after) ────
+# The image is PRIVATE (GHCR). A dedicated READ-ONLY, pull-only credential is either supplied via env or
+# PROMPTED interactively — it is NEVER baked into this public installer. It can only pull shopbot-vision;
+# it has no write, no GitHub, no server access, and is revocable. It is fed to `docker login` via stdin
+# (never in the process list / history / logs) and DISCARDED with `docker logout` after the pull — the
+# box needs no registry access during normal operation.
 cd "$DEST"
-if [ -n "${REGISTRY_PULL_TOKEN:-}" ]; then
-  REG_HOST="${REGISTRY_PULL_HOST:-${IMAGE_REF%%/*}}"     # host = part of IMAGE_REF before the first '/'
-  printf '%s' "$REGISTRY_PULL_TOKEN" | docker login "$REG_HOST" \
-    -u "${REGISTRY_PULL_USER:-shopbot-pull}" --password-stdin >/dev/null 2>&1 \
-    && say "Registry login OK ($REG_HOST, pull-only)" \
-    || die "registry login failed — check the read-only pull credential for $REG_HOST"
+REG_HOST="${REGISTRY_PULL_HOST:-${IMAGE_REF%%/*}}"       # host = part of IMAGE_REF before the first '/'
+PULL_USER="${REGISTRY_PULL_USER:-}"
+PULL_TOKEN="${REGISTRY_PULL_TOKEN:-}"
+if [ -z "$PULL_TOKEN" ]; then
+  if [ -r /dev/tty ]; then
+    echo >/dev/tty
+    printf '  ShopBot Vision — private image: %s\n' "$IMAGE_REF" >/dev/tty
+    printf '  Registry username (%s): ' "$REG_HOST" >/dev/tty; read -r  PULL_USER  </dev/tty
+    printf '  Read-only pull token: '              >/dev/tty; read -rs PULL_TOKEN </dev/tty; echo >/dev/tty
+  else
+    die "no pull credential — run interactively (curl -o sb.sh; sudo bash sb.sh) or pass REGISTRY_PULL_USER/REGISTRY_PULL_TOKEN"
+  fi
 fi
+printf '%s' "$PULL_TOKEN" | docker login "$REG_HOST" -u "$PULL_USER" --password-stdin >/dev/null 2>&1 \
+  && say "Registry login OK ($REG_HOST, pull-only)" \
+  || die "registry login failed — check the read-only pull credential for $REG_HOST"
+unset PULL_TOKEN REGISTRY_PULL_TOKEN
 
-# ── 5b. pull the image (matched to this arch by the registry manifest) ────────────────────────
+# ── 5b. pull the image (matched to this arch by the registry manifest), then FORGET the credential ─
 say "Downloading Vision Engine ($IMAGE_REF)…"
-docker compose pull || die "image pull failed — check IMAGE_REF and the pull credential/registry access"
+docker compose pull || { docker logout "$REG_HOST" >/dev/null 2>&1 || true; die "image pull failed — check IMAGE_REF and the read-only pull credential"; }
+docker logout "$REG_HOST" >/dev/null 2>&1 || true
+say "Pull credential discarded (docker logout $REG_HOST) — the box keeps no registry access"
 
 # ── 6. AI model (separate from the image, checksum-verified) ─────────────────────────────────
 if [ -n "${MODEL_URL:-}" ]; then
