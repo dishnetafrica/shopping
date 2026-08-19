@@ -449,7 +449,7 @@ class ProcessIncomingMessage implements ShouldQueue
                     // ad topic. Strict patterns only, so it never hijacks a real product query.
                     $st = is_array($convo->state) ? $convo->state : [];
                     if (! empty($st['ad_topic']) && (time() - (int) ($st['ad_topic_at'] ?? 0) < 1800)
-                        && (preg_match('/^\s*(what\'?s\s+the\s+)?(moq|minimum\s*order(\s*quantity)?|price|cost|rate)\s*\??\s*$/i', $q)
+                        && (preg_match('/^\s*(what(?:\'?s|\s+is)\s+the\s+)?(moq|min(?:imum)?\s*order(\s*(qty|quantity))?|price|cost|rate)\s*\??\s*$/i', $q)
                             || preg_match('/^\s*how\s+much\s*\??\s*$/i', $q)
                             || preg_match('/^\s*(is\s+it\s+|are\s+they\s+)?(available|in\s+stock)\s*\??\s*$/i', $q))) {
                         $this->incoming['text'] = 'About "' . $st['ad_topic'] . '": ' . $q;
