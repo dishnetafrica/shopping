@@ -83,13 +83,17 @@ final class VisionReconciler
      */
     private function loadLedger(int $tenantId, array $event, array $cfg): array
     {
-        $location = (string) ($cfg['zone_location_map'][$event['zone_uid']] ?? $event['zone_uid']);
-        if ($location === '' || ($event['direction'] ?? '') === '') {
+        // Mapping is mandatory — never fall back to the zone name as a location (the engine also
+        // guards this). An unmapped zone loads no ledger and the engine returns UNMAPPED_ZONE.
+        $map = (array) ($cfg['zone_location_map'] ?? []);
+        if (! array_key_exists($event['zone_uid'], $map) || ($event['direction'] ?? '') === '') {
             return [];
         }
-        $win   = (int) $cfg['match_window_seconds'];
-        $from  = Carbon::createFromTimestamp($event['ts'] - $win);
-        $to    = Carbon::createFromTimestamp($event['ts'] + $win);
+        $location = (string) $map[$event['zone_uid']];
+        // ASYMMETRIC window, matching the engine: up to match_window BEFORE the crossing, up to the full
+        // grace AFTER it (paperwork lags). A symmetric ±match_window would miss a late-but-in-grace txn.
+        $from  = Carbon::createFromTimestamp($event['ts'] - (int) $cfg['match_window_seconds']);
+        $to    = Carbon::createFromTimestamp($event['ts'] + (int) $cfg['grace_seconds']);
 
         $rows = DB::table('stock_movements')
             ->where('tenant_id', $tenantId)
