@@ -16,4 +16,21 @@ return [
     'token'           => env('VISION_WEBHOOK_TOKEN', ''),
     'tenant_id'       => (int) env('VISION_TENANT_ID', 0),
     'claim_ttl_hours' => (int) env('VISION_CLAIM_TTL_HOURS', 24),
+
+    /**
+     * Phase-0 Stock & Loss reconciliation (single dispatch-door slice). OFF by default — turning it
+     * on only affects MOVEMENT events (carton.move / pallet.move / zone.entry / …); classical shelf
+     * events are never touched. Per-tenant overrides live in tenant settings (vision_* keys).
+     */
+    'reconcile' => [
+        'enabled'                 => (bool) env('VISION_RECONCILE', false),
+        'grace_seconds'           => (int) env('VISION_RECONCILE_GRACE', 900),
+        'match_window_seconds'    => (int) env('VISION_RECONCILE_WINDOW', 300),
+        'net_zero_window_seconds' => (int) env('VISION_RECONCILE_NETZERO', 300),
+        // Quantity-level reconciliation is DEFERRED for the PoC (a carton is not a SKU-unit), so the
+        // slice reconciles on the PRESENCE of a matching outbound transaction, not exact counts.
+        'qty_tolerance'           => 1_000_000,
+        'zone_location_map'       => [],   // ['D->EXIT' => 'juba'] — event zone → stock_movements.location
+        'controlled_zones'        => [],   // ['D->EXIT','X'] — a red only fires on these
+    ],
 ];
