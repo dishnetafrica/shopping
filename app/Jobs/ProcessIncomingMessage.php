@@ -235,9 +235,18 @@ class ProcessIncomingMessage implements ShouldQueue
                 'address' => trim((string) ($this->incoming['loc_address'] ?? '')) ?: null,
             ])];
         }
+        // Persist a media caption as the message body when there's no separate text —
+        // otherwise a forwarded/shared product card logs blank and the AI history (which
+        // reads `body`) loses the product the customer referenced, so a later "what's the
+        // MOQ?" has nothing to bind to. The media meta still carries kind+key for the inbox
+        // thumbnail; this only makes the customer's own caption words visible/searchable.
+        $logText = $this->incoming['text'];
+        if (trim((string) $logText) === '' && ! empty($mMeta['media']['caption'])) {
+            $logText = (string) $mMeta['media']['caption'];
+        }
         $inMsg = MessageLog::record(
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
-            'in', 'customer', $this->incoming['text'], $this->incoming['messageId'] ?: null,
+            'in', 'customer', $logText, $this->incoming['messageId'] ?: null,
             null, $mMeta
         );
 
