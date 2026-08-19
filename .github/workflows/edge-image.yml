@@ -4,8 +4,11 @@
 # `docker compose pull` on any box gets the right architecture. Triggered ONLY on an edge version tag so
 # it never runs on ordinary pushes and never interferes with the Laravel EasyPanel build.
 #
-# Requires repo/org secrets: REGISTRY (e.g. ghcr.io), REGISTRY_USER, REGISTRY_TOKEN. Without them the job
-# does not run (it is tag-gated). This publishes the image `bootstrap.sh` pulls via IMAGE_REF.
+# GitHub config (see docs/SHOPBOT_EDGE_OWNER_RUNBOOK.md):
+#   Variables (not secret): REGISTRY (e.g. ghcr.io/dishnetafrica), SHOPBOT_LICENSE_PUBKEY (public key)
+#   Secrets:                REGISTRY_USER, REGISTRY_TOKEN
+# The signing PRIVATE key is never referenced here. Registry credentials are only used by the login
+# action (never echoed). The public key and registry host are variables so the image ref can be printed.
 name: edge-image
 
 on:
@@ -23,7 +26,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU (for arm64 emulation)
+      - name: Fail fast if the license public key is missing
+        run: |
+          if [ -z "${{ vars.SHOPBOT_LICENSE_PUBKEY }}" ]; then
+            echo "::error::SHOPBOT_LICENSE_PUBKEY variable is empty — the image would ship with no license"
+            echo "::error::verification key and every license would be rejected on the box. Set the repo"
+            echo "::error::variable SHOPBOT_LICENSE_PUBKEY to config('vision.license_public') and re-run."
+            exit 1
+          fi
+          if [ -z "${{ vars.REGISTRY }}" ]; then
+            echo "::error::REGISTRY variable is empty (e.g. ghcr.io/dishnetafrica)"; exit 1
+          fi
+
+      - name: Set up QEMU (arm64 emulation)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -32,7 +47,7 @@ jobs:
       - name: Log in to registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ secrets.REGISTRY }}
+          registry: ${{ vars.REGISTRY }}
           username: ${{ secrets.REGISTRY_USER }}
           password: ${{ secrets.REGISTRY_TOKEN }}
 
@@ -46,12 +61,16 @@ jobs:
           context: .
           file: edge/Dockerfile
           platforms: linux/arm64,linux/amd64
-          # PUBLIC verification key only (a repo variable, NOT a secret). The signing private key
-          # never touches CI or the image. A dev image is built with the staging public key.
           build-args: |
             SHOPBOT_LICENSE_PUBKEY=${{ vars.SHOPBOT_LICENSE_PUBKEY }}
+            SHOPBOT_VISION_VERSION=${{ github.ref_name }}
           push: true
-          tags: |
-            ${{ secrets.REGISTRY }}/shopbot-vision:${{ steps.ver.outputs.version }}
-            ${{ secrets.REGISTRY }}/shopbot-vision:${{ steps.ver.outputs.version }}-${{ github.sha }}
           provenance: false
+          tags: |
+            ${{ vars.REGISTRY }}/shopbot-vision:${{ github.ref_name }}
+            ${{ vars.REGISTRY }}/shopbot-vision:${{ github.ref_name }}-${{ github.sha }}
+
+      - name: Output the image reference the box should pull
+        run: |
+          echo "IMAGE_REF=${{ vars.REGISTRY }}/shopbot-vision:${{ github.ref_name }}"
+          echo "Set this as IMAGE_REF / SHOPBOT_EDGE_IMAGE in the installer."

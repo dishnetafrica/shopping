@@ -668,11 +668,32 @@ def api_selftest():
     return events.selftest()
 
 
+def _edge_identity() -> dict:
+    """Version / device id / license summary for the dashboard + visionctl. Best-effort: any failure
+    yields 'unknown' rather than breaking /api/health (which the Docker healthcheck depends on)."""
+    out = {"version": os.environ.get("SHOPBOT_VISION_VERSION", "unknown"), "device_id": None,
+           "license": {"status": "unknown"}}
+    try:
+        with open(os.path.join(os.environ.get("VISION_DATA", "/data"), "device_id"), encoding="utf-8") as fh:
+            out["device_id"] = fh.read().strip()
+    except OSError:
+        pass
+    try:
+        from .licensing import gate
+        r = gate.evaluate(time.time())
+        out["license"] = {"status": r.status, "type": r.payload.get("license_type"),
+                          "tenant": r.payload.get("tenant"), "expires_at": r.payload.get("expires_at")}
+    except Exception:
+        pass
+    return out
+
+
 @app.get("/api/health")
 def health():
     con = db.db()
     return {
         "ok": True, "ts": time.time(),
+        **_edge_identity(),
         "cameras": len(db.list_cameras()),
         "zones": con.execute("SELECT COUNT(*) c FROM zones").fetchone()["c"],
         # What a person actually wants to know before trusting a quiet dashboard:
