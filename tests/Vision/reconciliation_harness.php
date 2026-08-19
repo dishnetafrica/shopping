@@ -113,6 +113,38 @@ check('9 · quantity discrepancy (moved 6, booked 4)',
         [['type'=>'dispatch','location'=>'EXIT','direction'=>'out','qty'=>4,'ts'=>$T]], [], $CFG, $T),
     ['result'=>RE::QTY_DISCREPANCY, 'severity'=>RE::RED, 'review_required'=>true]);
 
+echo "\nRegression tests (audit findings)\n";
+
+// A — late transaction inside grace but BEYOND the old symmetric ±5min window → must MATCH, not red.
+check('A · late txn +10min (within grace) matches',
+    RE::reconcile(carton('out','D->EXIT',$T),
+        [['type'=>'dispatch','location'=>'EXIT','direction'=>'out','qty'=>1,'ts'=>$T+600]], [], $CFG, $T+600),
+    ['result'=>RE::MATCH, 'severity'=>RE::GREEN]);
+
+// B — an unmapped zone can NEVER become a red; it is a misconfiguration, not an exception.
+check('B · unmapped zone → UNMAPPED_ZONE (never red)',
+    RE::reconcile(carton('out','P->D',$T), [], [], $CFG, $T+901),
+    ['result'=>RE::UNMAPPED_ZONE, 'severity'=>RE::MUTE, 'review_required'=>false]);
+
+// D — a shelf event reaching the engine can never be processed as a carton movement.
+check('D · shelf event → IGNORED (never movement)',
+    RE::reconcile(['kind'=>'shelf.out_of_stock','zone_uid'=>'D->EXIT','ts'=>$T], [], [], $CFG, $T),
+    ['result'=>RE::IGNORED, 'severity'=>RE::MUTE, 'review_required'=>false]);
+
+// E — every red carries self-contained evidence for the human reviewer.
+$red = RE::reconcile(carton('out','D->EXIT',$T), [], [], $CFG, $T+901);
+$ev  = $red['evidence'] ?? [];
+$hasEvidence = isset($ev['zone_uid'], $ev['direction'], $ev['qty'], $ev['track_id'], $ev['confidence'], $ev['ts']);
+check('E · red carries evidence (zone/dir/qty/track/conf/ts)',
+    ['result'=> $hasEvidence ? RE::UNRECONCILED : 'NO_EVIDENCE'],
+    ['result'=>RE::UNRECONCILED]);
+
+// F — direction from signed qty: an inbound-signed txn must NOT satisfy an outbound crossing.
+check('F · inbound txn does not match an outbound crossing',
+    RE::reconcile(carton('out','D->EXIT',$T),
+        [['type'=>'IN','location'=>'EXIT','direction'=>'in','qty'=>1,'ts'=>$T]], [], $CFG, $T+901),
+    ['result'=>RE::UNRECONCILED, 'severity'=>RE::RED]);
+
 echo str_repeat('─', 66) . "\n";
 printf("%d passed, %d failed\n\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

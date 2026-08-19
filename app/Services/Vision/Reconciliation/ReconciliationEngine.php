@@ -46,6 +46,8 @@ final class ReconciliationEngine
     public const ACCESS          = 'ACCESS';
     public const ACCESS_VIOLATION = 'ACCESS_VIOLATION';
     public const COVERAGE_GAP    = 'COVERAGE_GAP';
+    public const UNMAPPED_ZONE   = 'UNMAPPED_ZONE';   // zone has no ledger location — misconfig, never a red
+    public const IGNORED         = 'IGNORED';         // not a movement event — nothing to reconcile
 
     // Severities (semantic, separate from any UI accent)
     public const GREEN = 'green';
@@ -96,12 +98,22 @@ final class ReconciliationEngine
             $zone  = (string) ($event['zone_uid'] ?? '');
             $track = $event['assoc']['track_id'] ?? null;
             $allow = (array) ($cfg['authorized'][$zone] ?? []);
+            $ev    = ['zone_uid' => $zone, 'direction' => 'in', 'qty' => 0,
+                      'track_id' => $track !== null ? (int) $track : null, 'confidence' => round($conf, 3), 'ts' => (int) ($event['ts'] ?? $asOf)];
             if ($allow === [] || ($track !== null && in_array((int) $track, array_map('intval', $allow), true))) {
                 return self::decide(self::ACCESS, self::INFO, false, 'known', null, $conf,
-                    'Authorised presence — no stock moved.', []);
+                    'Authorised presence — no stock moved.', [], $ev);
             }
             return self::decide(self::ACCESS_VIOLATION, self::RED, true, 'known', null, $conf,
-                'Entry to a controlled zone by an unauthorised track.', []);
+                'Entry to a controlled zone by an unauthorised track.', [], $ev);
+        }
+
+        // Anything that is not a stock-movement event has nothing to reconcile. Explicit, so a shelf
+        // event that somehow reaches here can NEVER be processed as a carton movement (defence in depth
+        // behind the controller's whitelist).
+        if ($kind !== 'carton.move' && $kind !== 'pallet.move') {
+            return self::decide(self::IGNORED, self::MUTE, false, 'undetermined', null, $conf,
+                'Not a stock-movement event — nothing to reconcile.', [], []);
         }
 
         // 3) Stock movement (carton.move / pallet.move).
@@ -111,11 +123,28 @@ final class ReconciliationEngine
         $direction  = (string) ($event['direction'] ?? '');
         $eventTs    = (int) ($event['ts'] ?? $asOf);
         $controlled = in_array($zoneUid, (array) $cfg['controlled_zones'], true);
+        $trackId    = $event['assoc']['track_id'] ?? null;
+
+        // Evidence travels with EVERY decision so a red is self-contained for human review.
+        $evidence = [
+            'zone_uid' => $zoneUid, 'direction' => $direction, 'qty' => $qty,
+            'track_id' => $trackId !== null ? (int) $trackId : null, 'confidence' => round($conf, 3), 'ts' => $eventTs,
+        ];
+
+        // Zone→location mapping is MANDATORY. An unmapped zone can never be reconciled against the
+        // ledger, so it must NOT silently fall back to the zone name as a location (that would match
+        // nothing and manufacture a false red). Surfaced as a misconfiguration, never an exception.
+        $map = (array) $cfg['zone_location_map'];
+        if (! array_key_exists($zoneUid, $map)) {
+            return self::decide(self::UNMAPPED_ZONE, self::MUTE, false, 'undetermined', null, $conf,
+                'Zone "' . $zoneUid . '" is not mapped to a ledger location — fix vision_zone_location_map. Not reconciled.', [], $evidence);
+        }
+        $location = (string) $map[$zoneUid];
 
         // Attribution is soft and NEVER gates a red (two workers near one carton → movement still real).
         $cands       = (array) ($event['assoc']['candidates'] ?? []);
         $assocConf   = (float) ($event['assoc']['assoc_conf'] ?? 0.0);
-        $attribution = ($assocConf >= (float) $cfg['assoc_min'] && count($cands) <= 1 && ($event['assoc']['track_id'] ?? null) !== null)
+        $attribution = ($assocConf >= (float) $cfg['assoc_min'] && count($cands) <= 1 && $trackId !== null)
             ? 'known' : 'undetermined';
 
         $notes = [];
@@ -126,44 +155,48 @@ final class ReconciliationEngine
         // 3a) Net-zero: an opposite-direction crossing of the same carton/track within the window cancels.
         if (self::hasNetZeroCounterpart($event, $prior, (int) $cfg['net_zero_window_seconds'])) {
             return self::decide(self::NET_ZERO, self::GREEN, false, $attribution, null, $conf,
-                'Out-then-in within the window cancels — no net movement.', $notes);
+                'Out-then-in within the window cancels — no net movement.', $notes, $evidence);
         }
 
-        // 3b) Look for a matching ledger transaction (location + time + direction).
-        $location = (string) ($cfg['zone_location_map'][$zoneUid] ?? $zoneUid);
-        $sameSlot = array_values(array_filter($ledger, function ($t) use ($location, $direction, $eventTs, $cfg) {
+        // 3b) Look for a matching ledger transaction. The window is ASYMMETRIC: a transaction may
+        // precede the crossing by up to match_window, but the paperwork usually LAGS, so it may follow
+        // by up to the full grace window. A symmetric ±match_window silently misses a dispatch booked
+        // 6–14 min after the carton left, escalating a legitimate move to a false red.
+        $before = (int) $cfg['match_window_seconds'];
+        $after  = (int) $cfg['grace_seconds'];
+        $sameSlot = array_values(array_filter($ledger, function ($t) use ($location, $direction, $eventTs, $before, $after) {
+            $dt = ((int) ($t['ts'] ?? 0)) - $eventTs;
             return (string) ($t['location'] ?? '') === $location
                 && (string) ($t['direction'] ?? '') === $direction
-                && abs(((int) ($t['ts'] ?? 0)) - $eventTs) <= (int) $cfg['match_window_seconds'];
+                && $dt >= -$before && $dt <= $after;
         }));
 
         foreach ($sameSlot as $t) {
             if (abs(((int) ($t['qty'] ?? 0)) - $qty) <= (int) $cfg['qty_tolerance']) {
                 return self::decide(self::MATCH, self::GREEN, false, $attribution, $t, $conf,
-                    'Movement matches a recorded transaction.', $notes);
+                    'Movement matches a recorded transaction.', $notes, $evidence);
             }
         }
         // A transaction is present in the slot but the quantity disagrees → discrepancy (scenario 9).
         if ($sameSlot !== []) {
-            $t = $sameSlot[0];
-            return self::decide(self::QTY_DISCREPANCY, self::RED, true, $attribution, $t, $conf,
-                'Quantity moved does not match the recorded transaction.', $notes);
+            return self::decide(self::QTY_DISCREPANCY, self::RED, true, $attribution, $sameSlot[0], $conf,
+                'Quantity moved does not match the recorded transaction.', $notes, $evidence);
         }
 
         // 3c) No transaction. Inside grace it is simply PENDING; the vision leads the paperwork.
         if (($asOf - $eventTs) < (int) $cfg['grace_seconds']) {
             return self::decide(self::PENDING, self::AMBER, false, $attribution, null, $conf,
-                'No transaction yet — within the grace window.', $notes);
+                'No transaction yet — within the grace window.', $notes, $evidence);
         }
 
         // 3d) Grace expired and still nothing. On a CONTROLLED boundary this is the headline exception.
         if ($controlled) {
             return self::decide(self::UNRECONCILED, self::RED, true, $attribution, null, $conf,
-                'Movement across a controlled boundary with no matching transaction.', $notes);
+                'Movement across a controlled boundary with no matching transaction.', $notes, $evidence);
         }
         // On an internal boundary it is unexplained but lower-stakes — surfaced amber, not a red alert.
         return self::decide(self::UNRECONCILED, self::AMBER, false, $attribution, null, $conf,
-            'Unexplained internal movement with no matching transaction.', $notes);
+            'Unexplained internal movement with no matching transaction.', $notes, $evidence);
     }
 
     /** Is there an opposite-direction move of the same carton/track within the window? */
@@ -180,17 +213,15 @@ final class ReconciliationEngine
             if (! in_array((string) ($p['kind'] ?? ''), ['carton.move', 'pallet.move'], true)) { continue; }
             if ((string) ($p['direction'] ?? '') !== $opp) { continue; }
             if ((string) ($p['zone_uid'] ?? '') !== $zone) { continue; }
-            $pt = $event['assoc']['track_id'] ?? null;   // same-carton proxy: same track id
+            // Same-carton proxy: same track id (the PoC has no per-carton identity — see limitation note).
             if ($track !== null && (($p['assoc']['track_id'] ?? null) !== $track)) { continue; }
             if (abs(((int) ($p['ts'] ?? 0)) - $ts) <= $window) { return true; }
-            // keep $pt referenced to avoid confusion; not used beyond track match
-            unset($pt);
         }
         return false;
     }
 
     /** @return array<string,mixed> */
-    private static function decide(string $result, string $severity, bool $review, string $attribution, ?array $matched, float $confidence, string $reason, array $notes): array
+    private static function decide(string $result, string $severity, bool $review, string $attribution, ?array $matched, float $confidence, string $reason, array $notes, array $evidence = []): array
     {
         // A red under heavy occlusion or low confidence is still a red — but the reviewer is told.
         if ($severity === self::RED && $notes !== []) {
@@ -206,6 +237,7 @@ final class ReconciliationEngine
             'confidence'      => round($confidence, 3),
             'reason'          => $reason,
             'notes'           => $notes,
+            'evidence'        => $evidence,
         ];
     }
 }

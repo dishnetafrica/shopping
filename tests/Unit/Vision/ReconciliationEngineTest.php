@@ -108,4 +108,47 @@ final class ReconciliationEngineTest extends TestCase
         $this->assertSame(RE::QTY_DISCREPANCY, $d['result']);
         $this->assertTrue($d['review_required']);
     }
+
+    /** Audit fix A: a late-but-in-grace transaction (beyond the old ±match_window) must still MATCH. */
+    public function test_late_transaction_within_grace_matches(): void
+    {
+        $d = RE::reconcile($this->carton('out', 'D->EXIT', self::T),
+            [['type' => 'dispatch', 'location' => 'EXIT', 'direction' => 'out', 'qty' => 1, 'ts' => self::T + 600]],
+            [], $this->cfg, self::T + 600);
+        $this->assertSame(RE::MATCH, $d['result']);
+    }
+
+    /** Audit fix B: an unmapped zone is a misconfiguration, never a red. */
+    public function test_unmapped_zone_is_never_a_red(): void
+    {
+        $d = RE::reconcile($this->carton('out', 'P->D', self::T), [], [], $this->cfg, self::T + 901);
+        $this->assertSame(RE::UNMAPPED_ZONE, $d['result']);
+        $this->assertFalse($d['review_required']);
+    }
+
+    /** Audit fix D: a shelf event can never be processed as a carton movement. */
+    public function test_shelf_event_is_ignored(): void
+    {
+        $d = RE::reconcile(['kind' => 'shelf.out_of_stock', 'zone_uid' => 'D->EXIT', 'ts' => self::T], [], [], $this->cfg, self::T);
+        $this->assertSame(RE::IGNORED, $d['result']);
+        $this->assertFalse($d['review_required']);
+    }
+
+    /** Audit point 12: every red carries self-contained evidence for review. */
+    public function test_red_carries_evidence(): void
+    {
+        $d = RE::reconcile($this->carton('out', 'D->EXIT', self::T), [], [], $this->cfg, self::T + 901);
+        foreach (['zone_uid', 'direction', 'qty', 'track_id', 'confidence', 'ts'] as $k) {
+            $this->assertArrayHasKey($k, $d['evidence']);
+        }
+    }
+
+    /** Audit point 4/5: an inbound-signed transaction must not satisfy an outbound crossing. */
+    public function test_inbound_txn_does_not_match_outbound_crossing(): void
+    {
+        $d = RE::reconcile($this->carton('out', 'D->EXIT', self::T),
+            [['type' => 'IN', 'location' => 'EXIT', 'direction' => 'in', 'qty' => 1, 'ts' => self::T]],
+            [], $this->cfg, self::T + 901);
+        $this->assertSame(RE::UNRECONCILED, $d['result']);
+    }
 }
