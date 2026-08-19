@@ -1,0 +1,42 @@
+# ShopBot Vision edge — single-box bring-up (Phase 1).
+#
+# Two services from ONE image:
+#   • vision-api   — the dashboard/API (camera config, /api/selftest, /api/health) on :8080
+#   • vision-door  — the movement door: RTSP → carton.move → outbox
+#
+# Run:   cd edge && docker compose up -d --build      (build context is the repo root, see Dockerfile)
+# Config comes from ../.env (STORE_ID, EVENT_WEBHOOK_URL, VISION_TOKEN, ADMIN_PASSWORD, …) — the same
+# discipline as the existing gateway: env_file only, NO `environment:` override block.
+#
+# NOTE: `vision-door` runs the SELFTEST by default (emits one synthetic carton.move to prove the
+# outbox path) so this compose is safe before a camera/detector exist. For a real door, replace its
+# command with the --rtsp/--detector form (see edge/README.md).
+
+services:
+  vision-api:
+    build:
+      context: ..
+      dockerfile: edge/Dockerfile
+    image: shopbot-vision:phase1
+    container_name: shopbot-vision-api
+    restart: unless-stopped
+    network_mode: host          # ONVIF WS-Discovery multicast + camera LAN
+    env_file: ../.env
+    volumes:
+      - ../data:/data
+
+  vision-door:
+    image: shopbot-vision:phase1
+    depends_on: [vision-api]
+    container_name: shopbot-vision-door
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../.env
+    volumes:
+      - ../data:/data
+    # Default = plumbing selftest. Swap to the real door once a detector is wired:
+    #   command: ["python","-m","app.movement.run_door","--rtsp","rtsp://…",
+    #             "--store","wh-juba-01","--zone","D->EXIT","--line","0,540,1920,540",
+    #             "--detector","mydetectors:make","--max-fps","8"]
+    command: ["python", "-m", "app.movement.run_door", "--selftest",
+              "--store", "wh-juba-01", "--zone", "D->EXIT"]
