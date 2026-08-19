@@ -15,9 +15,16 @@ import os
 from . import fingerprint, license as lic
 from .identity import DeviceIdentity
 
-DATA = os.environ.get("VISION_DATA", "/data")
-LICENSE_FILE = os.path.join(DATA, "license.json")
-DEVICE_KEY = os.path.join(DATA, "device_key")
+def _data() -> str:
+    return os.environ.get("VISION_DATA", "/data")
+
+
+def _license_file() -> str:
+    return os.path.join(_data(), "license.json")
+
+
+def _device_key() -> str:
+    return os.path.join(_data(), "device_key")
 
 
 def _enforce() -> bool:
@@ -31,16 +38,16 @@ def _shopbot_pubkey() -> str:
 
 def evaluate(now: float) -> lic.LicenseResult:
     """Verify the cached license for this box. Pure-ish (reads /data); returns a LicenseResult."""
-    if not os.path.exists(LICENSE_FILE):
+    if not os.path.exists(_license_file()):
         return lic.LicenseResult(lic.EXPIRED, "no license cached — activate this box")
     try:
-        with open(LICENSE_FILE, "r", encoding="utf-8") as fh:
+        with open(_license_file(), "r", encoding="utf-8") as fh:
             doc = json.load(fh)
         payload, sig = doc["payload"], doc["signature"]
     except (OSError, ValueError, KeyError) as e:
         return lic.LicenseResult(lic.INVALID_SIG, f"license file unreadable: {e}")
 
-    dev = DeviceIdentity(DEVICE_KEY).load_or_create()
+    dev = DeviceIdentity(_device_key()).load_or_create()
     return lic.verify(payload, sig, _shopbot_pubkey(), dev.public_key_b64(),
                       fingerprint.fingerprint(), now)
 

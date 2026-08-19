@@ -29,10 +29,16 @@ COPY app/cal /srv/app/cal
 COPY app/movement /srv/app/movement
 COPY app/web /srv/app/web
 
+# ShopBot license VERIFICATION key — PUBLIC key only, baked at build time (safe to ship). The signing
+# PRIVATE key never leaves ShopBot Cloud, and NO production credential is present in the image.
+ARG SHOPBOT_LICENSE_PUBKEY=""
+
 # Data (SQLite outbox, config, snapshots, model cache) lives on the mounted NVMe volume.
 ENV VISION_DB=/data/vision.db \
     SNAP_DIR=/data/snapshots \
+    VISION_DATA=/data \
     PYTHONUNBUFFERED=1 \
+    SHOPBOT_LICENSE_PUBKEY=$SHOPBOT_LICENSE_PUBKEY \
     SHOPBOT_VISION_VERSION=phase1-dev
 VOLUME ["/data"]
 EXPOSE 8080

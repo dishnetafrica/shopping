@@ -126,6 +126,51 @@ def test_clone_copied_storage_different_hardware_rejected(tmp_path):
 
 # ── fingerprint quorum ─────────────────────────────────────────────────────────────────────────
 
+# ── startup enforcement (VISION_LICENSE_ENFORCE=1): dev license runs; expired dev license refuses ──
+
+def _install_license(tmp_path, monkeypatch, *, expires_in, grace, ltype="development"):
+    """Set up a box's /data with a device key + a ShopBot-signed license, and point the gate at it."""
+    import json
+    import time
+
+    from app.licensing import fingerprint as fpmod, gate, identity
+
+    monkeypatch.setenv("VISION_DATA", str(tmp_path))
+    dev = identity.DeviceIdentity(str(tmp_path / "device_key")).load_or_create()
+    sk, pub = _shopbot()
+    monkeypatch.setenv("SHOPBOT_LICENSE_PUBKEY", pub)
+    now = int(time.time())
+    payload = {
+        "device_id": "SB-UG-ENF", "box_uid": "mid", "device_pubkey": dev.public_key_b64(),
+        "fingerprint_quorum": fpmod.fingerprint(),      # current host fingerprint → quorum matches
+        "license_type": ltype, "runtime_authorized": "", "model_authorized": "", "tenant": "dev",
+        "issued_at": now, "expires_at": now + expires_in, "grace_seconds": grace, "nonce": "n",
+    }
+    with open(tmp_path / "license.json", "w") as fh:
+        json.dump({"payload": payload, "signature": _sign(sk, payload)}, fh)
+    return gate
+
+
+def test_enforce_valid_development_license_starts(tmp_path, monkeypatch):
+    gate = _install_license(tmp_path, monkeypatch, expires_in=3600, grace=100, ltype="development")
+    monkeypatch.setenv("VISION_LICENSE_ENFORCE", "1")
+    gate.check_license()   # must NOT raise — a valid development license runs (supplier box works)
+
+
+def test_enforce_expired_development_license_refuses(tmp_path, monkeypatch):
+    gate = _install_license(tmp_path, monkeypatch, expires_in=-10000, grace=100, ltype="development")
+    monkeypatch.setenv("VISION_LICENSE_ENFORCE", "1")
+    with pytest.raises(RuntimeError):
+        gate.check_license()   # expired past grace → refuse to start licensed inference
+
+
+def test_enforce_off_by_default_does_not_gate(tmp_path, monkeypatch):
+    monkeypatch.setenv("VISION_DATA", str(tmp_path))
+    monkeypatch.delenv("VISION_LICENSE_ENFORCE", raising=False)
+    from app.licensing import gate
+    gate.check_license()   # enforcement off → never gates (existing dev/shelf paths unchanged)
+
+
 def test_fingerprint_quorum():
     assert fp.quorum_ok(FP, FP, need=2)
     one_swapped = ["machine_id:aaaaaaaaaaaaaaaa", "disk_serial:XXXX", "cpu_serial:cccccccccccccccc"]

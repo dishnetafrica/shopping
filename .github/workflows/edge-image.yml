@@ -46,6 +46,10 @@ jobs:
           context: .
           file: edge/Dockerfile
           platforms: linux/arm64,linux/amd64
+          # PUBLIC verification key only (a repo variable, NOT a secret). The signing private key
+          # never touches CI or the image. A dev image is built with the staging public key.
+          build-args: |
+            SHOPBOT_LICENSE_PUBKEY=${{ vars.SHOPBOT_LICENSE_PUBKEY }}
           push: true
           tags: |
             ${{ secrets.REGISTRY }}/shopbot-vision:${{ steps.ver.outputs.version }}

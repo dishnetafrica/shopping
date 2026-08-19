@@ -160,6 +160,17 @@ fi
 say "Starting services…"
 docker compose up -d || die "compose up failed — see: docker compose -f $DEST/docker-compose.yml logs"
 
+# ── 7b. licensed activation (enrollment) ──────────────────────────────────────────────────────
+# When SHOPBOT_CLOUD_URL is set, the box generates its Ed25519 keypair (private key stays in
+# /data/device_key, 0600), sends its public key + fingerprint through the EXISTING hello/poll, prints a
+# claim code, and waits until an operator runs `php artisan vision:claim CODE --tenant=<DEV>
+# --type=development` on ShopBot Cloud — then caches the signed license. No permanent secret is baked.
+if [ -n "${SHOPBOT_CLOUD_URL:-}" ]; then
+  say "Activating device against ShopBot Cloud…"
+  docker compose run --rm vision-api python -m app.licensing.enroll --cloud "$SHOPBOT_CLOUD_URL" \
+    || warn "enrollment did not complete — run vision:claim on the cloud, then: (cd $DEST && docker compose run --rm vision-api python -m app.licensing.enroll --cloud $SHOPBOT_CLOUD_URL)"
+fi
+
 # ── 8. health-gate + uplink proof ─────────────────────────────────────────────────────────────
 ok=0
 for _ in $(seq 1 30); do

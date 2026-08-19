@@ -196,11 +196,40 @@ Activation/heartbeat/revocation against the real Laravel DB; the physical clone/
 Ed25519 keypair generation in `edge/Dockerfile`-bundled runtime; wiring `bootstrap.sh` to do
 hello-with-keypair. None are sandbox-runnable (no cloud DB / no box).
 
-## Acceptance test (eventual)
-- new box → activate → licensed runtime → camera → movement event → cloud; **and**
-- copy runtime to an unlicensed box → **fingerprint mismatch → does not activate**.
+## Edge wiring (finished — the box half of hello/poll)
 
-**Honest boundary:** none of this is testable in the ShopBot sandbox (no box, no cloud DB, no HSM). On
-approval, the pure parts (fingerprint quorum, offline license-signature verify + grace math) are
-unit-testable here with a test keypair; activation/heartbeat/revocation against the real cloud and the
-copy-protection behaviour are only provable on the sample box + staging.
+`app/licensing/enroll.py` does first-boot enrollment through the EXISTING hello/poll: generates the
+device keypair (→ `/data/device_key`, 0600), invents a box secret (→ `/data/box_secret`, 0600), computes
+the fingerprint, POSTs `hello` with `device_pubkey`+`fingerprint`, prints the claim code, polls until
+claimed, caches the signed license (→ `/data/license.json`) + per-box token (→ `/data/credential`, 0600),
+and verifies the license offline. `edge/bootstrap.sh` runs it when `SHOPBOT_CLOUD_URL` is set.
+`edge/Dockerfile` bakes only the **public** verification key (`ARG SHOPBOT_LICENSE_PUBKEY`); the CI
+build passes it as a repo **variable** (not a secret). No signing key, no production credential in the image.
+
+## Physical acceptance test (run on the sample box + staging)
+
+| # | Test | Expected |
+|---|---|---|
+| 1 | claim → license → start → camera → event → cloud | ✅ licensed box operates, event lands in staging |
+| 2 | internet disconnected | ✅ cached license valid → vision continues, events queue in the outbox |
+| 3 | internet restored | ✅ outbox drains to cloud |
+| 4 | copy the whole install to another machine | ❌ device identity mismatch (keypair or fingerprint) → refused |
+| 5 | revoke in cloud (`vision:revoke <box_uid>`) | ❌ box stops licensed inference at next heartbeat (online) / at expiry (offline); outbox/evidence remain |
+| 6 | development license expires | ❌ past grace → no licensed inference (dev TTL auto-expires; `--type production` for prod) |
+
+## Supplier receives / does NOT receive
+
+- **Receives:** AI edge box · Ubuntu/Linux · temporary internet + remote access · **one development claim
+  code** · camera credentials for testing. Effectively **hardware provider + test-site operator.**
+- **Does NOT receive:** Git repository · source · training datasets · training pipeline · production API
+  keys · **production license signing key** · other customer data · production credentials. Enforced by:
+  dev-tenant scoping, a single-use dev claim code, and an image that contains **no secret, no signing key,
+  no dataset** (only the public verification key).
+
+## Honest boundary — 9/9 crypto tests ≠ the commercial chain
+
+The **12/12** edge tests (incl. clone/expiry/enforcement) and the proven PHP↔Python interop verify the
+**cryptographic mechanism**, not the end-to-end commercial licensing chain. The milestone that matters is
+**a real physical AI box activating against the real staging Laravel server** (Tests 1–6). Only that
+proves we can remotely provision commodity hardware without handing the supplier our source or production
+credentials. None of it is sandbox-runnable (no box, no cloud DB, no HSM) — it is the on-hardware step.
