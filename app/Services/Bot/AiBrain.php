@@ -1468,8 +1468,21 @@ class AiBrain
             }
 
             $convoRow = Conversation::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)->first() ?: $convo;
-            $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
+            $quote = app(OrderCalculator::class)->quote($tenant, $items, $from, true);   // skipOutOfStock: never quote what we can't supply
             app(PartRequestService::class)->captureUnmatched($tenant, $from, $quote, mb_substr($text, 0, 300));   // v4.9.2
+
+            // Out-of-stock items were left off the quotation — tell the customer plainly rather than
+            // pricing something we don't have (which reads as a firm offer we can't honour).
+            $oosNames = array_values(array_unique(array_filter(array_map(
+                fn ($l) => empty($l['out_of_stock']) ? '' : (string) ($l['name'] ?? ''),
+                $quote['lines']
+            ))));
+            if ($oosNames) {
+                $isOne = count($oosNames) === 1;
+                $clean = trim((string) $clean) . "\n\n(Note: " . implode(', ', $oosNames) . ' '
+                    . ($isOne ? 'is' : 'are') . ' currently out of stock, so ' . ($isOne ? "it's" : "they're")
+                    . ' not on this quotation. I can let you know as soon as we restock.)';
+            }
 
             // Guard: only send if at least one line actually matched a priced product. This is what
             // stops the old "wrong items / random products" quotations from going out.

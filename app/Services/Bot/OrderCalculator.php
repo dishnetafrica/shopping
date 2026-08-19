@@ -21,7 +21,7 @@ class OrderCalculator
      *                                   given and their profile is a dealer, every matched line resolves
      *                                   through PriceResolver (tier %/override, margin-floor guarded).
      */
-    public function quote(Tenant $tenant, array $items, ?string $customerPhone = null): array
+    public function quote(Tenant $tenant, array $items, ?string $customerPhone = null, bool $skipOutOfStock = false): array
     {
         $products = $this->catalogue($tenant);
         $currency = (string) ($tenant->setting('currency', 'UGX'));
@@ -62,6 +62,14 @@ class OrderCalculator
             $p    = $hits[0]['product'] ?? null;
             if (! $p || ! isset($p['price'])) {
                 $lines[] = ['name' => $query, 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false];
+                continue;
+            }
+            // Out of stock: on the bot quote path (skipOutOfStock=true) we do NOT price something we
+            // can't supply — flag it unmatched+out_of_stock so the caller can tell the customer instead
+            // of putting an unavailable item on a firm quotation. POS/panel pass false and are unaffected.
+            $outOfStock = isset($p['stock']) && (float) $p['stock'] <= 0;
+            if ($skipOutOfStock && $outOfStock) {
+                $lines[] = ['name' => (string) ($p['name'] ?? $query), 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false, 'out_of_stock' => true];
                 continue;
             }
             $price = (float) $p['price'];
@@ -131,6 +139,7 @@ class OrderCalculator
                 'image'        => (string) ($p['image'] ?? ''),
                 'matched'      => true,
                 'dealer'       => $isDealerLine,
+                'out_of_stock' => $outOfStock,
             ];
         }
 
@@ -190,6 +199,10 @@ class OrderCalculator
                     'category' => (string) ($p->category ?? ''), 'keywords' => (string) ($p->keywords ?? ''),
                     'unit_label' => (string) ($p->unit_label ?? ''), 'moq' => $p->moq ? (int) $p->moq : null,
                     'pack_size' => $p->pack_size ? (int) $p->pack_size : 0,
+                    // On-hand (home cache) — feeds the matcher's in-stock ranking bonus (until now the
+                    // field was never supplied, so that bonus was dead) and lets bot quotes skip items
+                    // we don't actually have.
+                    'stock' => (float) ($p->stock ?? 0),
                     'image' => (string) ($p->image_url ?? ''),
                     'sold_by_weight' => (bool) ($p->sold_by_weight ?? false),
                     'reference_price' => $p->reference_price !== null ? (float) $p->reference_price : null,
