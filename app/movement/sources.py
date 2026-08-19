@@ -58,3 +58,55 @@ class VideoFileSource:
                 idx += 1
         finally:
             cap.release()
+
+
+class RtspFrameSource:
+    """Live RTSP capture for the movement pipeline — the real Phase-1 input.
+
+    Yields (frame, ts) where ts is the wall-clock capture time (a live stream has no file clock). cv2
+    is imported lazily. RTSP-over-TCP is forced (UDP loses packets on warehouse Wi-Fi). On a read
+    failure it reconnects with backoff rather than exiting, because a door camera must survive a blip.
+    `max_fps` throttles CPU: cartons cross in ~1s, so 6-10 fps is plenty and a fraction of the load of
+    decoding every frame. This is a capture seam only — no detection, no hardware assumptions.
+    """
+
+    def __init__(self, url: str, *, max_fps: float = 8.0, reconnect: bool = True,
+                 reconnect_backoff_s: float = 2.0, transport: str = "tcp"):
+        self.url = url
+        self.max_fps = float(max_fps)
+        self.reconnect = reconnect
+        self.reconnect_backoff_s = float(reconnect_backoff_s)
+        self.transport = transport
+
+    def frames(self) -> Iterator[Tuple[object, float]]:
+        import os
+        import time
+
+        import cv2
+
+        os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS",
+                              f"rtsp_transport;{self.transport}")
+        min_dt = (1.0 / self.max_fps) if self.max_fps > 0 else 0.0
+        last = 0.0
+        while True:
+            cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+            try:
+                if not cap.isOpened():
+                    if not self.reconnect:
+                        raise RuntimeError(f"could not open RTSP stream: {self.url}")
+                    time.sleep(self.reconnect_backoff_s)
+                    continue
+                while True:
+                    ok, frame = cap.read()
+                    now = time.time()
+                    if not ok:
+                        break                       # stream dropped → fall out to reconnect
+                    if min_dt and (now - last) < min_dt:
+                        continue                    # throttle: skip frames above max_fps
+                    last = now
+                    yield frame, now
+            finally:
+                cap.release()
+            if not self.reconnect:
+                return
+            time.sleep(self.reconnect_backoff_s)
