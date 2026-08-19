@@ -212,6 +212,11 @@ class AiBrain
             $reply = trim(substr($reply, 0, $srp));   // truncated block — never leaks
         }
 
+        // 3a-quote. Customer ACCEPTED their outstanding quotation — the model emits a hidden
+        //     <<ACCEPT_QUOTE>> line. Convert that quote into a real order through the one authoritative
+        //     converter (idempotent), instead of the bot re-asking what items they want.
+        $reply = $this->acceptQuote($tenant, $from, $reply);
+
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
@@ -807,11 +812,89 @@ class AiBrain
             $itemsTxt = $items ? implode('; ', $items) : '(the items already listed on the quotation)';
             $valid    = $q->valid_until ? (' valid until ' . $q->valid_until->toDateString()) : '';
 
+            $acceptLine = (bool) $tenant->setting('bot_quote_autoconvert', true)
+                ? ' When the customer has CLEARLY accepted this quotation — confirming, approving, asking to proceed, or asking to deliver it (e.g. "please deliver today", "confirm", "yes go ahead", "ok send it") — append the hidden line <<ACCEPT_QUOTE>> as the VERY LAST thing in your reply. That line turns THIS quotation into a confirmed order and notifies the team; do NOT create a new quotation for it. Emit it ONLY on clear acceptance, and only once. If they are only asking a question about the quote, do not emit it.'
+                : '';
+
             return "\n\nOUTSTANDING QUOTATION FOR THIS CUSTOMER: {$q->quote_no} — {$cur} {$total}{$valid}. Items: {$itemsTxt}. "
                 . 'If the customer replies about delivery, confirming, accepting, or paying (e.g. "please deliver today", "confirm", "yes", "ok send it"), THIS is the quotation they mean — do NOT ask what items they want. '
-                . 'Acknowledge it by its number, treat it as confirmed, and ask only for anything still missing (such as their exact delivery area). Only start a fresh order if they clearly ask for different or additional items.';
+                . 'Acknowledge it by its number, treat it as confirmed, and ask only for anything still missing (such as their exact delivery area). Only start a fresh order if they clearly ask for different or additional items.'
+                . $acceptLine;
         } catch (\Throwable $e) {
             return '';
+        }
+    }
+
+    /**
+     * The model emitted a hidden <<ACCEPT_QUOTE>> line — the customer accepted their outstanding
+     * quotation. Convert that quote into a real order through the ONE authoritative converter
+     * (QuotationConvertService, the same path the panel uses), never a second writer. Idempotent:
+     * the converter no-ops if the quote already has an order, and a short cache lock stops a message
+     * burst from racing. Gated by bot_quote_autoconvert (default on); when off, the acceptance is
+     * flagged to the owner to convert by hand instead of created automatically. Never breaks the chat.
+     */
+    private function acceptQuote(Tenant $tenant, string $from, string $reply): string
+    {
+        if (! preg_match('/<<\s*ACCEPT_QUOTE\s*(\{.*?\})?\s*>>/is', $reply, $m)) {
+            return $reply;
+        }
+        $stripped = trim((string) preg_replace('/<<\s*ACCEPT_QUOTE\s*(\{.*?\})?\s*>>/is', '', $reply));
+
+        try {
+            $digits = preg_replace('/[^0-9]/', '', $from);
+            if ($digits === '') return $stripped;
+
+            $wantNo = '';
+            if (! empty($m[1])) { $j = json_decode($m[1], true); $wantNo = trim((string) ($j['quote_no'] ?? '')); }
+
+            $qy = \App\Models\Quotation::where('tenant_id', $tenant->id)
+                ->where('customer_phone', $digits)
+                ->whereNotIn('status', ['converted', 'declined', 'expired', 'archived']);
+            if ($wantNo !== '') $qy->where('quote_no', $wantNo);
+            $q = $qy->with('items')->orderByDesc('id')->first();
+
+            if (! $q) {
+                \App\Support\BotTrace::log($tenant->id, 'accept_quote_none', $from, $wantNo ?: '(latest)', null);
+
+                return $stripped;
+            }
+
+            // Kill-switch: when auto-convert is off, don't create the order — flag the acceptance so
+            // a human converts it in Quotations. Still far better than the bot re-asking for items.
+            if (! (bool) $tenant->setting('bot_quote_autoconvert', true)) {
+                try { \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{2705} {$from} accepted quotation {$q->quote_no} — please convert it to an order in Quotations."); } catch (\Throwable $e) { }
+                \App\Support\BotTrace::log($tenant->id, 'accept_quote_manual', $from, (string) $q->quote_no, null);
+
+                return $stripped;
+            }
+
+            // One conversion per quote even across a burst of jobs.
+            if (! Cache::add("acceptquote:{$tenant->id}:{$q->id}", 1, 120)) {
+                return $stripped;
+            }
+
+            $res     = app(\App\Services\Sales\QuotationConvertService::class)->convert($tenant, $q);
+            $order   = $res['order'] ?? null;
+            $orderNo = $order ? (string) $order->order_no : '';
+            \App\Support\BotTrace::log($tenant->id, ! empty($res['already']) ? 'accept_quote_already' : 'accept_quote',
+                $from, $q->quote_no . ($orderNo !== '' ? " -> {$orderNo}" : ''), null);
+
+            // The converter dispatches NotifyOrderConfirmation (formal order details) + a staff alert,
+            // so we only ensure the customer-facing text isn't empty; the model's own line usually is
+            // the friendly acknowledgement.
+            if ($stripped === '') {
+                $stripped = $orderNo !== ''
+                    ? "Done! I've confirmed your order *{$orderNo}* from quotation {$q->quote_no}. Our team will arrange delivery. \u{1F64F}"
+                    : "Done! I've confirmed your order from quotation {$q->quote_no}. Our team will arrange delivery. \u{1F64F}";
+            }
+
+            return $stripped;
+        } catch (\Throwable $e) {
+            // no_items or any failure — never break the chat; put it in front of a human.
+            \App\Support\BotTrace::log($tenant->id, 'accept_quote_failed', $from, mb_substr($e->getMessage(), 0, 120), null);
+            try { \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{26A0}\u{FE0F} {$from} accepted a quotation but auto-conversion failed ({$e->getMessage()}). Please convert it manually in Quotations."); } catch (\Throwable $e2) { }
+
+            return $stripped;
         }
     }
 
