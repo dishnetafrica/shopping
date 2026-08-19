@@ -1,0 +1,81 @@
+# ShopBot Stock Object Dataset v0.1 — approved source register (license-gated).
+# Only sources with commercial: true are pulled by prepare.py. NonCommercial / unverified are excluded.
+# This is the machine-readable half of docs/vision-stock-object-dataset-v0_1.md. Re-verify at download.
+
+version: "0.1"
+primary_class: stock_object
+
+sources:
+  - id: loco
+    name: "LOCO — Logistics Objects in Context (TUM)"
+    url: "https://github.com/tum-fml/loco"
+    format: coco
+    license: "CC0 / public domain"
+    commercial: true
+    attribution: false
+    weight: core            # real warehouse domain + negatives (forklift/pallet/person)
+    notes: "SLC->container, pallet->pallet. Rich negatives. Curated annotations."
+
+  - id: openimages_box_bags
+    name: "Open Images V7 — Box / Luggage & bags / Packaging"
+    url: "https://storage.googleapis.com/openimages/web/download_v7.html"
+    format: openimages_csv
+    license: "annotations CC BY 4.0 (Google); images CC BY 2.0 (per-image, verify)"
+    commercial: true
+    attribution: true
+    weight: core
+    classes_wanted: ["Box", "Packaging and labeling", "Suitcase", "Handbag", "Backpack"]
+    notes: "Handbag/Backpack/Suitcase pulled as NEGATIVES (person-carried, not stock) via classmap."
+
+  - id: rf_carton
+    name: "Roboflow Universe — carton / cardboard box (aggregate)"
+    url: "https://universe.roboflow.com/search?q=carton"
+    format: yolo
+    license: "CC BY 4.0 (per-dataset — VERIFY each)"
+    commercial: true
+    attribution: true
+    weight: core
+    notes: "Requires per-dataset license check; record each dataset id + license in provenance."
+
+  - id: rf_bag_sack
+    name: "Roboflow Universe — rice bags / sack counting / rice counting"
+    url: "https://universe.roboflow.com/search?q=sack"
+    format: yolo
+    license: "CC BY 4.0 (per-dataset — VERIFY each)"
+    commercial: true
+    attribution: true
+    weight: core            # bags/sacks are the African-market-critical shape — weight up
+    notes: "phong-cv/rice-bags, supersourcing-vhpkc/sack-counting, testing-0voof/rice-counting."
+
+  - id: rf_parcel_warehouse
+    name: "Roboflow Universe — parcel / package / warehouse-detection"
+    url: "https://universe.roboflow.com/search?q=parcel"
+    format: yolo
+    license: "CC BY 4.0 (per-dataset — VERIFY each)"
+    commercial: true
+    attribution: true
+    weight: aux
+
+  - id: rf_pallet
+    name: "Roboflow Universe — pallet detection"
+    url: "https://universe.roboflow.com/search?q=pallet"
+    format: yolo
+    license: "CC BY 4.0 (per-dataset — VERIFY each)"
+    commercial: true
+    attribution: true
+    weight: aux
+
+# ── EXCLUDED (do not download for the commercial path) ────────────────────────────────────────
+excluded:
+  - id: amazon_bin
+    name: "Amazon Bin Image Dataset"
+    reason: "CC BY-NC-SA 3.0 — NonCommercial"
+  - id: sku110k
+    name: "SKU110K"
+    reason: "retail shelf products, not dispatch packages; research terms"
+  - id: youtube_vimeo
+    name: "YouTube / Vimeo warehouse videos"
+    reason: "all-rights-reserved by default; only explicit CC-BY video is usable — none approved here"
+  - id: tampar
+    name: "TAMPAR parcel dataset"
+    reason: "license unverified — verify before any use"
