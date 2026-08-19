@@ -22,11 +22,14 @@ from .state_machine import Crossing, Frame, MovementStateMachine
 
 class MovementPipeline:
     def __init__(self, config: MovementConfig, detector, sink: Callable[[dict], None], *,
-                 emit_gap: bool = True, lost_grace_frames: int = 8):
+                 emit_gap: bool = True, lost_grace_frames: int = 8, tracer: Callable[[dict], None] = None):
         self.config = config
         self.detector = detector
         self.emit_gap = emit_gap
         self.lost_grace_frames = int(lost_grace_frames)
+        # Optional, off by default: a per-frame observer for the benchmark to score tracking against
+        # exactly what drove the state machine. Never affects behaviour — production leaves it None.
+        self.tracer = tracer
         self.machine = MovementStateMachine(
             config.store, config.zone_uid, sink,
             cooldown_s=config.cooldown_s, assoc_max_dist=config.assoc_max_dist,
@@ -94,6 +97,15 @@ class MovementPipeline:
                 person_boxes[tid] = tuple(float(v) for v in persons.xyxy[i])
 
         lost = self._track_absence(set(carton_boxes.keys()))
+
+        if self.tracer is not None:
+            self.tracer({
+                "ts": ts,
+                "cartons": dict(carton_boxes),
+                "persons": dict(person_boxes),
+                "crossings": [(c.track_id, c.direction) for c in crossings],
+                "lost": list(lost),
+            })
 
         self.machine.observe(Frame(
             ts=ts, crossings=crossings, carton_boxes=carton_boxes,
