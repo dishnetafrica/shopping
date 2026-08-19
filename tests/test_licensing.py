@@ -171,6 +171,16 @@ def test_enforce_off_by_default_does_not_gate(tmp_path, monkeypatch):
     gate.check_license()   # enforcement off → never gates (existing dev/shelf paths unchanged)
 
 
+def test_enforce_missing_license_refuses(tmp_path, monkeypatch):
+    # no license.json cached at all → an enforced box must refuse to start
+    monkeypatch.setenv("VISION_DATA", str(tmp_path))
+    monkeypatch.setenv("SHOPBOT_LICENSE_PUBKEY", "x")   # bundled key present; just no license yet
+    monkeypatch.setenv("VISION_LICENSE_ENFORCE", "1")
+    from app.licensing import gate
+    with pytest.raises(RuntimeError):
+        gate.check_license()
+
+
 def test_fingerprint_quorum():
     assert fp.quorum_ok(FP, FP, need=2)
     one_swapped = ["machine_id:aaaaaaaaaaaaaaaa", "disk_serial:XXXX", "cpu_serial:cccccccccccccccc"]

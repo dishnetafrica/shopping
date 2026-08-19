@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
-# ShopBot Vision — first-sample PULL-BASED bootstrap installer (single AI box).
+# ShopBot Vision — one-command PULL-BASED installer, served from ShopBot Cloud.
 #
-#   curl -fsSL https://install.shopbot.africa | sudo bash                 # (eventual, config prompted/env)
-#   sudo STORE_ID=wh-juba-01 EVENT_WEBHOOK_URL=https://staging/api/vision/events \
-#        VISION_TOKEN=... IMAGE_REF=ghcr.io/dishnetafrica/shopbot-vision:v0.1 bash bootstrap.sh
+#   curl -fsSL https://mycloudbss.com/vision/bootstrap.sh | sudo bash
 #
-# Pulls a versioned multi-arch image from our registry (NEVER builds on the box), keeps config + data on
-# a persistent host dir, downloads the AI model separately (checksum-verified), starts the services and
-# proves the uplink to ShopBot. Idempotent — safe to re-run; existing .env/data are preserved.
+# Pulls a versioned multi-arch image from our registry (the box NEVER builds), generates a per-device
+# Ed25519 identity, enrols against ShopBot Cloud (hello/poll), waits for the operator to claim it, caches
+# a signed DEVELOPMENT license + a per-box delivery credential, starts the services. Idempotent — safe to
+# re-run; existing .env/data are preserved.
 #
-# SECURITY: this script contains NO secret. The webhook token is supplied at run time (env or, later, a
-# claim-code enrolment) and written to a root-only .env on the box — it is never baked into the public
-# installer and never shared across boxes. Fleet/OTA/enrolment/billing are deliberately NOT here.
+# SECURITY: this file contains NO secret. There is no baked token; the box gets its OWN per-box credential
+# at claim time. The one thing the OWNER must set below (before pointing a supplier at this URL) is the
+# registry image reference — DEFAULT_IMAGE. Everything else defaults to the ShopBot Cloud lab.
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo/root."; exit 1; }
 
+# ── owner-set defaults (edit DEFAULT_IMAGE per release; the rest rarely change) ────────────────
+DEFAULT_IMAGE="ghcr.io/dishnetafrica/shopbot-vision:edge-v0.1.0"   # <-- OWNER: set to the pushed image
+SHOPBOT_CLOUD_URL="${SHOPBOT_CLOUD_URL:-https://mycloudbss.com}"
+SHOPBOT_EDGE_VERSION="${SHOPBOT_EDGE_VERSION:-edge-v0.1.0}"
+IMAGE_REF="${IMAGE_REF:-${DEFAULT_IMAGE%:*}:$SHOPBOT_EDGE_VERSION}" # pin by :version (never :latest)
+STORE_ID="${STORE_ID:-bhavin-dev-lab}"
+EVENT_WEBHOOK_URL="${EVENT_WEBHOOK_URL:-$SHOPBOT_CLOUD_URL/api/vision/events}"
+
 DEST="${SHOPBOT_DIR:-/opt/shopbot-vision}"
 DATA="$DEST/data"
-IMAGE_REF="${IMAGE_REF:-ghcr.io/dishnetafrica/shopbot-vision:v0.1}"   # pin by :semver or @sha256 digest
 SB_COUNTRY="${SB_COUNTRY:-UG}"
 MIN_RAM_MB="${MIN_RAM_MB:-7000}"        # ~8GB nominal
 MIN_DISK_GB="${MIN_DISK_GB:-20}"
@@ -206,6 +212,8 @@ esac
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo
 echo "== ShopBot Vision online =="
+echo "Version:   $SHOPBOT_EDGE_VERSION   ($IMAGE_REF)"
 echo "Device ID: $DEVICE_ID"
 echo "Open:      http://${IP:-<box-ip>}:8080   (login: $ADMIN_USER / ${NEW_ADMIN_PW:+$ADMIN_PASSWORD}${NEW_ADMIN_PW:+  <- generated, write it down})"
-echo "Next:      dashboard → add IP camera (RTSP/ONVIF) → configure door line → switch vision-door to the real --rtsp/--detector command."
+echo "Next:      send the CLAIM CODE above to ShopBot; once claimed the box activates automatically."
+echo "           Then: dashboard → add IP camera (RTSP/ONVIF) → configure door line."

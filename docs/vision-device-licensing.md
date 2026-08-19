@@ -146,7 +146,7 @@ dev tenant scoping + single-use dev claim + secret-free/dataset-free image are t
 - `app/main.py` startup: add `check_license()` beside `check_security_config`/`check_delivery_config`
   (same refuse-to-start seam) → gate commercial inference; dev-license allowance.
 - `edge/Dockerfile`: bundle ShopBot license **public** key.
-- `edge/bootstrap.sh`: replace the shared-token write with **claim-code activation**, storing the per-box
+- `public/vision/bootstrap.sh`: replace the shared-token write with **claim-code activation**, storing the per-box
   credential + signed license in `/data` (600). Delivery then uses the per-box `webhook_token` (already the
   server's preferred `X-Vision-Token`) — likely **no `events.py` change**.
 
@@ -202,7 +202,7 @@ hello-with-keypair. None are sandbox-runnable (no cloud DB / no box).
 device keypair (→ `/data/device_key`, 0600), invents a box secret (→ `/data/box_secret`, 0600), computes
 the fingerprint, POSTs `hello` with `device_pubkey`+`fingerprint`, prints the claim code, polls until
 claimed, caches the signed license (→ `/data/license.json`) + per-box token (→ `/data/credential`, 0600),
-and verifies the license offline. `edge/bootstrap.sh` runs it when `SHOPBOT_CLOUD_URL` is set.
+and verifies the license offline. `public/vision/bootstrap.sh` runs it when `SHOPBOT_CLOUD_URL` is set.
 `edge/Dockerfile` bakes only the **public** verification key (`ARG SHOPBOT_LICENSE_PUBKEY`); the CI
 build passes it as a repo **variable** (not a secret). No signing key, no production credential in the image.
 

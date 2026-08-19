@@ -109,21 +109,21 @@ sudo STORE_ID=wh-juba-01 \
      VISION_TOKEN=<staging token> \
      IMAGE_REF=ghcr.io/dishnetafrica/shopbot-vision:v0.1 \
      [ MODEL_URL=https://<store>/stock_object_v0_1.bin MODEL_SHA256=<hex> ] \
-     bash edge/bootstrap.sh
+     bash public/vision/bootstrap.sh
 ```
 It: checks arch/OS/RAM/disk/net → installs Docker if missing → writes `/opt/shopbot-vision/{docker-compose.yml,.env}` (root-only, **no baked secret**) → generates a **Device ID** (`SB-UG-XXXXXX`, stored in `/data/device_id`) → `docker compose pull` → optional checksum-verified model download → `up -d` → health-gates `/api/health` → delivers a test event via `/api/selftest`. **Idempotent** (re-run preserves `.env` + `/data`).
 
 ### Acceptance test (the milestone)
 > A clean ARM64 box with internet receives ShopBot Vision remotely, starts, delivers a test event to
 > staging; then a real RTSP camera is connected and the door runs.
-1. `bash edge/bootstrap.sh` → "Edge box online", Device ID, `http://<ip>:8080`, "Test event delivered".
+1. `bash public/vision/bootstrap.sh` → "Edge box online", Device ID, `http://<ip>:8080`, "Test event delivered".
 2. Confirm one event row lands in ShopBot staging.
 3. Dashboard → add RTSP camera → Test → switch `vision-door` to `--rtsp … --detector …`.
 
 ### What I verified in the sandbox vs what needs the real box
 | Checked here | Result |
 |---|---|
-| `bash -n edge/bootstrap.sh` (syntax) | ✅ OK |
+| `bash -n public/vision/bootstrap.sh` (syntax) | ✅ OK |
 | workflow + the compose the installer writes are valid YAML, **pull-based** (no `build:`), persistent `./data:/data` | ✅ OK |
 | no secret literal baked into the public installer | ✅ OK |
 
