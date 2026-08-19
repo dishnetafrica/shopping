@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from . import alerting, auth, db, detector, evaluation, events, quality, redact, scheduler
 from .cal import CameraConfig, available_drivers, discover, get_driver
+from .licensing.gate import check_license   # off unless VISION_LICENSE_ENFORCE=1 (nacl imported lazily)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -74,6 +75,7 @@ def _startup():
     global _stop
     check_security_config()
     check_delivery_config()
+    check_license()          # refuse to start commercial inference without a valid license (when enforced)
     db.db()
     if os.environ.get("DEMO", "0") == "1" and not db.list_cameras():
         with db.tx() as con:

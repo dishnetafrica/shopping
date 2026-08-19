@@ -91,8 +91,57 @@ box** and were deliberately **not** guessed here:
 - **Streaming vs snapshot** — `vision-api`'s scheduler is the 10-min shelf loop; the movement door is a
   separate continuous process (this design keeps them separate — shelf vision untouched).
 
+---
+
+## First-sample REMOTE provisioning (pull-based) — `bootstrap.sh`
+
+The Phase-1 steps above **build on the box** (dev/CI). For shipping software to a real ARM64 box over
+the internet, use the **pull-based** path instead — the box never builds, it pulls a versioned image.
+Design: `docs/vision-edge-provisioning.md`.
+
+**Server side (CI, once per release):** `.github/workflows/edge-image.yml` builds a **multi-arch**
+image (`buildx`, arm64+amd64) on tag `edge-v*` and pushes `shopbot-vision:<version>` to the registry.
+
+**On the box (remote-access shell, first sample):**
+```bash
+sudo STORE_ID=wh-juba-01 \
+     EVENT_WEBHOOK_URL=https://<staging>/api/vision/events \
+     VISION_TOKEN=<staging token> \
+     IMAGE_REF=ghcr.io/dishnetafrica/shopbot-vision:v0.1 \
+     [ MODEL_URL=https://<store>/stock_object_v0_1.bin MODEL_SHA256=<hex> ] \
+     bash edge/bootstrap.sh
+```
+It: checks arch/OS/RAM/disk/net → installs Docker if missing → writes `/opt/shopbot-vision/{docker-compose.yml,.env}` (root-only, **no baked secret**) → generates a **Device ID** (`SB-UG-XXXXXX`, stored in `/data/device_id`) → `docker compose pull` → optional checksum-verified model download → `up -d` → health-gates `/api/health` → delivers a test event via `/api/selftest`. **Idempotent** (re-run preserves `.env` + `/data`).
+
+### Acceptance test (the milestone)
+> A clean ARM64 box with internet receives ShopBot Vision remotely, starts, delivers a test event to
+> staging; then a real RTSP camera is connected and the door runs.
+1. `bash edge/bootstrap.sh` → "Edge box online", Device ID, `http://<ip>:8080`, "Test event delivered".
+2. Confirm one event row lands in ShopBot staging.
+3. Dashboard → add RTSP camera → Test → switch `vision-door` to `--rtsp … --detector …`.
+
+### What I verified in the sandbox vs what needs the real box
+| Checked here | Result |
+|---|---|
+| `bash -n edge/bootstrap.sh` (syntax) | ✅ OK |
+| workflow + the compose the installer writes are valid YAML, **pull-based** (no `build:`), persistent `./data:/data` | ✅ OK |
+| no secret literal baked into the public installer | ✅ OK |
+
+| **NOT runnable in the sandbox (no ARM box / registry / camera / staging) — reported, not claimed passed** |
+|---|
+| multi-arch build+push, `docker compose pull` of a real image, arch match |
+| real Docker install, container start, `/api/health` + `/api/selftest` delivery to staging |
+| model download + checksum against a real artifact |
+| RTSP camera connect + a real `stock.move` (needs the v0.1 model, not yet trained) |
+| several-hours/days stability |
+
+These are the acceptance-test steps to run on the sample box; none were fabricated.
+
 ## Scope honoured
 No Laravel, reconciliation, or shelf-**detection** logic changed. `app/cal` is a faithful
 reconstruction of the missing capture layer (its documented contract is exercised by the existing
 shelf tests). The movement pipeline and `carton.move` contract remain hardware-independent; the
 detector/runtime and any NVIDIA/RKNN deps are injected, never baked into the base image.
+**Not built (deferred):** OTA, fleet management, device certificates/auto-enrolment, billing,
+production auto-update. The public installer stays secret-free; per-device credentials are a future
+claim-code enrolment step, not in `bootstrap.sh`.

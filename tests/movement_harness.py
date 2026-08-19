@@ -156,6 +156,45 @@ def s9_stationary():
     check("9 stationary carton → no false movement", ev == [], f"emitted {ev}")
 
 
+# ── Mixed-stock environment (first-class requirement): the engine counts crossings, not types ──
+def s10_mixed_simultaneous():
+    # carton(1), bag(2), sack(3) cross OUT together; a worker(9) carries nothing.
+    m, ev = machine()
+    m.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (200, 300, 240, 340), 3: (300, 300, 340, 340)},
+        person_boxes={9: (420, 300, 460, 380)},   # empty-handed worker — not a stock object
+        crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],
+    ))
+    mv = moves(ev)
+    check("10 mixed types crossing at once → exactly one movement each (3)", len(mv) == 3, f"got {len(mv)}")
+    check("10 empty worker adds no movement (3, not 4)", len(mv) == 3)
+    # uid = WHAT moved (stock-object track), not WHO carried it → distinct even when one worker carries all
+    check("10 three distinct uids (identity per object, not per worker)",
+          len({x['uid'] for x in mv}) == 3, f"got {len({x['uid'] for x in mv})}")
+
+
+def s11_person_only():
+    # A worker walks through carrying nothing across two frames — no stock object, no crossing.
+    m, ev = machine()
+    m.observe(Frame(ts=0.0, person_boxes={9: (400, 300, 440, 380)}))
+    m.observe(Frame(ts=1.0, person_boxes={9: (400, 320, 440, 400)}))
+    check("11 person carrying nothing → no movement", ev == [], f"emitted {ev}")
+
+
+def s12_pallet_and_empty_worker():
+    # One worker carries a pallet (a stock object), one carries nothing — exactly one movement.
+    m, ev = machine()
+    m.observe(Frame(
+        ts=0.0,
+        carton_boxes={5: (100, 300, 190, 360)},    # pallet, tracked as a generic stock object
+        person_boxes={8: (420, 300, 460, 380)},     # empty-handed worker
+        crossings=[Crossing(5, "out")],
+    ))
+    check("12 pallet crosses, empty worker doesn't → exactly one movement", len(moves(ev)) == 1,
+          f"got {len(moves(ev))}")
+
+
 # ── Cross-cutting verifications the plan calls out explicitly ─────────────────────────────────
 def x_uid_stable():
     a = contract.event_uid(STORE, ZONE, 7, "out", 1_723_000_000.0)
@@ -205,9 +244,10 @@ def show_payloads():
 
 
 def main():
-    print("MOVEMENT STATE-MACHINE HARNESS — 9 acceptance scenarios + contract\n")
+    print("MOVEMENT STATE-MACHINE HARNESS — 9 acceptance scenarios + mixed-env + contract\n")
     for fn in (s1_approaching, s2_out, s3_in, s4_oscillation, s5_occlusion, s6_tracking_loss,
                s7_two_workers, s8_multiple_cartons, s9_stationary,
+               s10_mixed_simultaneous, s11_person_only, s12_pallet_and_empty_worker,
                x_uid_stable, x_timestamp_from_frame, x_contract_example, x_exactly_once):
         fn()
     show_payloads()

@@ -31,11 +31,17 @@ def iso(ts: float) -> str:
 
 
 def carton_move(store: str, zone_uid: str, direction: str, ts: float, *,
-                track_id, candidates, assoc_conf: float, confidence: float, occlusion: bool,
-                qty: int = 1, qty_conf: float = 1.0, object_class: str = "carton") -> dict:
+                object_track_id, track_id, candidates, assoc_conf: float, confidence: float,
+                occlusion: bool, qty: int = 1, qty_conf: float = 1.0, object_class: str = "carton") -> dict:
+    # WHO carried it (track_id, a person) ≠ WHAT moved (object_track_id, the stock object). The event
+    # IDENTITY — and therefore the idempotency uid — is the stock object's own track, never the person's.
+    # Keying the uid on the person collides when one worker carries several objects, and ShopBot's
+    # unique(tenant,event_uid) index would then drop real crossings as duplicates. assoc.track_id keeps
+    # the person purely as attribution.
     return {
         "event": CARTON_MOVE,
-        "uid": event_uid(store, zone_uid, track_id if track_id is not None else "?", direction, ts),
+        "uid": event_uid(store, zone_uid,
+                         object_track_id if object_track_id is not None else "?", direction, ts),
         "store": store,
         "zone_uid": zone_uid,
         "direction": direction,
@@ -91,14 +97,15 @@ def validate_carton_move(p: dict) -> list[str]:
 
 
 # A frozen, canonical example — the schema fixture both sides can point at.
+# uid is keyed on the STOCK OBJECT track (23); the person who carried it (5) lives only in assoc.
 EXAMPLE_CARTON_MOVE = {
     "event": "carton.move",
-    "uid": event_uid("wh-juba-01", "D->EXIT", 17, "out", 1_723_987_654.0),
+    "uid": event_uid("wh-juba-01", "D->EXIT", 23, "out", 1_723_987_654.0),
     "store": "wh-juba-01",
     "zone_uid": "D->EXIT",
     "direction": "out",
     "object": {"class": "carton", "qty": 1, "qty_conf": 0.94},
-    "assoc": {"track_id": 17, "candidates": [17], "assoc_conf": 0.88},
+    "assoc": {"track_id": 5, "candidates": [5], "assoc_conf": 0.88},   # person = attribution only
     "confidence": 0.86,
     "occlusion": False,
     "timestamp": iso(1_723_987_654.0),

@@ -158,6 +158,96 @@ def test_frozen_contract_example_is_valid():
     assert contract.validate_carton_move(contract.EXAMPLE_CARTON_MOVE) == []
 
 
+# ── mixed-stock environment: the engine counts a STOCK OBJECT crossing, regardless of type ────
+
+def test_mixed_types_crossing_simultaneously_one_event_each(machine, sink):
+    # carton + bag + sack cross OUT together; an empty-handed worker is present but carries nothing.
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (200, 300, 240, 340), 3: (300, 300, 340, 340)},
+        person_boxes={9: (420, 300, 460, 380)},
+        crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],
+    ))
+    mv = moves(sink)
+    assert len(mv) == 3                                   # one movement per physical object (the metric)
+    assert len({m["uid"] for m in mv}) == 3              # WHAT moved: distinct identity per object
+
+
+# ── uid identity = WHAT moved (stock object), NOT WHO carried it (person) ─────────────────────
+
+def test_three_objects_one_worker_three_unique_uids(machine, sink):
+    # all three objects associate to the SAME worker — uids must still be distinct
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (130, 300, 170, 340), 3: (160, 300, 200, 340)},
+        person_boxes={9: (150, 300, 190, 380)},          # one worker, close to all three
+        crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],
+    ))
+    mv = moves(sink)
+    assert len(mv) == 3 and len({m["uid"] for m in mv}) == 3
+    # every event attributes to the same worker — attribution is shared, identity is not
+    assert {m["assoc"]["track_id"] for m in mv} == {9}
+
+
+def test_three_objects_no_attribution_three_unique_uids(machine, sink):
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (200, 300, 240, 340), 3: (300, 300, 340, 340)},
+        crossings=[Crossing(1, "out"), Crossing(2, "out"), Crossing(3, "out")],   # no person_boxes
+    ))
+    mv = moves(sink)
+    assert len(mv) == 3 and len({m["uid"] for m in mv}) == 3
+    assert all(m["assoc"]["track_id"] is None for m in mv)   # unattributed, still distinct identities
+
+
+def test_same_object_retransmitted_is_one_event(machine, sink):
+    # the same object re-observed crossing the same way within cooldown is one movement (idempotent)
+    machine.observe(Frame(ts=0.0, crossings=[Crossing(1, "out")]))
+    machine.observe(Frame(ts=0.3, carton_boxes={1: (100, 300, 140, 340)},
+                          crossings=[Crossing(1, "out")]))
+    mv = moves(sink)
+    assert len(mv) == 1
+
+
+def test_two_objects_simultaneously_two_events(machine, sink):
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={1: (100, 300, 140, 340), 2: (300, 300, 340, 340)},
+        crossings=[Crossing(1, "out"), Crossing(2, "out")],
+    ))
+    mv = moves(sink)
+    assert len(mv) == 2 and len({m["uid"] for m in mv}) == 2
+
+
+def test_uid_is_stable_for_the_same_object_crossing():
+    a = contract.carton_move(STORE, ZONE, "out", 1_723_000_000.0, object_track_id=1, track_id=9,
+                             candidates=[9], assoc_conf=0.9, confidence=0.9, occlusion=False)
+    b = contract.carton_move(STORE, ZONE, "out", 1_723_000_000.0, object_track_id=1, track_id=None,
+                             candidates=[], assoc_conf=0.0, confidence=0.9, occlusion=False)
+    # same object + same crossing → same uid regardless of who (or whether anyone) was attributed
+    assert a["uid"] == b["uid"]
+    # different object → different uid
+    c = contract.carton_move(STORE, ZONE, "out", 1_723_000_000.0, object_track_id=2, track_id=9,
+                             candidates=[9], assoc_conf=0.9, confidence=0.9, occlusion=False)
+    assert c["uid"] != a["uid"]
+
+
+def test_person_carrying_nothing_produces_no_movement(machine, sink):
+    machine.observe(Frame(ts=0.0, person_boxes={9: (400, 300, 440, 380)}))
+    machine.observe(Frame(ts=1.0, person_boxes={9: (400, 320, 440, 400)}))
+    assert sink == []                                    # person is not stock — no movement
+
+
+def test_pallet_crosses_while_empty_worker_does_not(machine, sink):
+    machine.observe(Frame(
+        ts=0.0,
+        carton_boxes={5: (100, 300, 190, 360)},          # pallet as a generic stock object
+        person_boxes={8: (420, 300, 460, 380)},           # empty-handed worker
+        crossings=[Crossing(5, "out")],
+    ))
+    assert len(moves(sink)) == 1                          # exactly one movement, type-agnostic
+
+
 # ── real-Supervision integration: scripted detector through actual ByteTrack + LineZone ──────
 
 sv = pytest.importorskip("supervision", reason="supervision not installed")
