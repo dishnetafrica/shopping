@@ -1484,6 +1484,30 @@ class AiBrain
                     . ' not on this quotation. I can let you know as soon as we restock.)';
             }
 
+            // Ambiguity guard: a generic term (e.g. "aluminium foil") matched several SKUs at very
+            // different prices with no distinguishing word. Never guess/quote the wrong one — ask which
+            // product, listing the real options and our prices. (Mirrors the invented-quantity block.)
+            $ambLines = array_values(array_filter($quote['lines'], fn ($l) => ! empty($l['ambiguous'])));
+            if ($ambLines) {
+                $cur = strtoupper((string) ($tenant->setting('currency', 'UGX') ?: 'UGX'));
+                $dec = \App\Services\Pricing::decimalsForCurrency($cur);
+                $first = $ambLines[0];
+                $opts = array_map(
+                    fn ($c) => '• ' . (string) ($c['name'] ?? '') . ' — ' . $cur . ' ' . number_format((float) ($c['price'] ?? 0), $dec),
+                    array_slice((array) ($first['candidates'] ?? []), 0, 5)
+                );
+                $ask = ($clean !== '' ? rtrim((string) $clean) . "\n\n" : '')
+                    . 'We stock a few options for "' . (string) $first['name'] . '" at different prices — which one would you like?' . "\n"
+                    . implode("\n", $opts);
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'blocked_ambiguous', false, '', 'query matched multiple SKUs with a wide price spread — asked which one');
+                try {
+                    $gateway->sendText($tenant->whatsapp_instance, $from, $ask);
+                    MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $ask, null, null, ['via' => 'ai', 'kind' => 'quote_needs_pick']);
+                } catch (\Throwable $e2) { /* still block the wrong quote below */ }
+
+                return ['reply' => '', 'sent' => true];
+            }
+
             // Guard: only send if at least one line actually matched a priced product. This is what
             // stops the old "wrong items / random products" quotations from going out.
             $matched = array_filter($quote['lines'], fn ($l) => ! empty($l['matched']));
@@ -1920,6 +1944,7 @@ class AiBrain
         $p .= "- PHOTOS: if the customer sends a PHOTO of a product, look carefully and READ any visible model / part number / rating printed on it (e.g. \"A9F74101\", \"LC1D32P7\", \"63A\", \"3P\") and match that to the catalogue — this is the reliable way to identify the exact item, so a customer can photograph a failed/old part and get the same one. If no number or label is legible, identify the product TYPE from the image and ask a short question for the rating/size/spec you need. NEVER guess an exact model, rating or price from shape or colour alone — read it or ask. Once identified, confirm the catalogue match and offer to quote; if it isn't stocked, offer a special order.\n";
         $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
+        $p .= "- OUR PRICES ARE FIXED from the catalogue. If a customer proposes, assumes, states, or haggles their OWN price (e.g. \"30\", \"can you do 30\", \"10 cartons for 30\"), you must NEVER accept, confirm, agree to, or repeat their number as our price, and never compute a total from it. Politely restate OUR listed price for that exact product (e.g. \"Our price for that is 33 per carton\"), and if they want it in writing emit the <<QUOTE>> line so the system prices it. You have no authority to give a discount or match a customer's price.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
         $deliverFrom = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';

@@ -59,6 +59,15 @@ class OrderCalculator
             }
 
             $hits = $this->matcher->search($query, $products);
+            // Ambiguous generic term: the query matched several near-tied SKUs spanning a wide price
+            // range (e.g. "aluminium foil" → $33…$155) with no distinguishing word. Do NOT guess a
+            // price from hits[0] — flag it so the caller asks WHICH product instead of quoting the wrong
+            // one. (POS trusted-price picks are handled above and never reach here.)
+            $amb = $this->matcher->ambiguityCandidates($hits);
+            if ($amb !== null) {
+                $lines[] = ['name' => $query, 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false, 'ambiguous' => true, 'candidates' => $amb];
+                continue;
+            }
             $p    = $hits[0]['product'] ?? null;
             if (! $p || ! isset($p['price'])) {
                 $lines[] = ['name' => $query, 'qty' => $qty, 'price' => null, 'sum' => null, 'matched' => false];

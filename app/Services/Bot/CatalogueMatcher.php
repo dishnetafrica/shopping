@@ -259,6 +259,41 @@ class CatalogueMatcher
     }
 
     /**
+     * Ambiguity guard for the bot QUOTE path. Given a search() result, decide whether the top is a
+     * near-tie among SKUs that span a WIDE price range with no clear leader — the "aluminium foil →
+     * $33…$155, no distinguishing word" case that must never be silently quoted as hits[0].
+     *
+     * Returns up to 4 candidate {name,price} (cheapest first) when ambiguous, or null when the match
+     * is safe: an exact-name hit (score ≥ 1000), OR a clear leader pulled ahead by a distinguishing
+     * word (e.g. "golden" adds +120, beyond $gap), OR a narrow price spread. Pure over the search()
+     * result — unit-testable without a catalogue. Mirrors clarifyCheck()'s ≥3× spread test, but works
+     * for multi-token queries (which clarifyCheck deliberately skips).
+     *
+     * @param array<int,array{product:array,score:float}> $hits
+     * @return array<int,array{name:string,price:float}>|null
+     */
+    public function ambiguityCandidates(array $hits, float $spread = 3.0, float $gap = 90.0): ?array
+    {
+        $priced = array_values(array_filter($hits, fn ($h) => (float) ($h['product']['price'] ?? 0) > 0));
+        if (count($priced) < 2) return null;
+
+        $top = $priced[0];
+        if ((float) ($top['score'] ?? 0) >= 1000.0) return null;   // exact name match — unambiguous
+
+        // The near-tied top cluster: SKUs within one distinguishing-word gap of the leader.
+        $cluster = array_values(array_filter($priced, fn ($h) => ((float) $top['score'] - (float) $h['score']) <= $gap));
+        if (count($cluster) < 2) return null;                       // a clear leader → unambiguous
+
+        $prices = array_map(fn ($h) => (float) $h['product']['price'], $cluster);
+        if (min($prices) <= 0 || (max($prices) / min($prices)) < $spread) return null;   // narrow spread → fine
+
+        usort($cluster, fn ($a, $b) => (float) $a['product']['price'] <=> (float) $b['product']['price']);
+
+        return array_map(fn ($h) => ['name' => (string) $h['product']['name'], 'price' => (float) $h['product']['price']],
+            array_slice($cluster, 0, 4));
+    }
+
+    /**
      * Broad multi-term browse ("india gate rice chenab super brown rice ravi rice mb"):
      * when a long query is dominated by ONE product category/head term, return only that
      * category's products (best first), ignoring unrelated products that merely collide on
