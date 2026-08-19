@@ -32,6 +32,8 @@ COPY app/web /srv/app/web
 # ShopBot license VERIFICATION key — PUBLIC key only, baked at build time (safe to ship). The signing
 # PRIVATE key never leaves ShopBot Cloud, and NO production credential is present in the image.
 ARG SHOPBOT_LICENSE_PUBKEY=""
+# The image version (the CI tag, e.g. edge-v0.1.0). Surfaced via /api/health and visionctl.
+ARG SHOPBOT_VISION_VERSION="edge-dev"
 
 # Data (SQLite outbox, config, snapshots, model cache) lives on the mounted NVMe volume.
 ENV VISION_DB=/data/vision.db \
@@ -39,9 +41,18 @@ ENV VISION_DB=/data/vision.db \
     VISION_DATA=/data \
     PYTHONUNBUFFERED=1 \
     SHOPBOT_LICENSE_PUBKEY=$SHOPBOT_LICENSE_PUBKEY \
-    SHOPBOT_VISION_VERSION=phase1-dev
+    SHOPBOT_VISION_VERSION=$SHOPBOT_VISION_VERSION
 VOLUME ["/data"]
 EXPOSE 8080
+
+# Liveness: the API is up if uvicorn answers at all — 200 or 401 (auth wall) both mean "alive". Uses
+# stdlib python (no curl dependency) and needs no credentials.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD \
+    python -c "import urllib.request,urllib.error,sys;\
+try:\
+ urllib.request.urlopen('http://127.0.0.1:8080/api/health',timeout=3); sys.exit(0)\
+except urllib.error.HTTPError as e: sys.exit(0 if e.code in (200,401) else 1)\
+except Exception: sys.exit(1)"
 
 # Default entrypoint: the dashboard/API service (camera config, health, selftest).
 # The movement door is a separate command against the SAME image:
