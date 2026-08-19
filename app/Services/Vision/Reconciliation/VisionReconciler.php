@@ -35,6 +35,22 @@ final class VisionReconciler
         return (bool) config('vision.reconcile.enabled', false);
     }
 
+    /**
+     * Per-tenant gate: reconciliation runs for a tenant if the GLOBAL switch is on OR the tenant has
+     * opted in via its `vision_reconcile_enabled` setting. This lets one lab tenant (e.g. 22) reconcile
+     * while every other tenant is untouched — without a global flip. The reconciliation ENGINE is not
+     * changed; only this adapter's on/off decision is.
+     */
+    public static function enabledForTenant(int $tenantId): bool
+    {
+        if (self::enabled()) {
+            return true;
+        }
+        $t = $tenantId ? Tenant::find($tenantId) : null;
+
+        return $t ? (bool) $t->setting('vision_reconcile_enabled', false) : false;
+    }
+
     /** Reconcile one movement event and stamp the result onto its row. Returns the decision. */
     public function reconcile(int $tenantId, array $payload, VisionEvent $row): array
     {

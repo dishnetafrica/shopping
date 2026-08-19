@@ -169,6 +169,22 @@ if [ -n "${SHOPBOT_CLOUD_URL:-}" ]; then
   say "Activating device against ShopBot Cloud…"
   docker compose run --rm vision-api python -m app.licensing.enroll --cloud "$SHOPBOT_CLOUD_URL" \
     || warn "enrollment did not complete — run vision:claim on the cloud, then: (cd $DEST && docker compose run --rm vision-api python -m app.licensing.enroll --cloud $SHOPBOT_CLOUD_URL)"
+
+  # Wire the per-box delivery credential (minted at claim, cached by enroll) into the event-delivery
+  # service as VISION_TOKEN. China never receives or types a permanent token — the box holds its OWN
+  # per-box webhook_token, and event delivery uses it. The token is written root-only and the services
+  # are recreated to pick it up.
+  if [ -f "$DATA/credential" ]; then
+    TOK="$(cat "$DATA/credential")"
+    if grep -q '^VISION_TOKEN=' "$DEST/.env"; then
+      sed -i "s|^VISION_TOKEN=.*|VISION_TOKEN=$TOK|" "$DEST/.env"
+    else
+      echo "VISION_TOKEN=$TOK" >> "$DEST/.env"
+    fi
+    chmod 600 "$DEST/.env"
+    docker compose up -d --force-recreate
+    say "Per-box delivery credential wired into VISION_TOKEN (no token was ever typed)"
+  fi
 fi
 
 # ── 8. health-gate + uplink proof ─────────────────────────────────────────────────────────────

@@ -110,7 +110,7 @@ class VisionEventController extends Controller
         // Phase-0 Stock & Loss: reconcile MOVEMENT events against the ledger (opt-in; shelf events are
         // never touched). Best-effort — a reconciliation failure must never drop the event.
         $decision = null;
-        if (\App\Services\Vision\Reconciliation\VisionReconciler::enabled()
+        if (\App\Services\Vision\Reconciliation\VisionReconciler::enabledForTenant($tenantId)
             && \App\Services\Vision\Reconciliation\VisionReconciler::handles((string) $data['event'])) {
             try {
                 $decision = app(\App\Services\Vision\Reconciliation\VisionReconciler::class)
