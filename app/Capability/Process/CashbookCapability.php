@@ -261,6 +261,53 @@ final class CashbookCapability implements ProcessCapability
             'columns' => [['label' => 'Supplier'], ['label' => 'Owed', 'align' => 'right'], ['label' => '', 'align' => 'right']],
             'rows' => $payRows, 'empty' => 'Nothing outstanding — you are square with every supplier 🎉', 'pageSize' => 25];
 
+        // "Who to pay today" — the Pay Advisor's plan, in-app. Cash-aware (pay/hold vs the payer's cash,
+        // keeping the buffer) when a cash holder is configured; otherwise a simple overdue list. Owner-only,
+        // read-only; tapping a row opens that supplier (where "Pay supplier" lives). Never breaks the page.
+        $payPlanCard = null;
+        if ($isOwner) {
+            try {
+                $adv = app(\App\Services\Finance\PayAdvisor::class);
+                $PA = \App\Services\Finance\PayAdvisor::class;
+                $holderSet = trim((string) $ctx->tenant->setting('pay_advisor_cash_holder', '')) !== '';
+                $planRows = [];
+                $sub = '';
+                $ageCell = fn ($a) => ['value' => $a['oldest_days'] . 'd overdue', 'tone' => $a['oldest_days'] >= 15 ? 'danger' : 'warn'];
+                $link = fn ($a) => '/api/v1/workspace/supplier/' . $a['supplier_id'];
+
+                if ($holderSet) {
+                    $plan = $adv->cashPlan($ctx->tenant);
+                    foreach ($plan['pay'] as $a) {
+                        $amt = $a['pay_native'] !== null ? $PA::money((float) $a['pay_native'], $a['currency']) : ('$' . number_format($a['pay_usd'], 0));
+                        $planRows[] = ['cells' => [$a['supplier'], ['value' => 'Pay ' . $amt . ($a['partial'] ? ' (partial)' : ''), 'tone' => 'ok'], $ageCell($a)], 'link' => $link($a)];
+                    }
+                    foreach ($plan['hold'] as $a) {
+                        $planRows[] = ['cells' => [$a['supplier'], ['value' => 'Hold ' . $PA::money((float) $a['overdue'], $a['currency'])], $ageCell($a)], 'link' => $link($a)];
+                    }
+                    if ($planRows) {
+                        $cashUgx = (float) ($plan['cash_native']['UGX'] ?? 0);
+                        $cashBit = $cashUgx > 0 ? $PA::money($cashUgx, 'UGX') : ('$' . number_format($plan['cash_usd'], 0));
+                        $sub = 'Cash ' . $cashBit . ' · keep $' . number_format($plan['buffer_usd'], 0) . ' · ~$' . number_format($plan['spendable_usd'], 0) . ' to spend';
+                    }
+                } else {
+                    foreach ($adv->forTenant($ctx->tenant) as $a) {
+                        if (! in_array($a['state'], ['pay', 'tension'], true) || $a['overdue'] <= 0.005) { continue; }
+                        $amt = $PA::money((float) $a['overdue'], $a['currency']) . $PA::usdBracket((float) $a['overdue'], $a['currency'], (float) ($a['rate'] ?? 0));
+                        $planRows[] = ['cells' => [$a['supplier'], ['value' => 'Pay ' . $amt, 'tone' => 'ok'], $ageCell($a)], 'link' => $link($a)];
+                    }
+                    if ($planRows) { $sub = count($planRows) . ' overdue · set a cash holder to get a cash-aware plan'; }
+                }
+
+                if ($planRows) {
+                    $payPlanCard = ['kind' => 'table', 'title' => 'Who to pay today', 'sub' => $sub,
+                        'columns' => [['label' => 'Supplier'], ['label' => 'Plan'], ['label' => 'Age', 'align' => 'right']],
+                        'rows' => $planRows, 'empty' => 'Nothing overdue', 'pageSize' => 20];
+                }
+            } catch (\Throwable $e) {
+                $payPlanCard = null;
+            }
+        }
+
         // Supplier picker map for the header "Pay supplier" action (pay anyone, incl. advances not yet on account).
         $supIdMap = []; $supNames = []; $seen = [];
         foreach (Supplier::where('tenant_id', $t)->orderBy('name')->get(['id', 'name']) as $s) {
@@ -476,7 +523,7 @@ final class CashbookCapability implements ProcessCapability
                 ['tone' => 'info', 'label' => 'WC ' . Money::fmt($workingCapital, 'USD')]))
             ->financials($financials)
             ->quickActions($actions)
-            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'company' => [$companyCard], 'receivables' => [$receivablesCard], 'payables' => [$payablesCard]])
+            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'company' => [$companyCard], 'receivables' => [$receivablesCard], 'payables' => array_values(array_filter([$payPlanCard, $payablesCard]))])
             ->tabs([
                 ['key' => 'holders', 'label' => 'Cash by person', 'count' => count($holderRows)],
                 ['key' => 'entries', 'label' => 'All entries', 'count' => count($entryRows)],
