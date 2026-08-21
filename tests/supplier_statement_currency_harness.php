@@ -30,14 +30,21 @@ function fold(array $items, string $currency, float $openingNative = 0.0, string
     }
 
     $bal = $opening; $charges = 0.0; $payments = 0.0; $excluded = 0; $others = []; $rows = [];
+    $cashCount = 0; $cashTotal = 0.0;
     foreach ($items as $c) {
         if ($native && strtoupper($c['currency']) !== $mode) {
             $excluded++; $others[strtoupper($c['currency'] ?: '?')] = true; continue;
         }
         $isPay = $c['stage'] === 'supplier_payment';
+        $isCash = ! $isPay && strtolower($c['pay_status'] ?? 'credit') === 'cash';
         $amt = $native ? (float) $c['native_amount'] : (float) $c['usd_amount'];
         $signed = $isPay ? -$amt : $amt;
         $ts = isset($c['date']) ? strtotime($c['date'] . ' 12:00:00') : null;
+        if ($isCash) {
+            if ($fromTs && $ts && $ts < $fromTs) { continue; }
+            if ($toTs && $ts && $ts > $toTs) { continue; }
+            $cashCount++; $cashTotal += $amt; continue;
+        }
         if ($fromTs && $ts && $ts < $fromTs) { $bal += $signed; $opening = $bal; continue; }
         if ($toTs && $ts && $ts > $toTs) { continue; }
         $bal += $signed;
@@ -49,6 +56,7 @@ function fold(array $items, string $currency, float $openingNative = 0.0, string
         'currency' => $mode, 'native' => $native,
         'opening' => round($opening, 2), 'charges' => round($charges, 2),
         'payments' => round($payments, 2), 'closing' => round($bal, 2),
+        'cash_count' => $cashCount, 'cash_total' => round($cashTotal, 2),
         'excluded' => $excluded, 'other_currencies' => array_keys($others), 'rows' => $rows,
     ];
 }
@@ -110,13 +118,22 @@ $toEarly = fold($bills, 'UGX', 0.0, 'USD', null, '2026-08-07');
 check('Through 07 Aug closing', $toEarly['closing'], 9900000.0); // 1.65M+4.95M+3.30M
 check('Through 07 Aug rows',    count($toEarly['rows']), 3);
 
+// 5c) Cash purchases are excluded from payables but counted for the note.
+$withCash = array_merge($bills, [
+    ['date' => '2026-07-28', 'stage' => 'purchase', 'currency' => 'UGX', 'native_amount' => 1650000, 'usd_amount' => 440.00, 'pay_status' => 'cash'],
+]);
+$cashUgx = fold($withCash, 'UGX');
+check('Cash excluded from balance', $cashUgx['closing'], 16725000.0);
+check('Cash counted', $cashUgx['cash_count'], 1);
+check('Cash total', $cashUgx['cash_total'], 1650000.0);
+
 // 6) The REAL csv() method — proves the export shape and numbers.
 $svc = new App\Services\Finance\SupplierStatement();
 $d = [
     'business' => 'Family Shoppers', 'generated' => '21 Aug 2026, 22:11', 'supplier' => 'Nura Traders',
     'meta' => 'Net 30', 'currency' => 'UGX', 'native' => true, 'period' => 'All transactions',
     'opening' => 0.0, 'charges' => 16725000.0, 'payments' => 0.0, 'closing' => 16725000.0,
-    'excluded' => 0, 'other_currencies' => [],
+    'cash_count' => 1, 'cash_total' => 1650000.0, 'excluded' => 0, 'other_currencies' => [],
     'rows' => [
         ['when' => '2026-07-31', 'ref' => 'PUR-0351', 'desc' => 'Foil 10 boxes', 'charge' => 1650000.0, 'payment' => null, 'balance' => 1650000.0],
         ['when' => '2026-08-21', 'ref' => 'PUR-0653', 'desc' => 'Foil 30 cartons', 'charge' => 4950000.0, 'payment' => null, 'balance' => 16725000.0],
@@ -128,6 +145,7 @@ check('CSV has a bill row',      strpos($csv, '"PUR-0351"') !== false, true);
 check('CSV charge is unformatted number', strpos($csv, '1650000.00') !== false, true);
 check('CSV closing balance row', strpos($csv, '"Balance owed",16725000.00,0.00,16725000.00') !== false, true);
 check('CSV uses CRLF line ends', strpos($csv, "\r\n") !== false, true);
+check('CSV notes excluded cash', strpos($csv, 'cash purchase(s) totalling 1650000.00 UGX') !== false, true);
 
 echo "\n" . ($fail === 0 ? "ALL PASS" : "$fail FAILURES") . "\n";
 exit($fail === 0 ? 0 : 1);
