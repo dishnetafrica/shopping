@@ -236,20 +236,20 @@ final class SupplierCapability implements ObjectCapability
         arsort($curTally);
         $txnCur = strtoupper((string) (array_key_first($curTally) ?: $baseCur));
         $nativeCur = $txnCur !== 'USD' ? $txnCur : null;
-        $statementNative = $nativeCur
-            ? ['key' => 'statement_native', 'label' => 'Download statement (' . $nativeCur . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . $nativeCur, 'actor' => 'human', 'tone' => 'default']
-            : null;
-        // CSV of the same statement (spreadsheet reconciliation) — in the supplier's own currency,
-        // needs no PDF engine. USD stays available via &currency=USD on the same endpoint.
-        $csvCur = $nativeCur ?: 'USD';
-        $statementCsv = ['key' => 'statement_csv', 'label' => 'Download statement CSV (' . $csvCur . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . $csvCur . '&format=csv', 'actor' => 'human', 'tone' => 'default'];
+        // "Download statement…" — a picker (currency + PDF/CSV + optional date range) rather than a
+        // fixed link, so the owner chooses the period before it generates. The supplier's own
+        // currency (e.g. UGX) is offered first when they invoice in one; USD (consolidated) is always
+        // available. The plain "View statement" above stays a one-click USD PDF.
+        $statementDl = ['key' => 'statement_dl', 'label' => 'Download statement…', 'actor' => 'human', 'tone' => 'default',
+            'statement' => ['id' => $s->id, 'name' => (string) ($s->business_name ?: $s->name),
+                'currencies' => $nativeCur ? [$nativeCur, 'USD'] : ['USD']]];
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
 
         $header = $canEdit ? [$buyProduct, $recordBill, $paySupplier] : [];
-        $quick = $canEdit ? array_values(array_filter([$buyProduct, $recordBill, $paySupplier, $statement, $statementNative, $editSupplier])) : array_values(array_filter([$statement, $statementNative]));
-        $more = $canEdit ? array_values(array_filter([$statement, $statementNative, $statementCsv, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementNative, $statementCsv]));
+        $quick = $canEdit ? array_values(array_filter([$buyProduct, $recordBill, $paySupplier, $statement, $statementDl, $editSupplier])) : array_values(array_filter([$statement, $statementDl]));
+        $more = $canEdit ? array_values(array_filter([$statement, $statementDl, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementDl]));
 
         return (new WorkspacePayload)
             ->object([

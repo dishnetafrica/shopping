@@ -2385,6 +2385,7 @@ function withScope(a){
 }
 async function doAction(a){
   if(a.href){ const u=withScope(a); try{ window.open(u,'_blank'); }catch(e){ location.href=u; } return; }
+  if(a.statement){ return statementModal(a); }
   if(a.chooser){ return chooserModal(a); }
   // queryWrite: reuse a legacy panel GET endpoint. With a schema → open the form (submit builds the
   // query string); without → an optional confirm then a direct GET-query write, then refresh.
@@ -2472,6 +2473,35 @@ function chooserModal(a){
   document.getElementById('ov').classList.add('on');
 }
 function chooserPick(i){ const act=(window.__CHOOSER__||[])[i]; closeM(); if(act) setTimeout(()=>doAction(act),60); }
+// Statement download picker: choose currency + PDF/CSV + an optional date range, then open the doc.
+// The endpoint (…/doc/supplier-statement) already accepts id/currency/format/from/to as query params.
+function statementModal(a){
+  const st=a.statement||{}; const curs=(st.currencies&&st.currencies.length)?st.currencies:['USD'];
+  const curOpts=curs.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
+  document.getElementById('modal').innerHTML=
+    '<div class="h">Download statement'+(st.name?' — '+esc(st.name):'')+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>'+
+    '<div class="b">'+
+      '<div class="fld"><label>Currency</label><select id="stm_cur">'+curOpts+'</select></div>'+
+      '<div class="fld"><label>Format</label><select id="stm_fmt"><option value="pdf">PDF</option><option value="csv">CSV (Excel)</option></select></div>'+
+      '<div class="fld"><label>From <span class="mut" style="font-weight:400">(optional)</span></label><input type="date" id="stm_from"></div>'+
+      '<div class="fld"><label>To <span class="mut" style="font-weight:400">(optional)</span></label><input type="date" id="stm_to"></div>'+
+      '<div class="mut" style="font-size:12px;margin-bottom:12px">Leave the dates empty for the full history. Anything before the "From" date is rolled into the opening balance.</div>'+
+      '<button class="btn pri" onclick="statementGo('+JSON.stringify(String(st.id))+')">Download</button>'+
+    '</div>';
+  document.getElementById('ov').classList.add('on');
+}
+function statementGo(id){
+  const cur=(document.getElementById('stm_cur')||{}).value||'USD';
+  const fmt=(document.getElementById('stm_fmt')||{}).value||'pdf';
+  const from=(document.getElementById('stm_from')||{}).value||'';
+  const to=(document.getElementById('stm_to')||{}).value||'';
+  if(from&&to&&from>to){ toast('The "From" date is after the "To" date.',true); return; }
+  let u='/api/v1/doc/supplier-statement?id='+encodeURIComponent(id)+'&currency='+encodeURIComponent(cur)+'&format='+encodeURIComponent(fmt);
+  if(from) u+='&from='+encodeURIComponent(from);
+  if(to) u+='&to='+encodeURIComponent(to);
+  closeM();
+  try{ window.open(u,'_blank'); }catch(e){ location.href=u; }
+}
 window.GAL={};
 function formModal(a){
   const pf=a.prefill||{};
