@@ -4,6 +4,7 @@ namespace App\Services\Finance;
 
 use App\Models\Supplier;
 use App\Models\Tenant;
+use App\Services\Money\CashService;
 use App\Services\Money\Fx;
 use Illuminate\Support\Carbon;
 
@@ -25,6 +26,28 @@ final class PayAdvisor
 {
     public const FLAT_DAYS = 15;
     public const BUFFER_PCT = 0.5;   // fraction of the balance to keep pending
+    public const CASH_BUFFER_USD = 500.0;   // keep at least this much cash as operating float
+
+    /**
+     * Greedy oldest-first allocation of a spendable cash pool across a list of due amounts.
+     * Pure: returns the amount to pay against each due, in the same order (partial where cash runs low,
+     * zero once exhausted). Amounts and $spendable are in the SAME unit (we use USD-equivalent).
+     *
+     * @param  array<int,float> $dues
+     * @return array<int,float> amount paid against each due
+     */
+    public static function allocate(array $dues, float $spendable): array
+    {
+        $rem = round(max(0.0, $spendable), 2);
+        $out = [];
+        foreach ($dues as $d) {
+            $d = max(0.0, (float) $d);
+            $pay = round(max(0.0, min($d, $rem)), 2);
+            $rem = round($rem - $pay, 2);
+            $out[] = $pay;
+        }
+        return $out;
+    }
 
     /** Pure decision — no I/O. Amounts in one currency. */
     public static function decide(float $balance, float $overdue, float $bufferPct = self::BUFFER_PCT): array
@@ -192,5 +215,108 @@ final class PayAdvisor
         $head = ($t->name ?: 'ShopBot') . ' — supplier payments due (' . count($act) . ')';
         $foot = "Pay in the app · advisory only — nothing has been paid.";
         return $head . "\n\n" . implode("\n", $lines) . "\n\n" . $foot;
+    }
+
+    /**
+     * Cash-aware plan (CFO view): allocate the payer's own cash — minus the buffer — across the overdue
+     * suppliers oldest-first, in USD-equivalent (cash and bills are treated as convertible at the
+     * current rate). Returns the split into pay (full/partial) and hold, plus the cash headline.
+     * Falls back to zero cash (everything holds) if the holder is unset or the balance can't be read.
+     */
+    public function cashPlan(Tenant $t, ?Carbon $asOf = null, int $flatDays = self::FLAT_DAYS, float $bufferPct = self::BUFFER_PCT): array
+    {
+        $advisories = $this->forTenant($t, $asOf, $flatDays, $bufferPct);
+        $overdue = array_values(array_filter($advisories, fn ($a) => in_array($a['state'], ['pay', 'tension'], true) && $a['overdue'] > 0.005));
+
+        $holder = trim((string) $t->setting('pay_advisor_cash_holder', ''));
+        $bufferUsd = (float) $t->setting('pay_advisor_buffer_usd', self::CASH_BUFFER_USD);
+        $fx = Fx::forTenant($t);
+
+        // Payer's cash on hand, per currency → USD-equivalent (cross-currency sum is ours to make).
+        $cashNative = ['USD' => 0.0, 'UGX' => 0.0, 'SSP' => 0.0];
+        $cashUsd = 0.0;
+        if ($holder !== '') {
+            try {
+                $cashNative = CashService::forTenant($t)->balances(['holder' => $holder]);
+                foreach ($cashNative as $ccy => $amt) {
+                    if ($amt <= 0) { continue; }
+                    $rate = strtoupper((string) $ccy) === 'USD' ? 1.0 : (float) $fx->ratePerUsd($ccy);
+                    $cashUsd += $rate > 0 ? $amt / $rate : 0.0;
+                }
+            } catch (\Throwable $e) {
+                $cashNative = ['USD' => 0.0, 'UGX' => 0.0, 'SSP' => 0.0];
+                $cashUsd = 0.0;
+            }
+        }
+        $cashUsd = round($cashUsd, 2);
+        $spendable = round(max(0.0, $cashUsd - $bufferUsd), 2);
+
+        $dues = array_map(fn ($a) => (float) ($a['overdue_usd'] ?? 0), $overdue);
+        $alloc = self::allocate($dues, $spendable);
+
+        $pay = []; $hold = []; $paidUsd = 0.0;
+        foreach ($overdue as $i => $a) {
+            $payUsd = round((float) ($alloc[$i] ?? 0), 2);
+            $rate = (float) ($a['rate'] ?? 0);
+            if ($payUsd >= 0.01) {
+                $paidUsd += $payUsd;
+                $pay[] = array_merge($a, [
+                    'pay_usd' => $payUsd,
+                    'pay_native' => $rate > 0 ? round($payUsd * $rate) : null,
+                    'partial' => ($payUsd + 0.01) < (float) ($a['overdue_usd'] ?? 0),
+                ]);
+            } else {
+                $hold[] = $a;
+            }
+        }
+
+        return [
+            'holder' => $holder,
+            'cash_native' => $cashNative,
+            'cash_usd' => $cashUsd,
+            'buffer_usd' => round($bufferUsd, 2),
+            'spendable_usd' => $spendable,
+            'paid_usd' => round($paidUsd, 2),
+            'left_usd' => round($cashUsd - $paidUsd, 2),
+            'pay' => $pay,
+            'hold' => $hold,
+        ];
+    }
+
+    /** CFO WhatsApp digest: what to pay from the payer's cash, keeping the buffer. Empty = nothing to do. */
+    public function cashDigestText(Tenant $t, array $plan): string
+    {
+        if (empty($plan['pay']) && empty($plan['hold'])) { return ''; }
+        $usd = fn ($v) => '$' . number_format((float) $v, 0);
+        $cashUgx = (float) ($plan['cash_native']['UGX'] ?? 0);
+        $cashBit = $cashUgx > 0 ? self::money($cashUgx, 'UGX') . ' (≈ ' . $usd($plan['cash_usd']) . ')' : $usd($plan['cash_usd']);
+
+        $out = [];
+        $out[] = ($t->name ?: 'ShopBot') . ' — pay plan for ' . ($plan['holder'] ?: 'you');
+        $out[] = '';
+        $out[] = 'Cash on hand: ' . $cashBit . '. Keep ' . $usd($plan['buffer_usd']) . ' → about ' . $usd($plan['spendable_usd']) . ' to spend.';
+
+        if (! empty($plan['pay'])) {
+            $out[] = '';
+            $out[] = 'Pay now (oldest first):';
+            foreach ($plan['pay'] as $a) {
+                $cur = (string) $a['currency'];
+                $amt = $a['pay_native'] !== null ? self::money((float) $a['pay_native'], $cur) : $usd($a['pay_usd']);
+                $out[] = '✓ ' . $a['supplier'] . ': pay ' . $amt . ' (' . $usd($a['pay_usd']) . ')'
+                    . ($a['partial'] ? ' — partial, cash runs out here' : '') . ' · ' . $a['oldest_days'] . 'd';
+            }
+        }
+        if (! empty($plan['hold'])) {
+            $out[] = '';
+            $out[] = 'Hold — not enough cash (buffer protected):';
+            foreach ($plan['hold'] as $a) {
+                $cur = (string) $a['currency'];
+                $out[] = '• ' . $a['supplier'] . ': ' . self::money((float) $a['overdue'], $cur)
+                    . self::usdBracket((float) $a['overdue'], $cur, (float) ($a['rate'] ?? 0)) . ' · ' . $a['oldest_days'] . 'd';
+            }
+        }
+        $out[] = '';
+        $out[] = 'Left after paying: ≈ ' . $usd($plan['left_usd']) . ' kept. Pay in the app · advisory only.';
+        return implode("\n", $out);
     }
 }

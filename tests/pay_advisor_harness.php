@@ -63,6 +63,12 @@ check('pay line text', $payLine, 'Pay UGX 4,950,000 (≈ $1,238) — 18 days ove
 $holdLine = PayAdvisor::line(array_merge($hold, ['currency' => 'UGX', 'oldest_days' => 5, 'threshold_days' => 15]));
 check('hold line mentions threshold', strpos($holdLine, 'nothing past 15 days') !== false, true);
 
+// ---- allocate(): greedy oldest-first cash allocation ----
+check('allocate partial then hold', PayAdvisor::allocate([738, 1678, 2632, 903], 2020), [738.0, 1282.0, 0.0, 0.0]);
+check('allocate covers all', PayAdvisor::allocate([738, 1678], 5000), [738.0, 1678.0]);
+check('allocate nothing when broke', PayAdvisor::allocate([738], 0), [0.0]);
+check('allocate exact first, none left', PayAdvisor::allocate([738, 900], 738), [738.0, 0.0]);
+
 // ---- aging fold (mirror of buildFromSlices) ----
 function foldAging(array $slices, int $termDays, int $todayTs, int $flat = 15): array {
     $thr = PayAdvisor::thresholdDays($termDays ?: null, $flat);
