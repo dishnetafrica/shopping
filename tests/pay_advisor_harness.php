@@ -50,6 +50,7 @@ check('custom flat 10, Net 30 → 10', PayAdvisor::thresholdDays(30, 10), 10);
 // ---- money(): formatting ----
 check('USD money', PayAdvisor::money(1320, 'USD'), '$1,320.00');
 check('UGX money whole', PayAdvisor::money(4950000, 'UGX'), 'UGX 4,950,000');
+check('UGX money rounds stray cents', PayAdvisor::money(2696365.14, 'UGX'), 'UGX 2,696,365');
 
 // ---- line(): the one-line verdict ----
 $payLine = PayAdvisor::line(array_merge($pay, ['currency' => 'UGX', 'oldest_days' => 18, 'threshold_days' => 15]));
