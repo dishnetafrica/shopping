@@ -259,10 +259,16 @@ final class PayAdvisor
             $rate = (float) ($a['rate'] ?? 0);
             if ($payUsd >= 0.01) {
                 $paidUsd += $payUsd;
+                $isPartial = ($payUsd + 0.01) < (float) ($a['overdue_usd'] ?? 0);
+                // Full payment → show the exact native overdue (reconciles to the statement to the shilling);
+                // partial → the proportional native of what actually fits.
+                $payNative = $isPartial
+                    ? ($rate > 0 ? round($payUsd * $rate) : null)
+                    : round((float) ($a['overdue'] ?? 0));
                 $pay[] = array_merge($a, [
                     'pay_usd' => $payUsd,
-                    'pay_native' => $rate > 0 ? round($payUsd * $rate) : null,
-                    'partial' => ($payUsd + 0.01) < (float) ($a['overdue_usd'] ?? 0),
+                    'pay_native' => $payNative,
+                    'partial' => $isPartial,
                 ]);
             } else {
                 $hold[] = $a;
