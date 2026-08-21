@@ -4,6 +4,7 @@ namespace App\Services\Finance;
 
 use App\Models\Supplier;
 use App\Models\Tenant;
+use App\Services\Money\Fx;
 use Illuminate\Support\Carbon;
 
 /**
@@ -76,7 +77,7 @@ final class PayAdvisor
     public function forSupplier(Tenant $t, Supplier $s, ?Carbon $asOf = null, int $flatDays = self::FLAT_DAYS, float $bufferPct = self::BUFFER_PCT): ?array
     {
         $slices = PayablesCalculator::unpaidSlicesBySupplier($t->id)[$s->id] ?? [];
-        return $this->buildFromSlices($s, $slices, $asOf ?: Carbon::now(), $flatDays, $bufferPct);
+        return $this->buildFromSlices($s, $slices, $asOf ?: Carbon::now(), $flatDays, $bufferPct, Fx::forTenant($t));
     }
 
     /** Every supplier with something owed, most overdue first. */
@@ -85,19 +86,20 @@ final class PayAdvisor
         $asOf = $asOf ?: Carbon::now();
         $bySup = PayablesCalculator::unpaidSlicesBySupplier($t->id);
         if (! $bySup) { return []; }
+        $fx = Fx::forTenant($t);
         $suppliers = Supplier::where('tenant_id', $t->id)->whereIn('id', array_keys($bySup))->get()->keyBy('id');
         $out = [];
         foreach ($bySup as $sid => $slices) {
             $s = $suppliers->get($sid);
             if (! $s) { continue; }
-            $a = $this->buildFromSlices($s, $slices, $asOf, $flatDays, $bufferPct);
+            $a = $this->buildFromSlices($s, $slices, $asOf, $flatDays, $bufferPct, $fx);
             if ($a) { $out[] = $a; }
         }
         usort($out, fn ($x, $y) => ($y['oldest_days'] <=> $x['oldest_days']) ?: ($y['overdue'] <=> $x['overdue']));
         return $out;
     }
 
-    private function buildFromSlices(Supplier $s, array $slices, Carbon $asOf, int $flatDays, float $bufferPct): ?array
+    private function buildFromSlices(Supplier $s, array $slices, Carbon $asOf, int $flatDays, float $bufferPct, ?Fx $fx = null): ?array
     {
         if (! $slices) { return null; }
         $term = (int) ($s->pay_term_days ?: 0);
@@ -117,14 +119,30 @@ final class PayAdvisor
         $cur = (string) (array_key_first($curTally) ?: 'USD');
         if (round($balance, 2) <= 0.005) { return null; }
 
-        return array_merge(self::decide($balance, $overdue, $bufferPct), [
+        // Current market rate for the USD-equivalent bracket ("≈ $X"). Uses the tenant's live Fx rate
+        // (the one the owner maintains), not each bill's historical rate — this is "pay in USD today".
+        $rate = ($cur === 'USD') ? 1.0 : ($fx ? (float) $fx->ratePerUsd($cur) : 0.0);
+
+        $d = self::decide($balance, $overdue, $bufferPct);
+        return array_merge($d, [
             'supplier_id' => (int) $s->id,
             'supplier' => (string) ($s->business_name ?: $s->name),
             'currency' => $cur,
+            'rate' => $rate,
+            'balance_usd' => $rate > 0 ? round($d['balance'] / $rate, 2) : null,
+            'overdue_usd' => $rate > 0 ? round($d['overdue'] / $rate, 2) : null,
+            'recommend_usd' => $rate > 0 ? round($d['recommend'] / $rate, 2) : null,
             'term_days' => $term,
             'threshold_days' => $thr,
             'oldest_days' => (int) $oldest,
         ]);
+    }
+
+    /** " (≈ $718)" — a USD-equivalent bracket at the current rate; empty for USD or an unknown rate. */
+    public static function usdBracket(float $native, string $cur, float $rate): string
+    {
+        if (strtoupper($cur) === 'USD' || $rate <= 0) { return ''; }
+        return ' (≈ $' . number_format(round($native / $rate), 0) . ')';
     }
 
     /** Money in a supplier's currency: "$1,234.00" for USD, "UGX 1,650,000" (whole) otherwise.
@@ -141,11 +159,13 @@ final class PayAdvisor
     public static function line(array $a): string
     {
         $cur = (string) $a['currency'];
+        $rate = (float) ($a['rate'] ?? 0);
+        $pay = self::money($a['overdue'], $cur) . self::usdBracket((float) $a['overdue'], $cur, $rate);
         if ($a['state'] === 'pay') {
-            return 'Pay ' . self::money($a['overdue'], $cur) . ' — ' . $a['oldest_days'] . ' days overdue';
+            return 'Pay ' . $pay . ' — ' . $a['oldest_days'] . ' days overdue';
         }
         if ($a['state'] === 'tension') {
-            return 'Pay ' . self::money($a['overdue'], $cur) . ' (' . $a['oldest_days'] . ' days overdue) — this drops you to '
+            return 'Pay ' . $pay . ' (' . $a['oldest_days'] . ' days overdue) — this drops you to '
                 . $a['pending_pct'] . '% pending, below your buffer';
         }
         if ($a['state'] === 'hold') {
@@ -163,8 +183,9 @@ final class PayAdvisor
         $lines = [];
         foreach ($act as $a) {
             $cur = (string) $a['currency'];
+            $rate = (float) ($a['rate'] ?? 0);
             $flag = $a['state'] === 'tension' ? '  ⚠ below 50% buffer' : '';
-            $lines[] = '• ' . $a['supplier'] . ': pay ' . self::money($a['overdue'], $cur)
+            $lines[] = '• ' . $a['supplier'] . ': pay ' . self::money($a['overdue'], $cur) . self::usdBracket((float) $a['overdue'], $cur, $rate)
                 . ' (' . $a['oldest_days'] . 'd overdue, owe ' . self::money($a['balance'], $cur) . ')' . $flag;
         }
 
