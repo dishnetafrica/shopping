@@ -222,13 +222,19 @@ final class SupplierCapability implements ObjectCapability
             'prefill' => ['name' => (string) ($s->business_name ?: $s->name), 'contact_name' => (string) $s->contact_name, 'phone' => (string) $s->phone, 'email' => (string) $s->email, 'tax_number' => (string) $s->tax_number, 'pay_term_days' => $s->pay_term_days, 'opening_balance' => $s->opening_balance, 'opening_currency' => (string) $s->opening_currency, 'address' => (string) $s->address],
             'body' => ['business_name' => (string) ($s->business_name ?: $s->name)]];
         $statement = ['key' => 'statement', 'label' => 'View statement', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id, 'actor' => 'human', 'tone' => 'default'];
+        // Native-currency statement (e.g. UGX) — figures taken from each bill's native amount so it
+        // reconciles line-for-line against the supplier's own invoice. Offered only when the supplier
+        // trades in a non-USD currency; the USD "View statement" above stays the consolidated view.
+        $statementNative = strtoupper($baseCur) !== 'USD'
+            ? ['key' => 'statement_native', 'label' => 'Download statement (' . strtoupper($baseCur) . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . strtoupper($baseCur), 'actor' => 'human', 'tone' => 'default']
+            : null;
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
 
         $header = $canEdit ? [$buyProduct, $recordBill, $paySupplier] : [];
-        $quick = $canEdit ? [$buyProduct, $recordBill, $paySupplier, $statement, $editSupplier] : [$statement];
-        $more = $canEdit ? [$statement, $sendStatement, $editSupplier, $deleteSup] : [$statement];
+        $quick = $canEdit ? array_values(array_filter([$buyProduct, $recordBill, $paySupplier, $statement, $statementNative, $editSupplier])) : array_values(array_filter([$statement, $statementNative]));
+        $more = $canEdit ? array_values(array_filter([$statement, $statementNative, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementNative]));
 
         return (new WorkspacePayload)
             ->object([

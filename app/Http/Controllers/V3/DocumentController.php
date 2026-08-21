@@ -247,7 +247,8 @@ final class DocumentController extends Controller
             abort(401);
         }
         $svc = app(SupplierStatement::class);
-        $data = $svc->collect($t, (int) $r->query('id', 0));
+        $currency = strtoupper(trim((string) $r->query('currency', 'USD'))) ?: 'USD';
+        $data = $svc->collect($t, (int) $r->query('id', 0), $currency);
         if (! $data) {
             abort(404, 'Supplier not found');
         }
@@ -258,7 +259,7 @@ final class DocumentController extends Controller
 
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="Statement-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier']) . '-' . now()->format('Ymd') . '.pdf"',
+            'Content-Disposition' => 'inline; filename="Statement-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier']) . '-' . $data['currency'] . '-' . now()->format('Ymd') . '.pdf"',
         ]);
     }
 
