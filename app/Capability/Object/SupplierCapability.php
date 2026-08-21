@@ -95,8 +95,13 @@ final class SupplierCapability implements ObjectCapability
 
         $billRows = [];
         $boughtByProduct = [];
+        $curTally = [];   // which currency this supplier actually invoices in (drives the native statement)
         foreach ($bills as $c) {
             $voided = in_array((string) $c->status, ['void', 'rejected'], true);
+            if (! $voided) {
+                $cc = strtoupper(trim((string) $c->currency));
+                if ($cc !== '') { $curTally[$cc] = ($curTally[$cc] ?? 0) + 1; }
+            }
             $ref = (string) ($c->order_no ?: ('PUR-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)));
             $when = $c->created_at ? Carbon::parse($c->created_at) : null;
             $isCredit = strtolower((string) $c->pay_status) === 'credit';
@@ -225,12 +230,18 @@ final class SupplierCapability implements ObjectCapability
         // Native-currency statement (e.g. UGX) — figures taken from each bill's native amount so it
         // reconciles line-for-line against the supplier's own invoice. Offered only when the supplier
         // trades in a non-USD currency; the USD "View statement" above stays the consolidated view.
-        $statementNative = strtoupper($baseCur) !== 'USD'
-            ? ['key' => 'statement_native', 'label' => 'Download statement (' . strtoupper($baseCur) . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . strtoupper($baseCur), 'actor' => 'human', 'tone' => 'default']
+        // The supplier's real invoicing currency = the most common currency across their bills
+        // (NOT the tenant base — a USD-reporting tenant still buys foil in UGX). Falls back to the
+        // opening/base currency only when there are no bills yet.
+        arsort($curTally);
+        $txnCur = strtoupper((string) (array_key_first($curTally) ?: $baseCur));
+        $nativeCur = $txnCur !== 'USD' ? $txnCur : null;
+        $statementNative = $nativeCur
+            ? ['key' => 'statement_native', 'label' => 'Download statement (' . $nativeCur . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . $nativeCur, 'actor' => 'human', 'tone' => 'default']
             : null;
         // CSV of the same statement (spreadsheet reconciliation) — in the supplier's own currency,
         // needs no PDF engine. USD stays available via &currency=USD on the same endpoint.
-        $csvCur = strtoupper($baseCur) !== 'USD' ? strtoupper($baseCur) : 'USD';
+        $csvCur = $nativeCur ?: 'USD';
         $statementCsv = ['key' => 'statement_csv', 'label' => 'Download statement CSV (' . $csvCur . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . $csvCur . '&format=csv', 'actor' => 'human', 'tone' => 'default'];
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
