@@ -127,13 +127,14 @@ final class PayAdvisor
         ]);
     }
 
-    /** Money in a supplier's currency: "$1,234.00" for USD, "UGX 1,650,000" (whole) otherwise. */
+    /** Money in a supplier's currency: "$1,234.00" for USD, "UGX 1,650,000" (whole) otherwise.
+     *  Native currencies here (UGX/SSP) have no sub-units in practice, so they round to whole — a
+     *  partially-paid supplier's proportional remainder must not surface stray "UGX …365.14" cents. */
     public static function money(float $v, string $cur): string
     {
         $cur = strtoupper($cur ?: 'USD');
         if ($cur === 'USD') { return '$' . number_format($v, 2); }
-        $dec = (abs(fmod($v, 1.0)) < 0.005) ? 0 : 2;
-        return $cur . ' ' . number_format($v, $dec);
+        return $cur . ' ' . number_format(round($v), 0);
     }
 
     /** A short one-line verdict for the panel / next-best-action. */
