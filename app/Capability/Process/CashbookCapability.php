@@ -55,36 +55,15 @@ final class CashbookCapability implements ProcessCapability
         // Base query: approved cash rows (credit purchases move no cash → excluded). Staff see only theirs.
         $scoped = fn ($q) => $isOwner ? $q : $q->where(fn ($w) => $w->where('holder_user_id', $ctx->user->id)->orWhere('holder', $me));
 
-        // --- cash position: per currency AND per holder (frozen IN_STAGES sign rule) ---
-        // Same basis as the cash book & entries below (every live cash entry, native_amount) so the
-        // Cash-by-person totals ALWAYS reconcile to each person's cash book to the cent.
-        $posRows = $scoped(OrderCost::where('tenant_id', $t)
-            ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
-            ->whereNotIn('status', ['void', 'rejected']))
-            // USD value = the dated dollars actually recorded on the row (usd_amount), the SAME basis the
-            // Entries list and Company-account running balance already use — so cash-by-person, the combined
-            // position and the entries can never disagree. Fall back to native ÷ rate only for legacy rows
-            // that never stored a usd_amount. (Re-deriving native ÷ rate here mis-valued currency whenever a
-            // legacy conversion leg carried a stale default rate, e.g. SSP stamped at 5,180/8,000 instead of
-            // the real deal rate — the "SSP counted at the wrong rate" bug.)
-            ->select('currency', 'stage', 'holder', DB::raw('SUM(native_amount) as native'),
-                DB::raw('SUM(COALESCE(NULLIF(usd_amount,0), native_amount / NULLIF(rate_to_usd,0), 0)) as usd'))
-            ->groupBy('currency', 'stage', 'holder')->get();
-
-        $pos = ['USD' => ['native' => 0.0, 'usd' => 0.0], 'UGX' => ['native' => 0.0, 'usd' => 0.0], 'SSP' => ['native' => 0.0, 'usd' => 0.0]];
-        $holders = [];   // holder => ['USD'=>x,'UGX'=>y,'SSP'=>z,'usd'=>total]
-        foreach ($posRows as $r) {
-            $sign = in_array($r->stage, CashService::IN_STAGES, true) ? 1 : -1;
-            $c = (string) $r->currency;
-            $native = $sign * (float) $r->native;
-            $usd = $sign * (float) $r->usd;
-            if (isset($pos[$c])) { $pos[$c]['native'] += $native; $pos[$c]['usd'] += $usd; }
-            $h = trim((string) ($r->holder ?: '')) ?: 'Unassigned';
-            if (! isset($holders[$h])) { $holders[$h] = ['USD' => 0.0, 'UGX' => 0.0, 'SSP' => 0.0, 'usd' => 0.0]; }
-            if (isset($holders[$h][$c])) { $holders[$h][$c] += $native; }
-            $holders[$h]['usd'] += $usd;
-        }
-        $combinedUsd = round($pos['USD']['usd'] + $pos['UGX']['usd'] + $pos['SSP']['usd'], 2);
+        // --- cash position: per currency AND per holder (the ONE cash-on-hand reader) ---
+        // CashOnHand is the shared reader behind this screen, the cash-book exports AND the Pay Advisor,
+        // so cash-by-person, the combined position and each person's cash book can never disagree.
+        $cash = $isOwner
+            ? \App\Services\Finance\CashOnHand::position($t)
+            : \App\Services\Finance\CashOnHand::position($t, (int) $ctx->user->id, $me);
+        $pos = $cash['pos'];
+        $holders = $cash['holders'];   // holder => ['USD'=>x,'UGX'=>y,'SSP'=>z,'usd'=>total]
+        $combinedUsd = $cash['combined_usd'];
 
         // Rail: per-currency position cards.
         $financials = [];
