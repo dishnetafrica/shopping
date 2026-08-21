@@ -2486,7 +2486,7 @@ function statementModal(a){
       '<div class="fld"><label>From <span class="mut" style="font-weight:400">(optional)</span></label><input type="date" id="stm_from"></div>'+
       '<div class="fld"><label>To <span class="mut" style="font-weight:400">(optional)</span></label><input type="date" id="stm_to"></div>'+
       '<div class="mut" style="font-size:12px;margin-bottom:12px">Leave the dates empty for the full history. Anything before the "From" date is rolled into the opening balance.</div>'+
-      '<button class="btn pri" onclick="statementGo('+JSON.stringify(String(st.id))+')">Download</button>'+
+      '<button class="btn pri" onclick="statementGo('+(parseInt(st.id,10)||0)+')">Download</button>'+
     '</div>';
   document.getElementById('ov').classList.add('on');
 }
