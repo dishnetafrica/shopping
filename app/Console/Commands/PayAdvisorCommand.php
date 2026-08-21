@@ -70,18 +70,26 @@ class PayAdvisorCommand extends Command
                 if ($now->timestamp - $last >= self::WEEKLY) { $due[] = $a; }
             }
 
-            // Preview shows everything currently actionable; a live send respects once+weekly.
-            $forMsg = $preview ? $actionable : $due;
-            $text = $advisor->digestText($t, $forMsg);
+            // Cash-aware CFO digest when a payer cashbook is configured; else the plain payables digest.
+            $holder = trim((string) $t->setting('pay_advisor_cash_holder', ''));
+            $flat = $flatDays ?: PayAdvisor::FLAT_DAYS;
+            $buf = $bufferPct ?: PayAdvisor::BUFFER_PCT;
+            $buildText = fn (array $forMsg) => $holder !== ''
+                ? $advisor->cashDigestText($t, $advisor->cashPlan($t, $now, $flat, $buf))
+                : $advisor->digestText($t, $forMsg);
 
             if ($preview) {
                 $reason = $dry ? 'dry-run' : (! $enabled ? 'not enabled' : 'no recipient number');
+                $text = $buildText($actionable);
                 $this->line("── {$t->name} (#{$t->id}) — PREVIEW ({$reason}) ──");
                 $this->line($text !== '' ? $text : '(nothing overdue)');
                 $this->line('');
                 continue;
             }
 
+            // Live: respect once + weekly — send only when at least one supplier is due this run.
+            if (empty($due)) { continue; }
+            $text = $buildText($due);
             if ($text === '') { continue; } // enabled + recipient, but nothing new to remind this run
 
             try {
