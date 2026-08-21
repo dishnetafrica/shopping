@@ -243,6 +243,19 @@ final class SupplierCapability implements ObjectCapability
         $statementDl = ['key' => 'statement_dl', 'label' => 'Download statement…', 'actor' => 'human', 'tone' => 'default',
             'statement' => ['id' => $s->id, 'name' => (string) ($s->business_name ?: $s->name),
                 'currencies' => $nativeCur ? [$nativeCur, 'USD'] : ['USD']]];
+        // Pay Advisor next-best-action: "Pay UGX X — N days overdue", opening the Pay supplier form.
+        // Advisory only; the pay endpoint still gates on menu:purchases. Read-only if it throws.
+        $nba = null;
+        if ($canEdit) {
+            try {
+                $adv = app(\App\Services\Finance\PayAdvisor::class)->forSupplier($ctx->tenant, $s);
+                if ($adv && in_array($adv['state'], ['pay', 'tension'], true)) {
+                    $nba = ['text' => \App\Services\Finance\PayAdvisor::line($adv), 'action' => $paySupplier];
+                }
+            } catch (\Throwable $e) {
+                $nba = null;
+            }
+        }
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
@@ -251,7 +264,7 @@ final class SupplierCapability implements ObjectCapability
         $quick = $canEdit ? array_values(array_filter([$buyProduct, $recordBill, $paySupplier, $statement, $statementDl, $editSupplier])) : array_values(array_filter([$statement, $statementDl]));
         $more = $canEdit ? array_values(array_filter([$statement, $statementDl, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementDl]));
 
-        return (new WorkspacePayload)
+        $payload = (new WorkspacePayload)
             ->object([
                 'type' => 'supplier', 'id' => (string) $s->id, 'ref' => (string) $s->name, 'title' => (string) ($s->business_name ?: $s->name),
                 'subtitle' => trim(implode(' · ', array_filter([$s->contact_id ? ('#' . $s->contact_id) : '', (string) $s->contact_name, (string) $s->address]))),
@@ -281,6 +294,10 @@ final class SupplierCapability implements ObjectCapability
             ->actions($header)
             ->more($more)
             ->meta(['capability' => 'supplier', 'ttl' => 30, 'layout' => 'record', 'permissions' => ['menu:purchases']]);
+        if ($nba) {
+            $payload->nba($nba['text'], $nba['action']);
+        }
+        return $payload;
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array

@@ -10,6 +10,9 @@ Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->
 Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:learn')->dailyAt('02:30')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('demand:digest')->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
+// Supplier Pay Advisor — WhatsApp the owner who to pay (overdue balances), once + weekly. Advisory only,
+// never pays. No-ops unless pay_advisor_enabled is ON and pay_advisor_notify_phone is set (preview-first).
+Schedule::command('suppliers:pay-advisor')->dailyAt('08:20')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:autosend')->dailyAt('08:15')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:stages')->dailyAt('03:15')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:attribute')->dailyAt('06:50')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
