@@ -4,7 +4,6 @@ namespace App\Services\Finance;
 
 use App\Models\Supplier;
 use App\Models\Tenant;
-use App\Services\Money\CashService;
 use App\Services\Money\Fx;
 use Illuminate\Support\Carbon;
 
@@ -237,7 +236,7 @@ final class PayAdvisor
         $cashUsd = 0.0;
         if ($holder !== '') {
             try {
-                $cashNative = CashService::forTenant($t)->balances(['holder' => $holder]);
+                $cashNative = CashOnHand::holderNative($t->id, $holder);
                 foreach ($cashNative as $ccy => $amt) {
                     if ($amt <= 0) { continue; }
                     $rate = strtoupper((string) $ccy) === 'USD' ? 1.0 : (float) $fx->ratePerUsd($ccy);
