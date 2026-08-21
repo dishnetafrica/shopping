@@ -52,9 +52,14 @@ check('USD money', PayAdvisor::money(1320, 'USD'), '$1,320.00');
 check('UGX money whole', PayAdvisor::money(4950000, 'UGX'), 'UGX 4,950,000');
 check('UGX money rounds stray cents', PayAdvisor::money(2696365.14, 'UGX'), 'UGX 2,696,365');
 
-// ---- line(): the one-line verdict ----
-$payLine = PayAdvisor::line(array_merge($pay, ['currency' => 'UGX', 'oldest_days' => 18, 'threshold_days' => 15]));
-check('pay line text', $payLine, 'Pay UGX 4,950,000 — 18 days overdue');
+// ---- usdBracket(): USD-equivalent at the current rate ----
+check('USD bracket UGX', PayAdvisor::usdBracket(4950000, 'UGX', 4000), ' (≈ $1,238)');
+check('USD bracket none for USD', PayAdvisor::usdBracket(1000, 'USD', 1), '');
+check('USD bracket none for unknown rate', PayAdvisor::usdBracket(4950000, 'UGX', 0), '');
+
+// ---- line(): the one-line verdict (with USD bracket) ----
+$payLine = PayAdvisor::line(array_merge($pay, ['currency' => 'UGX', 'rate' => 4000, 'oldest_days' => 18, 'threshold_days' => 15]));
+check('pay line text', $payLine, 'Pay UGX 4,950,000 (≈ $1,238) — 18 days overdue');
 $holdLine = PayAdvisor::line(array_merge($hold, ['currency' => 'UGX', 'oldest_days' => 5, 'threshold_days' => 15]));
 check('hold line mentions threshold', strpos($holdLine, 'nothing past 15 days') !== false, true);
 
