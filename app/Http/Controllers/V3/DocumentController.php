@@ -239,7 +239,10 @@ final class DocumentController extends Controller
         ]);
     }
 
-    /** GET /api/v1/doc/supplier-statement?id=X — payables statement (charges, payments, running balance owed). */
+    /**
+     * GET /api/v1/doc/supplier-statement?id=X — payables statement (charges, payments, running balance owed).
+     * Optional: currency=UGX (native, else USD consolidated), format=csv (else pdf), from=YYYY-MM-DD, to=YYYY-MM-DD.
+     */
     public function supplierStatement(Request $r)
     {
         $t = $r->user()->tenant;
@@ -248,10 +251,22 @@ final class DocumentController extends Controller
         }
         $svc = app(SupplierStatement::class);
         $currency = strtoupper(trim((string) $r->query('currency', 'USD'))) ?: 'USD';
-        $data = $svc->collect($t, (int) $r->query('id', 0), $currency);
+        $from = (string) $r->query('from', '');
+        $to = (string) $r->query('to', '');
+        $data = $svc->collect($t, (int) $r->query('id', 0), $currency, $from, $to);
         if (! $data) {
             abort(404, 'Supplier not found');
         }
+
+        $base = 'Statement-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier']) . '-' . $data['currency'] . '-' . now()->format('Ymd');
+
+        if (strtolower(trim((string) $r->query('format', 'pdf'))) === 'csv') {
+            return response($svc->csv($data), 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $base . '.csv"',
+            ]);
+        }
+
         $pdf = $svc->pdf($t, $data);
         if (! $pdf) {
             abort(404, 'PDF engine unavailable');
@@ -259,7 +274,7 @@ final class DocumentController extends Controller
 
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="Statement-' . preg_replace('/[^A-Za-z0-9]+/', '', $data['supplier']) . '-' . $data['currency'] . '-' . now()->format('Ymd') . '.pdf"',
+            'Content-Disposition' => 'inline; filename="' . $base . '.pdf"',
         ]);
     }
 

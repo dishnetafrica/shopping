@@ -9,18 +9,23 @@ use App\Services\Money\Fx;
 use Illuminate\Support\Carbon;
 
 /**
- * Supplier payables statement (PDF) — opening balance, every credit bill (charge) and payment,
+ * Supplier payables statement — opening balance, every credit bill (charge) and payment,
  * chronological, with a running "balance owed". Read-only; mirrors the debt computation.
  *
- * Two rendering currencies:
- *   - USD (default): every row converted to USD at its recorded rate — the consolidated/group view.
+ * Rendering currency:
+ *   - USD (default): every row converted to USD at its recorded rate — the consolidated view.
  *   - Native (e.g. UGX): amounts taken straight from each bill's native_amount, so the statement
- *     reconciles line-for-line against the supplier's own invoice. A native statement is
- *     single-currency by construction — rows billed in any other currency are skipped and noted.
+ *     reconciles line-for-line against the supplier's own invoice. Single-currency by construction —
+ *     rows billed in another currency are skipped and noted.
+ *
+ * Optional date range [$from, $to]: transactions before $from are folded into the opening balance
+ * (so the running balance is correct "as of" the period start); transactions after $to are ignored.
+ *
+ * Output: pdf() (Dompdf, paginated) or csv() (no PDF engine needed).
  */
 final class SupplierStatement
 {
-    public function collect(Tenant $t, int $supplierId, string $currency = 'USD'): ?array
+    public function collect(Tenant $t, int $supplierId, string $currency = 'USD', ?string $from = null, ?string $to = null): ?array
     {
         $s = Supplier::where('tenant_id', $t->id)->find($supplierId);
         if (! $s) { return null; }
@@ -29,11 +34,13 @@ final class SupplierStatement
         $native = ($mode !== 'USD');
         $fx = Fx::forTenant($t);
 
-        // Opening balance, expressed in the statement currency.
+        $fromTs = $this->parseDay($from, false);
+        $toTs = $this->parseDay($to, true);
+
+        // Base opening balance, expressed in the statement currency.
         $opening = 0.0;
         if ($s->opening_balance > 0) {
             if ($native) {
-                // Only carry an opening balance that is already in this currency.
                 if (strtoupper((string) ($s->opening_currency ?: 'USD')) === $mode) {
                     $opening = (float) $s->opening_balance;
                 }
@@ -56,8 +63,7 @@ final class SupplierStatement
         $rows = []; $bal = $opening; $charges = 0.0; $payments = 0.0;
         $excluded = 0; $others = [];
         foreach ($items as $c) {
-            // Native statement is single-currency: skip rows billed in another currency (they
-            // belong on that currency's statement, or on the consolidated USD one).
+            // Native statement is single-currency: skip other-currency rows (regardless of date).
             if ($native && strtoupper((string) $c->currency) !== $mode) {
                 $excluded++;
                 $others[strtoupper((string) ($c->currency ?: '?'))] = true;
@@ -65,16 +71,36 @@ final class SupplierStatement
             }
             $isPay = $c->stage === 'supplier_payment';
             $amt = $native ? (float) $c->native_amount : (float) $c->usd_amount;
-            if ($isPay) { $bal -= $amt; $payments += $amt; } else { $bal += $amt; $charges += $amt; }
+            $signed = $isPay ? -$amt : $amt;
+            $when = $c->created_at ? Carbon::parse($c->created_at) : null;
+
+            // Before the period → fold into opening so the running balance starts correct.
+            if ($fromTs && $when && $when->lt($fromTs)) {
+                $bal += $signed;
+                $opening = $bal;
+                continue;
+            }
+            // After the period → not on this statement.
+            if ($toTs && $when && $when->gt($toTs)) {
+                continue;
+            }
+
+            $bal += $signed;
+            if ($isPay) { $payments += $amt; } else { $charges += $amt; }
             $ref = (string) ($c->order_no ?: (($isPay ? 'PAY-' : 'PUR-') . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)));
             $rows[] = [
-                'when' => $c->created_at ? Carbon::parse($c->created_at)->format('Y-m-d') : '',
+                'when' => $when ? $when->format('Y-m-d') : '',
                 'ref' => $ref,
                 'desc' => (string) ($c->note ?: ($isPay ? 'Payment' : 'Purchase')),
                 'charge' => $isPay ? null : $amt,
                 'payment' => $isPay ? $amt : null,
                 'balance' => round($bal, 2),
             ];
+        }
+
+        $period = '';
+        if ($fromTs || $toTs) {
+            $period = ($fromTs ? $fromTs->format('d M Y') : 'start') . ' – ' . ($toTs ? $toTs->format('d M Y') : 'today');
         }
 
         return [
@@ -84,6 +110,7 @@ final class SupplierStatement
             'meta' => trim(implode(' · ', array_filter([$s->contact_id ? ('#' . $s->contact_id) : '', (string) $s->contact_name, (string) $s->phone, $s->pay_term_days ? ('Net ' . $s->pay_term_days) : '']))),
             'currency' => $mode,
             'native' => $native,
+            'period' => $period,
             'opening' => round($opening, 2),
             'charges' => round($charges, 2),
             'payments' => round($payments, 2),
@@ -94,6 +121,19 @@ final class SupplierStatement
         ];
     }
 
+    /** Safe day parse: returns start-of-day (or end-of-day when $end) Carbon, or null on empty/invalid. */
+    private function parseDay(?string $d, bool $end): ?Carbon
+    {
+        $d = trim((string) $d);
+        if ($d === '') { return null; }
+        try {
+            $c = Carbon::parse($d);
+            return $end ? $c->endOfDay() : $c->startOfDay();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function pdf(Tenant $t, array $d): ?string
     {
         if (! class_exists(\Dompdf\Dompdf::class)) { return null; }
@@ -102,10 +142,41 @@ final class SupplierStatement
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->loadHtml($this->html($d));
             $dompdf->render();
+            // Page numbers — a long statement flows across pages; number them.
+            $canvas = $dompdf->getCanvas();
+            $font = $dompdf->getFontMetrics()->getFont('DejaVu Sans');
+            $canvas->page_text(500, 812, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0.6, 0.6, 0.6]);
             return $dompdf->output();
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    /** Spreadsheet-friendly export of the same statement — works without a PDF engine. */
+    public function csv(array $d): string
+    {
+        $code = (string) ($d['currency'] ?? 'USD');
+        $q = fn ($v) => '"' . str_replace('"', '""', (string) $v) . '"';
+        $n = fn ($v) => $v === null ? '' : number_format((float) $v, 2, '.', '');
+        $out = [];
+        $out[] = $q($d['business'] . ' — Supplier Statement');
+        $out[] = $q('Supplier') . ',' . $q($d['supplier']);
+        if (! empty($d['meta'])) { $out[] = $q('Details') . ',' . $q($d['meta']); }
+        $out[] = $q('Currency') . ',' . $q($code);
+        $out[] = $q('Period') . ',' . $q($d['period'] ?: 'All transactions');
+        $out[] = $q('Generated') . ',' . $q($d['generated']);
+        $out[] = '';
+        $out[] = implode(',', array_map($q, ['Date', 'Ref', 'Description', 'Charge (' . $code . ')', 'Payment (' . $code . ')', 'Balance owed (' . $code . ')']));
+        $out[] = implode(',', [$q(''), $q(''), $q('Opening balance'), '', '', $n($d['opening'])]);
+        foreach ($d['rows'] as $r) {
+            $out[] = implode(',', [$q($r['when']), $q($r['ref']), $q($r['desc']), $n($r['charge']), $n($r['payment']), $n($r['balance'])]);
+        }
+        $out[] = implode(',', [$q(''), $q(''), $q('Balance owed'), $n($d['charges']), $n($d['payments']), $n($d['closing'])]);
+        if (($d['native'] ?? false) && (int) ($d['excluded'] ?? 0) > 0) {
+            $out[] = '';
+            $out[] = $q((int) $d['excluded'] . ' bill(s) in other currencies (' . implode(', ', (array) ($d['other_currencies'] ?? [])) . ') are excluded — see the USD statement for a consolidated view.');
+        }
+        return implode("\r\n", $out) . "\r\n";
     }
 
     private function html(array $d): string
@@ -139,6 +210,7 @@ final class SupplierStatement
             $excludedNote = '<div class="foot">Note: ' . (int) $d['excluded'] . ' bill(s) in other currencies (' . $oc
                 . ') are not shown on this ' . $e($code) . ' statement — use the USD statement for a consolidated view.</div>';
         }
+        $periodBit = ! empty($d['period']) ? ' &nbsp;·&nbsp; Period: ' . $e($d['period']) : '';
 
         return '<!doctype html><html><head><meta charset="utf-8"><style>
             * { font-family: DejaVu Sans, sans-serif; }
@@ -154,7 +226,7 @@ final class SupplierStatement
             .foot { margin-top: 16px; color: #9ca3af; font-size: 9px; text-align: center; }
         </style></head><body>
             <h1>' . $e($d['business']) . ' — Supplier Statement</h1>
-            <div class="sub">' . $e($d['supplier']) . ($d['meta'] ? ' &nbsp;·&nbsp; ' . $e($d['meta']) : '') . ' &nbsp;·&nbsp; Currency: ' . $e($code) . ' &nbsp;·&nbsp; ' . $e($d['generated']) . '</div>
+            <div class="sub">' . $e($d['supplier']) . ($d['meta'] ? ' &nbsp;·&nbsp; ' . $e($d['meta']) : '') . ' &nbsp;·&nbsp; Currency: ' . $e($code) . $periodBit . ' &nbsp;·&nbsp; ' . $e($d['generated']) . '</div>
             <table><thead><tr><th>Date</th><th>Ref</th><th>Description</th><th class="r">Charge (' . $e($code) . ')</th><th class="r">Payment (' . $e($code) . ')</th><th class="r">Balance owed</th></tr></thead>
             <tbody>' . $rows . '</tbody></table>
             <div class="foot">Charges ' . $e($money($d['charges'])) . ' · Payments ' . $e($money($d['payments'])) . ' · Balance owed ' . $e($money($d['closing'])) . ' — ' . $basis . '</div>'

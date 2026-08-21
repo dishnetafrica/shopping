@@ -150,7 +150,7 @@ final class SupplierCapability implements ObjectCapability
 
         $billsCard = ['kind' => 'table', 'title' => 'Purchases (bills)', 'sub' => count($billRows) . ' recorded', 'searchable' => true,
             'columns' => [['label' => 'Date'], ['label' => 'Ref'], ['label' => 'Item'], ['label' => 'Quantity', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Pay'], ['label' => '', 'align' => 'right']],
-            'rows' => $billRows, 'empty' => 'No purchases recorded for this supplier yet', 'pageSize' => 25];
+            'rows' => $billRows, 'empty' => 'No purchases recorded for this supplier yet', 'pageSize' => 25, 'dateFilter' => true];
 
         // --- payments list ---
         $pays = OrderCost::where('tenant_id', $t)->where('supplier_id', $s->id)
@@ -167,7 +167,7 @@ final class SupplierCapability implements ObjectCapability
         }
         $paysCard = ['kind' => 'table', 'title' => 'Payments made', 'sub' => count($payRows) . ' payments', 'searchable' => true,
             'columns' => [['label' => 'Date'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Paid by'], ['label' => 'Note']],
-            'rows' => $payRows, 'empty' => 'No payments recorded yet', 'pageSize' => 25];
+            'rows' => $payRows, 'empty' => 'No payments recorded yet', 'pageSize' => 25, 'dateFilter' => true];
 
         // --- contact card ---
         $contactCard = ['kind' => 'dl', 'title' => 'Contact & terms', 'rows' => array_values(array_filter([
@@ -228,13 +228,17 @@ final class SupplierCapability implements ObjectCapability
         $statementNative = strtoupper($baseCur) !== 'USD'
             ? ['key' => 'statement_native', 'label' => 'Download statement (' . strtoupper($baseCur) . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . strtoupper($baseCur), 'actor' => 'human', 'tone' => 'default']
             : null;
+        // CSV of the same statement (spreadsheet reconciliation) — in the supplier's own currency,
+        // needs no PDF engine. USD stays available via &currency=USD on the same endpoint.
+        $csvCur = strtoupper($baseCur) !== 'USD' ? strtoupper($baseCur) : 'USD';
+        $statementCsv = ['key' => 'statement_csv', 'label' => 'Download statement CSV (' . $csvCur . ')', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id . '&currency=' . $csvCur . '&format=csv', 'actor' => 'human', 'tone' => 'default'];
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
 
         $header = $canEdit ? [$buyProduct, $recordBill, $paySupplier] : [];
         $quick = $canEdit ? array_values(array_filter([$buyProduct, $recordBill, $paySupplier, $statement, $statementNative, $editSupplier])) : array_values(array_filter([$statement, $statementNative]));
-        $more = $canEdit ? array_values(array_filter([$statement, $statementNative, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementNative]));
+        $more = $canEdit ? array_values(array_filter([$statement, $statementNative, $statementCsv, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementNative, $statementCsv]));
 
         return (new WorkspacePayload)
             ->object([
