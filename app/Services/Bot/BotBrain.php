@@ -2617,6 +2617,10 @@ class BotBrain
                 'name'         => (string) $p->name,
                 'category'     => (string) ($p->category ?? ''),
                 'keywords'     => (string) ($p->keywords ?? ''),
+                // Model/part/SKU codes so the matcher resolves "8389E"/"A9F74101" to the exact item
+                // even when the code isn't a word in the product name.
+                'sku'          => (string) ($p->sku ?? ''),
+                'oem_number'   => (string) ($p->oem_number ?? ''),
                 'product_type' => (string) ($p->product_type ?? ''),   // drives matcher +250 tier
                 'price'        => Pricing::net($tenant, (float) $p->price),
                 'stock'        => $p->stock ?? 1,
