@@ -2184,8 +2184,13 @@ class AiBrain
                 }
                 $off = ($p->hidden ?? false) ? ' [OFF-CATALOGUE: never mention or list this unless the customer names it first]' : '';
                 $spec = isset($specTxt[(int) $p->id]) ? ', specs: ' . $specTxt[(int) $p->id] : '';
+                // v4.72 — the unit_size column (e.g. a container's dimensions/capacity) was recorded but
+                // never reached the bot, so "what size is this?" had no ground truth even when the shop
+                // HAD entered it. Surface it as a size fact; the prompt still forbids inventing an absent one.
+                $sizeTxt = trim((string) ($p->unit_size ?? ''));
+                $size = $sizeTxt !== '' ? ', size: ' . $sizeTxt : '';
 
-                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
+                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$size}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
             })->all();
         });
         return implode("\n", $rows);
