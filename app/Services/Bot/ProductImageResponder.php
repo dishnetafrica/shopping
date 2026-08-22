@@ -346,6 +346,29 @@ class ProductImageResponder
      * Caption. $short=true -> single name+price line (for 5-up category lists).
      * $short=false -> full card with variant sizes + a "reply with size" prompt.
      */
+    /**
+     * A "product card" caption: name, then size · pack, then price · stock. Pure/testable.
+     * Stock shows "In stock" when positive or untracked (null); it never claims out-of-stock.
+     */
+    public static function richCaption(string $name, ?string $size, ?int $packN, ?string $unitLabel, float $price, $stock, string $cur): string
+    {
+        $specs = [];
+        $size = trim((string) $size);
+        if ($size !== '') { $specs[] = $size; }
+        if ((int) $packN > 0) {
+            $lbl = trim((string) $unitLabel);
+            $specs[] = ($lbl !== '' ? ucfirst($lbl) : 'Pack') . ' of ' . (int) $packN;
+        }
+        $tail = [];
+        if ($price > 0) { $tail[] = $cur . ' ' . number_format($price); }
+        if ($stock === null || (float) $stock > 0) { $tail[] = 'In stock'; }
+
+        $out = $name;
+        if ($specs) { $out .= "\n" . implode(' · ', $specs); }
+        if ($tail)  { $out .= "\n" . implode(' · ', $tail); }
+        return $out;
+    }
+
     public function card(Product $p, string $cur, bool $short = false): string
     {
         $header = $this->cleanName($p);
@@ -358,7 +381,8 @@ class ProductImageResponder
         $sizes = $this->variantLines($p);
         if (! $sizes) {
             $price = (float) ($p->price ?? $p->base_price ?? 0);   // price-drift fix: captions quote the PANEL price
-            return $price > 0 ? $header . ' — ' . $cur . ' ' . number_format($price) : $header;
+            // Rich "product card" caption: name / size · pack / price · stock.
+            return self::richCaption($header, $p->unit_size ?? '', (int) ($p->pack_size ?? 0), (string) ($p->unit_label ?? ''), $price, $p->stock, $cur);
         }
 
         $out = $header . "\nAvailable:";

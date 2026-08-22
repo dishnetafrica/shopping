@@ -321,7 +321,70 @@ class AiBrain
                 Log::warning('AiBrain product image failed: ' . $e->getMessage());
             }
         }
+
+        // Hand off to the website: when the customer is browsing a category, send ONE link to that
+        // category on our storefront (filter pre-applied). Deterministic — the URL is built from the
+        // real /c/{slug} route, never invented by the model.
+        try {
+            $this->maybeSendCategoryLink($tenant, $from, $text, (string) $reply, $gateway);
+        } catch (\Throwable $e) {
+            Log::warning('AiBrain category link failed: ' . $e->getMessage());
+        }
+
         return true;
+    }
+
+    /**
+     * Send a "see the full category on our site" link when the customer is browsing. Guarded to a
+     * browse/pictures intent, to categories that actually have >1 product and are named in the
+     * message or our reply, and to once per category per customer per 30 min.
+     */
+    private function maybeSendCategoryLink(Tenant $tenant, string $from, string $text, string $reply, $gateway): void
+    {
+        if (! (bool) $tenant->setting('send_category_links', true)) return;
+
+        $t = mb_strtolower($text);
+        $browse = $this->photoRequested($text)
+            || (bool) preg_match('/\b(show|see|do you have|got any|any more|list|range|catalogue|catalog|browse|options|what.{0,6}have|price list)\b/u', $t);
+        if (! $browse) return;
+
+        // Category → product count (cached), live active products only.
+        $counts = Cache::remember("catcounts:{$tenant->id}", 300, function () use ($tenant) {
+            $out = [];
+            foreach (Product::where('tenant_id', $tenant->id)->where('active', true)
+                        ->whereNotNull('category')->where('category', '<>', '')->get(['category']) as $p) {
+                $c = trim((string) $p->category);
+                if ($c !== '') $out[$c] = ($out[$c] ?? 0) + 1;
+            }
+            return $out;
+        });
+        if (! $counts) return;
+
+        $pick = self::pickCategoryLink($counts, $text . ' ' . $reply);
+        if ($pick === null) return;
+
+        $url = $tenant->publicUrl('/c/' . \Illuminate\Support\Str::slug($pick['category']));
+        if (! Cache::add('catlink:' . $tenant->id . ':' . $from . ':' . md5($url), 1, 1800)) return;
+
+        $msg = 'See all ' . $pick['count'] . ' ' . $pick['category'] . ' products 👉 ' . $url;
+        $gateway->sendText($tenant->whatsapp_instance, $from, $msg);
+        MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $msg, null, null, ['kind' => 'category_link']);
+    }
+
+    /**
+     * Pick the category to link: the one named in the haystack (customer text + our reply) with the
+     * most products, requiring >1 product. Pure/testable. @return array{category:string,count:int}|null
+     */
+    public static function pickCategoryLink(array $counts, string $haystack): ?array
+    {
+        $hay = mb_strtolower($haystack);
+        $best = null; $bestN = 0;
+        foreach ($counts as $cat => $n) {
+            $c = mb_strtolower(trim((string) $cat));
+            if ($c === '' || (int) $n <= 1) continue;
+            if (str_contains($hay, $c) && (int) $n > $bestN) { $best = (string) $cat; $bestN = (int) $n; }
+        }
+        return $best !== null ? ['category' => $best, 'count' => $bestN] : null;
     }
 
     /**
