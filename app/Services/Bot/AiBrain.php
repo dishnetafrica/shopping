@@ -286,6 +286,15 @@ class AiBrain
                 if (empty($imgs) && self::promisedPhoto((string) $reply)) {
                     $imgs = $responder->imagesFor($tenant, $convo, (string) $reply);
                 }
+                // v4.73 — the reply LISTED several products ("1. Foil… 2. Cling…") and the customer
+                // asked for pictures. imagesFor() only serves ONE confident product, so a list sent
+                // nothing and we apologised. Resolve each listed product and send the photos it has.
+                if (empty($imgs) && $this->photoRequested($text)) {
+                    foreach (self::productNamesFromReply((string) $reply) as $nm) {
+                        foreach ($responder->imagesFor($tenant, $convo, $nm) as $im) { $imgs[] = $im; }
+                        if (count($imgs) >= 3) break;
+                    }
+                }
                 $sent = 0;
                 foreach (array_slice($imgs, 0, 3) as $im) {
                     if (empty($im['media'])) continue;
@@ -356,6 +365,25 @@ class AiBrain
     {
         return (bool) preg_match('/(sending|send you|share|attaching|attached|here is|here\'s).{0,24}(photo|picture|image|pic)\b/iu', $reply)
             || str_contains($reply, "\u{1F4F7}");
+    }
+
+    /**
+     * Product names the reply LISTED — the "1. Foil…  2. Cling…" a photo request produces. Takes each
+     * numbered/bulleted line and keeps the name up to the first "📷", "(", or " - description" tail, so
+     * each can be looked up for its photo. Returns up to 5, deduped.
+     *
+     * @return array<int,string>
+     */
+    public static function productNamesFromReply(string $reply): array
+    {
+        $out = [];
+        foreach (preg_split('/\R+/u', $reply) as $line) {
+            if (! preg_match('/^\s*(?:\d+[\.\)]|[-*•])\s*(.+)$/u', (string) $line, $m)) continue;
+            $name = (string) preg_split('/\s*(?:\x{1F4F7}|\x{1F5BC}|\(|[-\x{2013}\x{2014}]\s)/u', trim($m[1]))[0];
+            $name = trim(str_replace('*', '', $name));
+            if (mb_strlen($name) >= 4) $out[] = $name;
+        }
+        return array_slice(array_values(array_unique($out)), 0, 5);
     }
 
     /** Customer is asking for a product photo/picture (in several languages). */
