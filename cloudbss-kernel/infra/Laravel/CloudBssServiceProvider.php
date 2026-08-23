@@ -16,6 +16,7 @@ namespace App\Providers;
 
 use CloudBSS\App\CompositeAccountingPolicy;
 use CloudBSS\App\CogsCorrectionPolicy;
+use CloudBSS\App\SaleFxCorrectionPolicy;
 use CloudBSS\App\CashSettlementPolicy;
 use CloudBSS\App\InterestPolicy;
 use CloudBSS\App\UgandaVatPurchasePolicy;
@@ -55,6 +56,7 @@ class CloudBssServiceProvider extends ServiceProvider
                 new CashSettlementPolicy($clock, $ids),
                 new InterestPolicy($clock, $ids),
                 new CogsCorrectionPolicy($clock, $ids),   // Phase 3B: compensating COGS-FX entries
+                new SaleFxCorrectionPolicy($clock, $ids), // revenue-leg compensating entries
             ]));
             // Register more tenants/entities here (DishNet, WinWorld, …) as you onboard them.
             // NOTE: this Registry-resolver provider is a REFERENCE example and is not the one booted by
