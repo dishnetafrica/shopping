@@ -270,6 +270,9 @@ class PanelApiController extends Controller
             'ssMarkupPct'   => (float) ($s['ssMarkupPct'] ?? 0),
             'comboRecommendations' => (bool) ($s['combo_recommendations'] ?? true),
             'sendProductImages'    => (bool) ($s['send_product_images'] ?? true),
+            'webChat'        => (bool) ($s['web_chat'] ?? false),
+            'webChatAuto'    => ((string) ($s['web_chat_mode'] ?? 'auto')) !== 'off',
+            'webChatContact' => (bool) ($s['web_chat_contact'] ?? true),
             'features'      => $this->tenantFeatures($t),
         ]);
     }
@@ -5749,7 +5752,7 @@ class PanelApiController extends Controller
     {
         $t   = $r->user()->tenant;
         $key = (string) $r->query('key', '');
-        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup', 'intro_catalog', 'credit_reminder'], true)) {
+        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup', 'intro_catalog', 'credit_reminder', 'web_chat', 'web_chat_contact', 'web_chat_mode'], true)) {
             return response()->json(['ok' => false, 'error' => 'bad_key'], 422);
         }
         $on = in_array((string) $r->query('on', '1'), ['1', 'true', 'on', 'yes'], true);
@@ -5757,6 +5760,9 @@ class PanelApiController extends Controller
             $cfg = (array) $t->setting($key, []);
             $cfg['enabled'] = $on;
             $t->putSetting($key, $cfg);
+        } elseif ($key === 'web_chat_mode') {
+            // Website chat: bot answers automatically (auto) vs. only collect + hand to WhatsApp (off).
+            $t->putSetting('web_chat_mode', $on ? 'auto' : 'off');
         } else {
             $t->putSetting($key, $on);
         }
