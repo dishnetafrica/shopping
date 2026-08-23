@@ -46,11 +46,18 @@ class CogsReconcileCommand extends Command
             $costCur = OrderCosting::COST_CURRENCY;
             $fx = Fx::forTenant($t);
 
-            // Complete (delivered or customer-confirmed) orders — the ones OrderLedgerService would have posted.
+            // Complete (delivered or customer-confirmed) orders — the ones OrderLedgerService would have
+            // posted. customer_confirmed_at is on the model but not on every DB, so include it only when
+            // the column actually exists (schema-safe).
+            $hasConfirmed = \Illuminate\Support\Facades\Schema::hasColumn('orders', 'customer_confirmed_at');
+            $cols = ['id', 'order_no', 'total', 'sell_currency', 'created_at', 'delivered_at'];
+            if ($hasConfirmed) { $cols[] = 'customer_confirmed_at'; }
             $orders = Order::withoutGlobalScopes()->where('tenant_id', $t->id)
-                ->where(fn ($w) => $w->whereNotNull('delivered_at')->orWhereNotNull('customer_confirmed_at'))
-                ->orderByDesc('id')->limit($limit)
-                ->get(['id', 'order_no', 'total', 'sell_currency', 'created_at', 'delivered_at', 'customer_confirmed_at']);
+                ->where(function ($w) use ($hasConfirmed) {
+                    $w->whereNotNull('delivered_at');
+                    if ($hasConfirmed) { $w->orWhereNotNull('customer_confirmed_at'); }
+                })
+                ->orderByDesc('id')->limit($limit)->get($cols);
             if ($orders->isEmpty()) { continue; }
 
             // COGS native per order (cost_price × qty), batched.
