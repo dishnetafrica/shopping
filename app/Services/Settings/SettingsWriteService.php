@@ -142,6 +142,8 @@ final class SettingsWriteService
         'stamp_on_delivery_note', 'stamp_on_credit_note',
         'combo_recommendations', // bot "Goes well with" / "Often bought together" cross-sell suggestions
         'send_product_images',   // bot sends product photos with replies
+        'web_chat',              // show the chat bubble on the storefront
+        'web_chat_contact',      // ask website visitors for a name/number before chatting
         // Storefront: per-model show/hide toggles (default on). Read by StorefrontController.
         'show_model_boxer100', 'show_model_boxer125hd', 'show_model_boxer150',
         'show_model_boxer125x', 'show_model_ct125hd', 'show_model_boxer150x',
@@ -157,6 +159,7 @@ final class SettingsWriteService
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */
     private const ENUM_KEYS = [
+        'web_chat_mode'       => ['auto', 'off'],   // website chat: bot answers (auto) or collect-only (off)
         'invoice_page_size'   => ['A4', 'A5', 'Letter'],
         'invoice_orientation' => ['portrait', 'landscape'],
         'receipt_page_size'   => ['A4', 'A5'],
