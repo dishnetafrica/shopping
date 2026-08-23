@@ -67,7 +67,22 @@ final class SalesOrderCapability implements ObjectCapability
             $lineRows[] = ['cells' => [(string) $it->name, rtrim(rtrim(number_format($qty, 2), '0'), '.'), $fmt($price), $fmt($amount)],
                 'link' => $it->product_id ? '/api/v1/workspace/product/' . $it->product_id : null];
         }
-        $grossPct = ($costKnown && $total > 0) ? round(($total - $cogs) / $total * 100, 1) : null;
+        // COGS (cost_price × qty) is in UGX; the total is in the order's currency. Reconcile BOTH to the
+        // base currency before computing margin — never compare a raw UGX cost against a USD revenue.
+        $costCur = \App\Services\Sales\OrderCosting::COST_CURRENCY;
+        $baseCur = $rc->baseCurrency();
+        $grossPct = null; $profitBase = 0.0;
+        if ($costKnown) {
+            $rec = \App\Services\Sales\OrderCosting::reconcile(
+                $cogs, $costCur, $total, $ocur,
+                \App\Services\Sales\OrderCosting::converter($ctx->tenant, $baseCur, $odate)
+            );
+            $grossPct = $rec['pct']; $profitBase = $rec['profit'];
+        }
+        // COGS shown in the report currency (converted from UGX); the raw purchase currency is supporting info.
+        $fmtCogs   = fn () => $rc->text($cogs, $costCur, null, $odate);
+        $fmtProfit = fn () => $rc->text($profitBase, $baseCur, null, $odate);
+        $cogsNative = number_format($cogs) . ' ' . $costCur;
 
         // Customer link (profile lookup by phone, if saved). Blank phone → no match (never a stray one).
         $oPhone = preg_replace('/[^0-9]/', '', (string) $o->customer_phone);
@@ -218,8 +233,9 @@ final class SalesOrderCapability implements ObjectCapability
         $financialsCards = [[
             'kind' => 'dl', 'title' => 'Profitability', 'rows' => [
                 ['Revenue', $fmt($total)],
-                ['Cost of goods', $costKnown ? $fmt($cogs) : 'Not recorded'],
-                ['Gross profit', $grossPct !== null ? $fmt($total - $cogs) . ' (' . $grossPct . '%)' : '—'],
+                ['Cost of goods', $costKnown ? $fmtCogs() : 'Not recorded'],
+                ['Original purchase cost', $costKnown ? $cogsNative : '—'],
+                ['Gross profit', $grossPct !== null ? $fmtProfit() . ' (' . $grossPct . '%)' : '—'],
                 ['Invoiced', $inv ? $fmt($inv->total) : 'Not yet'],
                 ['Collected', $inv ? $fmt($inv->amount_paid) : '—'],
             ],
@@ -257,7 +273,7 @@ final class SalesOrderCapability implements ObjectCapability
             ['key' => 'total', 'label' => 'Order total', 'value' => $fmt($total)],
             ['key' => 'paid', 'label' => 'Paid', 'value' => $fmt($paid), 'tone' => $paid > 0 ? 'ok' : ''],
             ['key' => 'balance', 'label' => 'Balance', 'value' => $balance > 0 ? $fmt($balance) : '—', 'tone' => $balance > 0 ? 'danger' : ''],
-            ['key' => 'cogs', 'label' => 'Cost of goods', 'value' => $costKnown ? $fmt($cogs) : '—'],
+            ['key' => 'cogs', 'label' => 'Cost of goods', 'value' => $costKnown ? $fmtCogs() : '—'],
             ['key' => 'margin', 'label' => 'Gross margin', 'value' => $grossPct !== null ? $grossPct . '%' : '—', 'tone' => ($grossPct !== null && $grossPct < 12) ? 'warn' : ''],
         ];
 

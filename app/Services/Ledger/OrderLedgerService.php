@@ -38,7 +38,7 @@ class OrderLedgerService
 
             $sales = $this->sales ?? app(SalesLedger::class);
 
-            $cur    = (string) ($tenant->setting('currency', 'UGX'));
+            $cur    = (string) ($tenant->setting('currency', 'UGX'));   // base / posting currency
             $factor = Currency::of($cur)->subunit();                 // UGX=1, USD=100, …
             $gross  = (float) $order->total;
 
@@ -47,8 +47,18 @@ class OrderLedgerService
             $incVat = (bool) $tenant->setting('prices_include_vat', false);
             $net    = ($incVat && $vatPct > 0) ? $gross / (1 + $vatPct / 100) : $gross;
 
-            $revenueMinor = (int) round($net * $factor);
-            $costMinor    = (int) round($this->cogs($order) * $factor);
+            // Reconcile BOTH sides to the base/posting currency before booking: revenue is in the order's
+            // own sell currency, and cost_price (hence cogs) is UGX. Booking a UGX cost as base-currency
+            // COGS is the "UGX 2,000,000 read as USD" bug. Convert at the order's completion date.
+            $sellCur = (string) ($order->sell_currency ?: $cur);
+            $fxDate  = ($order->delivered_at ?: now())->format('Y-m-d');
+            $rec = \App\Services\Sales\OrderCosting::reconcile(
+                $this->cogs($order), \App\Services\Sales\OrderCosting::COST_CURRENCY,
+                $net, $sellCur,
+                \App\Services\Sales\OrderCosting::converter($tenant, $cur, $fxDate)
+            );
+            $revenueMinor = (int) round($rec['revenue_base'] * $factor);
+            $costMinor    = (int) round($rec['cogs_base'] * $factor);
             if ($revenueMinor <= 0) return;                          // nothing to post
 
             $ledgerTenant = (string) $tenant->setting('ledger_tenant', 't_' . $tenant->id);
