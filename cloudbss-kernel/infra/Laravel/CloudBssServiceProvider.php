@@ -57,11 +57,10 @@ class CloudBssServiceProvider extends ServiceProvider
                 new CogsCorrectionPolicy($clock, $ids),   // Phase 3B: compensating COGS-FX entries
             ]));
             // Register more tenants/entities here (DishNet, WinWorld, …) as you onboard them.
-            // NOTE (Phase 3B): before `cogs:remediate --confirm` can post for a tenant, that tenant's
-            // ledger book MUST be registered here with a CompositeAccountingPolicy that includes
-            // CogsCorrectionPolicy — otherwise the resolver returns null and the correction silently
-            // no-ops. e.g. Family Shoppers posts to ledger book 't_17'/'e1'; confirm/add its
-            // registration (mirroring the sales policy it already uses) before remediating.
+            // NOTE: this Registry-resolver provider is a REFERENCE example and is not the one booted by
+            // ShopBot — app/Providers/LedgerServiceProvider.php is (see bootstrap/providers.php). That
+            // one uses a wildcard resolver that applies its CompositeAccountingPolicy to EVERY book, and
+            // is where CogsCorrectionPolicy is added so cogs:remediate can correct any tenant.
 
             return new LedgerPoster(
                 $pdo, new PostgresEventLog($pdo), new PostgresLedgerProjection($pdo), $clock, $ids, $resolver,
