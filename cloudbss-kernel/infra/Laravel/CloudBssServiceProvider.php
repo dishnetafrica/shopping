@@ -15,6 +15,7 @@ namespace App\Providers;
  */
 
 use CloudBSS\App\CompositeAccountingPolicy;
+use CloudBSS\App\CogsCorrectionPolicy;
 use CloudBSS\App\CashSettlementPolicy;
 use CloudBSS\App\InterestPolicy;
 use CloudBSS\App\UgandaVatPurchasePolicy;
@@ -53,8 +54,13 @@ class CloudBssServiceProvider extends ServiceProvider
                 new UgandaVatPurchasePolicy($clock, $ids),
                 new CashSettlementPolicy($clock, $ids),
                 new InterestPolicy($clock, $ids),
+                new CogsCorrectionPolicy($clock, $ids),   // Phase 3B: compensating COGS-FX entries
             ]));
             // Register more tenants/entities here (DishNet, WinWorld, …) as you onboard them.
+            // NOTE: this Registry-resolver provider is a REFERENCE example and is not the one booted by
+            // ShopBot — app/Providers/LedgerServiceProvider.php is (see bootstrap/providers.php). That
+            // one uses a wildcard resolver that applies its CompositeAccountingPolicy to EVERY book, and
+            // is where CogsCorrectionPolicy is added so cogs:remediate can correct any tenant.
 
             return new LedgerPoster(
                 $pdo, new PostgresEventLog($pdo), new PostgresLedgerProjection($pdo), $clock, $ids, $resolver,
