@@ -77,7 +77,7 @@ final class JubaStockCapability implements ProcessCapability
      * base is USD. Tagging a 22,500 UGX carton as $22,500 and adding it to a total is precisely the
      * mislabelling this constant exists to prevent.
      */
-    private const COST_CURRENCY = 'UGX';
+    private const COST_CURRENCY = \App\Services\Sales\OrderCosting::COST_CURRENCY;
 
     /**
      * Order states where the goods are SOLD but have NOT left the building.
