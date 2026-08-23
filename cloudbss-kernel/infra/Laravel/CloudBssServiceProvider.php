@@ -15,6 +15,7 @@ namespace App\Providers;
  */
 
 use CloudBSS\App\CompositeAccountingPolicy;
+use CloudBSS\App\CogsCorrectionPolicy;
 use CloudBSS\App\CashSettlementPolicy;
 use CloudBSS\App\InterestPolicy;
 use CloudBSS\App\UgandaVatPurchasePolicy;
@@ -53,8 +54,14 @@ class CloudBssServiceProvider extends ServiceProvider
                 new UgandaVatPurchasePolicy($clock, $ids),
                 new CashSettlementPolicy($clock, $ids),
                 new InterestPolicy($clock, $ids),
+                new CogsCorrectionPolicy($clock, $ids),   // Phase 3B: compensating COGS-FX entries
             ]));
             // Register more tenants/entities here (DishNet, WinWorld, …) as you onboard them.
+            // NOTE (Phase 3B): before `cogs:remediate --confirm` can post for a tenant, that tenant's
+            // ledger book MUST be registered here with a CompositeAccountingPolicy that includes
+            // CogsCorrectionPolicy — otherwise the resolver returns null and the correction silently
+            // no-ops. e.g. Family Shoppers posts to ledger book 't_17'/'e1'; confirm/add its
+            // registration (mirroring the sales policy it already uses) before remediating.
 
             return new LedgerPoster(
                 $pdo, new PostgresEventLog($pdo), new PostgresLedgerProjection($pdo), $clock, $ids, $resolver,
