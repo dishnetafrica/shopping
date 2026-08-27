@@ -3454,7 +3454,8 @@ class PanelApiController extends Controller
         $t->putSetting('category_order', array_values($order));
 
         $this->catFlush($t);
-        return response()->json(['ok' => true, 'moved' => (int) $moved]);
+        return response()->json(['ok' => true, 'moved' => (int) $moved,
+            'message' => 'Renamed to "' . $new . '"' . ($moved > 0 ? ' — ' . (int) $moved . ' product' . ($moved === 1 ? '' : 's') . ' moved' : '')]);
     }
 
     /** Delete a category — only when empty. Products must be moved away first. */
