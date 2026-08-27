@@ -40,6 +40,25 @@ final class CategoryListCapability implements ProcessCapability
                 'category' => ['value' => (string) $c->name, 'image' => (string) ($c->image_url ?: ''), 'avatar' => true],
                 'products' => $n,
                 'status'   => ['value' => $isActive ? 'Active' : 'Hidden', 'badge' => $isActive ? 'ok' : 'default'],
+                // Rename cascades to every product in the category (products.category), the category
+                // record, and its image/order settings — it reuses the ONE canonical writer,
+                // /papi/category-rename (same session+CSRF auth this SPA already uses), so V3 and the
+                // classic panel can never drift. A form collects the new name; the old name rides in body.
+                'rename'   => ['buttons' => [[
+                    'icon'   => 'edit',
+                    'title'  => 'Rename "' . $c->name . '"',
+                    'action' => [
+                        'label'       => 'Rename category',
+                        'method'      => 'POST',
+                        'endpoint'    => '/papi/category-rename',
+                        'schema'      => ['new' => 'text'],
+                        'labels'      => ['new' => 'New category name'],
+                        'prefill'     => ['new' => (string) $c->name],
+                        'body'        => ['old' => (string) $c->name],
+                        'submitLabel' => 'Rename',
+                        'actor'       => 'human',
+                    ],
+                ]]],
                 'catalog'  => $n > 0
                     ? ['value' => 'Catalogue', 'href' => '/api/v1/doc/catalog?category=' . rawurlencode((string) $c->name), 'icon' => 'download']
                     : ['value' => ''],
@@ -71,6 +90,7 @@ final class CategoryListCapability implements ProcessCapability
             ['key' => 'category', 'label' => 'Category', 'type' => 'avatar', 'sortable' => true],
             ['key' => 'products', 'label' => 'Products', 'align' => 'right', 'type' => 'num', 'sortable' => true],
             ['key' => 'status',   'label' => 'Status',   'type' => 'badge', 'sortable' => true],
+            ['key' => 'rename',   'label' => 'Rename',   'type' => 'action', 'sortable' => false],
             ['key' => 'visible',  'label' => 'Customers', 'type' => 'action', 'sortable' => false],
             ['key' => 'catalog',  'label' => 'Catalogue', 'type' => 'action', 'sortable' => false],
         ];
