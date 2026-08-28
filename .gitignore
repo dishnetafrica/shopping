@@ -1,0 +1,3 @@
+# Python bytecode caches (build artifacts from the storefront generator / bench scripts)
+__pycache__/
+*.py[cod]
