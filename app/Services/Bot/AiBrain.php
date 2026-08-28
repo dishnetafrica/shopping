@@ -1782,6 +1782,7 @@ class AiBrain
         // physical property is not a use-note. This is that rule.
         $p .= "- NEVER STATE A PRODUCT PROPERTY THAT IS NOT IN PRODUCTS. Material, heat or cold tolerance, microwave/oven/freezer/dishwasher suitability, food-grade or BPA status, waterproofing, shelf life, certification, compliance, or fitness for any specific purpose may be stated ONLY if it appears in that product's own line in PRODUCTS. If a customer asks whether an item can be heated, frozen, microwaved, used with food, or used for anything particular, and PRODUCTS does not say so, DO NOT ANSWER FROM GENERAL KNOWLEDGE — say plainly that you will confirm the exact specification with the team, and offer to come back to them. A wrong answer here can hurt someone or ruin their kitchen. Saying \"I'll check\" is always the right answer when the data is silent.\n";
         $p .= "- MINIMUM ORDER (WHOLESALE): this is a wholesale business — most items are sold by the CARTON, minimum 1 carton. If a customer asks the minimum order without naming an item, tell them that plainly and ask which item so you can confirm its exact carton size, minimum and price. If a specific product shows an MOQ, use that number. If they want less than a carton, tell them loose/part-carton may be possible at the per-piece rate and you'll confirm with the team.\n";
+        $p .= "- QUOTE PER PIECE FIRST for carton-packed items. When a PRODUCT line shows a per-piece rate (\"≈ X per piece\"), and the customer asks a price, or wants one, a few, or \"a pair\", LEAD with the per-piece price so the number makes sense, then add the carton price for bulk — e.g. \"Rear shocks are about 32 each (64 a pair); a carton of 10 is 321.62.\" NEVER quote only the big carton total to someone who wants one piece: \"321 per carton of 10\" reads as absurd when it is really ~32 each. For parts normally used in pairs (shock absorbers, mirrors, footrests), also give the per-pair price = 2× the per-piece. Do NOT claim we are cheaper than anyone or invent a comparison — just state OUR real per-piece and carton price clearly.\n";
         $p .= "- PHOTOS: if the customer sends a PHOTO of a product, look carefully and READ any visible model / part number / rating printed on it (e.g. \"A9F74101\", \"LC1D32P7\", \"63A\", \"3P\") and match that to the catalogue — this is the reliable way to identify the exact item, so a customer can photograph a failed/old part and get the same one. If no number or label is legible, identify the product TYPE from the image and ask a short question for the rating/size/spec you need. NEVER guess an exact model, rating or price from shape or colour alone — read it or ask. Once identified, confirm the catalogue match and offer to quote; if it isn't stocked, offer a special order.\n";
         $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
@@ -2008,8 +2009,22 @@ class AiBrain
             } catch (\Throwable $e) { $specTxt = []; }
             return $products->map(function ($p) use ($inv, $specTxt) {
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
-                $pack = $p->pack_size ? ' (' . (int) $p->pack_size . '/unit)' : '';
+                $pack = $p->pack_size ? ' (' . (int) $p->pack_size . ' per ' . ($p->unit_label ?: 'unit') . ')' : '';
                 $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
+                // v4.73 — a Juba buyer asked "how much a pair of rear shocks?" and got
+                // "$321.62 per carton of 10" and fled: nobody buying one pair wants a
+                // ten-piece total. The per-piece rate lives in the data (price / pack)
+                // but never reached the model, so it could only quote the carton. Surface
+                // it — in the SAME number units as the carton price so the model applies the
+                // same currency/FX to both — only for carton/box/case packs (a per-kg
+                // grocery has no "piece"). The prompt then tells it to lead with this.
+                $perPiece = '';
+                $packN = (int) $p->pack_size;
+                if ($packN > 1 && (float) $p->price > 0
+                    && in_array(strtolower(trim((string) $p->unit_label)), ['carton', 'box', 'case', 'ctn'], true)) {
+                    $pp = (float) $p->price / $packN;
+                    $perPiece = ' ≈ ' . rtrim(rtrim(number_format($pp, 2, '.', ''), '0'), '.') . ' per piece';
+                }
                 // v4.28 — brand and origin were absent, so "do you have Pearl River Bridge?"
                 // or "is this Chinese or Indian?" had nothing to answer from and the model
                 // either guessed or said no. Only added when the product actually carries them.
@@ -2025,7 +2040,7 @@ class AiBrain
                 $off = ($p->hidden ?? false) ? ' [OFF-CATALOGUE: never mention or list this unless the customer names it first]' : '';
                 $spec = isset($specTxt[(int) $p->id]) ? ', specs: ' . $specTxt[(int) $p->id] : '';
 
-                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$moq}{$orig}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
+                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
             })->all();
         });
         return implode("\n", $rows);
