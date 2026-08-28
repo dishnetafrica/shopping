@@ -20,6 +20,7 @@ RUN composer require \
         predis/predis:^2.2 \
         laravel/horizon:^5.0 \
         dompdf/dompdf:^3.0 \
+        bacon/bacon-qr-code:^2.0 \
         --no-interaction --no-scripts --prefer-dist --ignore-platform-reqs --with-all-dependencies
 # 3) optional dependency for Phase 2 NLU (don't fail the build if it can't resolve)
 RUN composer require openai-php/laravel \

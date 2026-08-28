@@ -33,12 +33,14 @@ final class PayablesCalculator
         $bills = [];
         foreach (OrderCost::where('tenant_id', $tid)->where('pay_status', 'credit')
                     ->whereNotIn('status', ['void', 'rejected'])->orderBy('created_at')
-                    ->get(['supplier_id', 'native_amount', 'rate_to_usd', 'usd_amount', 'created_at']) as $c) {
+                    ->get(['supplier_id', 'native_amount', 'currency', 'rate_to_usd', 'usd_amount', 'created_at']) as $c) {
             // Use the stored usd_amount (same field SupplierController::owedBySupplierUsd sums) so every
             // screen agrees to the penny; fall back to native/rate only if usd_amount is missing.
             $usd = (float) ($c->usd_amount ?: ((float) $c->native_amount / ((float) $c->rate_to_usd ?: 1.0)));
             if ($usd <= 0.005) continue;
-            $bills[(int) ($c->supplier_id ?? 0)][] = ['usd' => $usd, 'at' => $c->created_at];
+            // native + currency ride along (ignored by the USD methods) so per-supplier aging can show
+            // the supplier's own currency without a second reader.
+            $bills[(int) ($c->supplier_id ?? 0)][] = ['usd' => $usd, 'native' => (float) $c->native_amount, 'currency' => strtoupper((string) $c->currency), 'at' => $c->created_at];
         }
 
         $paid = [];
@@ -132,5 +134,37 @@ final class PayablesCalculator
         }
         foreach ($age as $k => $v) $age[$k] = round($v, 2);
         return $age;
+    }
+
+    /**
+     * Per-supplier UNPAID bill slices after applying payments oldest-first (FIFO). Each slice carries the
+     * remaining USD, the proportional remaining native amount, the bill currency and its date — so the
+     * Supplier Pay Advisor can age each supplier on its own terms and show the supplier's own currency.
+     * Same FIFO/usd basis as bySupplierUsd/agedUsd, so nothing can disagree.
+     *
+     * @return array<int, array<int, array{usd: float, native: float, currency: string, at: mixed}>>
+     *         supplier_id => remaining slices (oldest first)
+     */
+    public static function unpaidSlicesBySupplier(int $tid): array
+    {
+        [$bills, $paid] = self::gather($tid);
+        $out = [];
+        foreach ($bills as $sid => $rows) {
+            $credit = $paid[$sid] ?? 0.0;
+            foreach ($rows as $r) {
+                $rem = $r['usd'];
+                if ($credit > 0) { $take = min($credit, $rem); $rem -= $take; $credit -= $take; }
+                if ($rem <= 0.005) continue;
+                // Remaining native is proportional to remaining USD (exact for a fully-unpaid slice).
+                $frac = $r['usd'] > 0 ? ($rem / $r['usd']) : 0.0;
+                $out[(int) $sid][] = [
+                    'usd' => round($rem, 2),
+                    'native' => round(((float) ($r['native'] ?? 0)) * $frac, 2),
+                    'currency' => (string) ($r['currency'] ?? 'USD'),
+                    'at' => $r['at'],
+                ];
+            }
+        }
+        return $out;
     }
 }

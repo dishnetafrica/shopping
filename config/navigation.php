@@ -73,6 +73,7 @@ return [
             ['key' => 'inventory',    'label' => 'Inventory',    'route' => '/panel/inventory-count', 'icon' => '📦', 'menu' => 'products'],
             // Inventory Trust (T6) — owner's trust queue, shrink waterfall, vision boxes.
             ['key' => 'trust',        'label' => 'Inventory Trust', 'route' => '/panel/trust', 'icon' => '🛡️', 'menu' => 'products'],
+            ['key' => 'vision_review', 'label' => 'Stock &amp; Loss', 'route' => '/panel/vision-review', 'icon' => '🎥', 'menu' => 'products'],
             ['key' => 'consignments', 'label' => 'Consignments', 'route' => '/panel/consignment',     'icon' => '🚚', 'menu' => 'products'],
             ['key' => 'deliveries',   'label' => 'Deliveries',   'route' => '/panel/operations',      'icon' => '📮', 'menu' => 'products'],
         ],
@@ -114,6 +115,7 @@ return [
             ['key' => 'chats',     'label' => 'Chats',     'route' => '/panel/chats',     'icon' => '💬', 'menu' => 'whatsapp'],
             ['key' => 'leads',     'label' => 'Leads',     'route' => '/panel/leads',     'icon' => '🎯', 'menu' => 'marketing'],
             ['key' => 'campaigns', 'label' => 'Campaigns', 'route' => '/panel/marketing', 'icon' => '📣', 'menu' => 'marketing'],
+            ['key' => 'engagement', 'label' => 'Customer Engagement', 'route' => '/panel/engagement', 'icon' => '🎯', 'menu' => 'marketing'],
             // nav_v2 pre-flight additions:
             ['key' => 'scheduled', 'label' => 'Scheduled', 'route' => '/panel/scheduled', 'icon' => '⏰', 'menu' => 'whatsapp'],
             ['key' => 'ads',       'label' => 'Ads',       'route' => '/panel/ads',       'icon' => '📢', 'menu' => 'marketing'],

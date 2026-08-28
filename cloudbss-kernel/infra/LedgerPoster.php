@@ -88,6 +88,23 @@ final class LedgerPoster
         }
     }
 
+    /**
+     * Read-only probe: is there a registered AccountingPolicy that would turn `$eventName` for this
+     * book into a JournalPosted? If false, post() would append the business event but produce NO
+     * journal (a silent ledger no-op) AND bump versionOf — poisoning idempotency. Callers that must
+     * not silently no-op (e.g. cogs:remediate --confirm) MUST gate on this first. Writes nothing.
+     */
+    public function canPost(string $tenantId, string $entityId, string $eventName): bool
+    {
+        $probe = new DomainEvent(
+            eventId: 'probe', name: $eventName, schemaVersion: 1, aggregateType: 'Probe',
+            aggregateId: 'probe', payload: [], occurredAt: $this->clock->now(),
+            tenantId: $tenantId, entityId: $entityId,
+        );
+        $policy = $this->policies->policyFor($probe);
+        return $policy !== null && $policy->supports($probe);
+    }
+
     public function balance(string $tenantId, string $entityId, string $account, string $currency): Money
     {
         return $this->ledger->balanceOf($tenantId, $entityId, $account, $currency);

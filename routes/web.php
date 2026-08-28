@@ -207,6 +207,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::post('/papi/comms/campaigns/{id}/pause',  [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignPause']);
     Route::post('/papi/comms/campaigns/{id}/resume', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignResume']);
     Route::post('/papi/comms/campaigns/{id}/cancel', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignCancel']);
+    Route::post('/papi/comms/campaigns/{id}/preview', [\App\Http\Controllers\Panel\EmailCenterController::class, 'campaignPreview']);
     // v3 CommunicationCapability adapters (G2) — flat-form endpoints delegating to the handlers above.
     Route::post('/papi/comms/messages/retry',        [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageRetryBody']);
     Route::post('/papi/comms/messages/cancel',       [\App\Http\Controllers\Panel\EmailCenterController::class, 'messageCancelBody']);
@@ -225,6 +226,8 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
     Route::get('/panel/staff', [SellerPanelController::class, 'staff']);
     Route::get('/panel/scheduled', [SellerPanelController::class, 'scheduled']);
     Route::get('/panel/marketing', [SellerPanelController::class, 'marketing']);
+    Route::get('/panel/engagement', [SellerPanelController::class, 'engagement']);
+    Route::get('/panel/vision-review', [SellerPanelController::class, 'visionReview']);
     Route::get('/panel/tasks', [SellerPanelController::class, 'tasks']);
     Route::get('/panel/operations', [SellerPanelController::class, 'tasks']);
     Route::get('/panel/diagnostics', [SellerPanelController::class, 'diagnostics']);
@@ -650,6 +653,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('campaign/send',     [PanelApiController::class, 'campaignSend']);
         Route::post('campaign/audience', [PanelApiController::class, 'campaignAudience']);
         Route::post('campaign/suggest',  [PanelApiController::class, 'campaignSuggest']);
+
+        // customer re-engagement (Phase 1, read-only plan)
+        Route::get('engagement-plan',    [PanelApiController::class, 'engagementPlan']);
+        Route::post('engagement-cap',    [PanelApiController::class, 'engagementSaveCap']);
+
+        // Vision Stock & Loss — read-only movement-exception review feed
+        Route::get('vision-review',      [PanelApiController::class, 'visionReview']);
 
         // bot pipeline diagnostics
         Route::get('diagnostics',        [PanelApiController::class, 'diagnostics']);

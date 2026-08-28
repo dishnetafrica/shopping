@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SendCommEmail;
 use App\Models\CommEvent;
 use App\Models\CommMessage;
 use App\Models\CommProvider;
@@ -183,12 +182,15 @@ class EmailCenterController extends Controller
             return response()->json(['ok' => false, 'error' => 'only failed/cancelled can be retried'], 422);
         }
 
-        $m->status = CommMessage::ST_PENDING;
+        // Re-queue as RETRY with an immediate next_attempt_at; the comms sweep (CommsEmailSweep) re-sends
+        // it through the CORRECT channel dispatcher. Sending inline here made a manual retry depend on a
+        // live provider (a failed send flipped straight back to 'failed') and always dispatched the email
+        // job even for a WhatsApp row.
+        $m->status = CommMessage::ST_RETRY;
         $m->attempts = 0;
-        $m->next_attempt_at = null;
+        $m->next_attempt_at = now();
         $m->last_error = null;
         $m->save();
-        SendCommEmail::dispatch($m->id);
 
         return response()->json(['ok' => true]);
     }
@@ -521,16 +523,65 @@ class EmailCenterController extends Controller
         return match ($type) {
             'tag'                     => $val !== '' ? ['segment' => $val] : [],
             'city'                    => $val !== '' ? ['city' => $val] : [],
+            'customer_type'           => $val !== '' ? ['customer_type' => $val] : [],
             'ordered_within_days'     => (int) $val > 0 ? ['ordered_within_days' => (int) $val] : [],
             'not_ordered_within_days' => (int) $val > 0 ? ['not_ordered_within_days' => (int) $val] : [],
+            'ordered_between'         => self::rangeSeg($val, 'ordered_between'),
+            'not_ordered_between'     => self::rangeSeg($val, 'not_ordered_between'),
+            'bought_product'          => (int) $val > 0 ? ['bought_product' => (int) $val] : [],
+            'bought_category'         => $val !== '' ? ['bought_category' => $val] : [],
+            'not_bought_category'     => $val !== '' ? ['not_bought_category' => $val] : [],
             default                   => [],
         };
     }
 
-    /** v3 New-campaign form (flat fields incl. audience) → campaignSave. */
+    /** Parse "2026-06-01..2026-06-30" (or " to ") into a date-range segment. */
+    private static function rangeSeg(string $val, string $key): array
+    {
+        $parts = preg_split('/\s*(?:\.\.|\bto\b)\s*/i', $val, 2) ?: [];
+        $from  = trim($parts[0] ?? '');
+        $to    = trim($parts[1] ?? '');
+        if ($from === '' && $to === '') {
+            return [];
+        }
+
+        return [$key => ['from' => $from, 'to' => $to]];
+    }
+
+    /** Flat offer fields → the campaign's `offer` (product being promoted, for template vars). */
+    private function offerFromSimple(Request $request): array
+    {
+        $offer = [];
+        if ((int) $request->input('offer_product_id', 0) > 0) {
+            $offer['product_id'] = (int) $request->input('offer_product_id');
+        }
+        if (trim((string) $request->input('offer_category', '')) !== '') {
+            $offer['category'] = trim((string) $request->input('offer_category'));
+        }
+        if (trim((string) $request->input('offer_promo', '')) !== '') {
+            $offer['promo'] = trim((string) $request->input('offer_promo'));
+        }
+
+        return $offer;
+    }
+
+    /** v3 New-campaign form (flat fields incl. audience + offer) → campaignSave. */
     public function campaignSaveSimple(Request $request)
     {
-        $request->merge(['segment' => $this->segmentFromSimple($request)]);
+        $merge = [
+            'segment' => $this->segmentFromSimple($request),
+            'offer'   => $this->offerFromSimple($request),
+        ];
+        // The v3 flat form carries a single content field (text_body). An email campaign needs an
+        // html_body, so when the channel includes email and none was supplied, use the text as the body
+        // (the whatsapp side keeps text_body). Without this the simple form 422s on every email campaign.
+        $channel = strtolower(trim((string) $request->input('channel', 'email')));
+        if (in_array($channel, ['email', 'both'], true)
+            && trim((string) $request->input('html_body', '')) === ''
+            && trim((string) $request->input('text_body', '')) !== '') {
+            $merge['html_body'] = (string) $request->input('text_body');
+        }
+        $request->merge($merge);
 
         return $this->campaignSave($request);
     }
@@ -666,6 +717,7 @@ class EmailCenterController extends Controller
                     'finished_at' => optional($c->finished_at)->toDateTimeString(),
                     'total_estimated' => $c->total_estimated, 'enqueued_count' => $c->enqueued_count,
                     'throttle_per_minute' => $c->throttle_per_minute,
+                    'daily_send_cap' => $c->daily_send_cap,
                     'stats' => $s,
                 ];
             });
@@ -687,7 +739,9 @@ class EmailCenterController extends Controller
             'html_body'           => 'nullable|string',
             'text_body'           => 'nullable|string',
             'segment'             => 'nullable|array',
+            'offer'               => 'nullable|array',
             'throttle_per_minute' => 'nullable|integer|min:1|max:600',
+            'daily_send_cap'      => 'nullable|integer|min:0|max:100000',
         ]);
 
         if (! empty($data['id'])) {
@@ -716,14 +770,20 @@ class EmailCenterController extends Controller
         }
 
         $seg = array_intersect_key((array) ($data['segment'] ?? []),
-            array_flip(['segment', 'city', 'ordered_within_days', 'not_ordered_within_days']));
+            array_flip(['segment', 'city', 'customer_type', 'ordered_within_days', 'not_ordered_within_days',
+                'ordered_between', 'not_ordered_between', 'bought_product', 'bought_category', 'not_bought_category']));
+        $offer = array_intersect_key((array) ($data['offer'] ?? []),
+            array_flip(['product_id', 'product_ids', 'category', 'promo', 'link']));
 
         $c->fill([
             'name' => $data['name'], 'channel' => $data['channel'],
             'template_key' => $tplKey, 'subject' => $data['subject'] ?? null,
             'html_body' => $data['html_body'] ?? null, 'text_body' => $data['text_body'] ?? null,
             'segment' => $seg ?: null,
+            'offer' => $offer ?: null,
             'throttle_per_minute' => (int) ($data['throttle_per_minute'] ?? 60),
+            // 0 / null → no per-campaign daily limit (only the tenant-wide cap applies).
+            'daily_send_cap' => (int) ($data['daily_send_cap'] ?? 0) > 0 ? (int) $data['daily_send_cap'] : null,
         ]);
         $c->tenant_id = $t->id;
         $c->save();
@@ -737,11 +797,53 @@ class EmailCenterController extends Controller
         if (! $t) return response()->json(['ok' => false], 401);
 
         $seg = array_intersect_key((array) $request->input('segment', []),
-            array_flip(['segment', 'city', 'ordered_within_days', 'not_ordered_within_days']));
+            array_flip(['segment', 'city', 'customer_type', 'ordered_within_days', 'not_ordered_within_days',
+                'ordered_between', 'not_ordered_between', 'bought_product', 'bought_category', 'not_bought_category']));
         $ch  = (string) $request->input('channel', 'email');
         if (! in_array($ch, \App\Models\CommCampaign::CHANNELS, true)) $ch = 'email';
 
-        return response()->json(['ok' => true, 'estimate' => $svc->estimate($t, $seg, $ch)]);
+        $est = $svc->estimate($t, $seg, $ch);
+
+        // Weekly-plan maths: how many days at the chosen per-day pace, and the per-day breakdown.
+        $perDay   = (int) $request->input('daily_send_cap', 0);
+        $audience = $ch === 'both'
+            ? max((int) ($est['email'] ?? 0), (int) ($est['whatsapp'] ?? 0))
+            : (int) ($est[$ch] ?? 0);
+        $est['per_day']   = $perDay > 0 ? $perDay : null;
+        $est['days']      = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::days($audience, $perDay) : 1;
+        $est['breakdown'] = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::breakdown($audience, $perDay) : [];
+
+        return response()->json(['ok' => true, 'estimate' => $est]);
+    }
+
+    /**
+     * Dry-run preview of a saved campaign: the eligibility funnel + a rendered example, sending nothing.
+     * Uses the same CampaignSafetyGuard as the real send (via CampaignPreview), so it can't mislead.
+     */
+    public function campaignPreview(Request $request, int $id)
+    {
+        if ($resp = $this->ownerGate($request)) return $resp;
+        $c = $this->campaignFor($request, $id);
+        if ($c instanceof \Illuminate\Http\JsonResponse) return $c;
+
+        $t = $this->tenant($request);
+        $p = \App\Services\Comms\Marketing\CampaignPreview::for($t, $c);
+
+        $msg = sprintf(
+            "Audience: %s\nMatched from available order data: %s\nOpted-in: %s\nSuppressed: %s · Frequency-held: %s\n".
+            "Daily capacity: %s of %s left today\nEligible now: %s%s\n\nExample:\n%s\n\n%s",
+            $p['audience_def'],
+            number_format($p['total_matching']),
+            number_format($p['opted_in']),
+            number_format($p['suppressed']), number_format($p['frequency_capped']),
+            number_format($p['daily_remaining']), number_format($p['daily_limit']),
+            number_format($p['eligible_now']),
+            $p['sampled'] ? ' (sampled from first '.number_format($p['sample_cap']).')' : '',
+            $p['example'],
+            $p['data_caveat']
+        );
+
+        return response()->json(['ok' => true, 'message' => $msg, 'preview' => $p]);
     }
 
     protected function campaignFor(Request $request, int $id): \App\Models\CommCampaign|\Illuminate\Http\JsonResponse

@@ -1,0 +1,32 @@
+# ShopBot Vision edge — PULL-based. The box NEVER builds; CI publishes the multi-arch image and the box
+# pulls a PINNED version. This is the reference compose; bootstrap.sh writes an equivalent into
+# /opt/shopbot-vision at install time.
+#
+#   export SHOPBOT_EDGE_IMAGE=<registry>/shopbot-vision:edge-v0.1.0
+#   docker compose pull && docker compose up -d
+#
+# Config comes from ../.env (env_file only — NO `environment:` override block, which would silently
+# clobber .env). No `:latest`: SHOPBOT_EDGE_IMAGE must name an explicit version.
+
+services:
+  vision-api:
+    image: ${SHOPBOT_EDGE_IMAGE:?set SHOPBOT_EDGE_IMAGE to a pinned image, e.g. registry/shopbot-vision:edge-v0.1.0}
+    container_name: shopbot-vision-api
+    restart: unless-stopped
+    network_mode: host          # ONVIF WS-Discovery multicast + camera LAN
+    env_file: ../.env
+    volumes:
+      - ../data:/data
+
+  vision-door:
+    image: ${SHOPBOT_EDGE_IMAGE}
+    container_name: shopbot-vision-door
+    depends_on: [vision-api]
+    restart: unless-stopped
+    network_mode: host
+    env_file: ../.env
+    volumes:
+      - ../data:/data
+    # Default = plumbing selftest (emits one synthetic stock.move). Swap to the real door once a camera
+    # + detector are configured:  --rtsp rtsp://… --detector module:fn --line ax,ay,bx,by
+    command: ["python", "-m", "app.movement.run_door", "--selftest", "--store", "${STORE_ID:-dev}", "--zone", "D->EXIT"]

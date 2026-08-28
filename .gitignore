@@ -1,3 +1,9 @@
-# Python bytecode caches (build artifacts from the storefront generator / bench scripts)
+# Python bytecode / caches (vision service + bench harness)
 __pycache__/
 *.py[cod]
+*$py.class
+.pytest_cache/
+
+# Benchmark outputs (generated reports)
+/out/
+bench/out/

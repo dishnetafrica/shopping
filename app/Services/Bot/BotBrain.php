@@ -315,7 +315,7 @@ class BotBrain
         // Try the LLM first; fall back to keywords.
         $action = $this->nlu->parse($tenant, $convo, $text);
         if ($action) {
-            $reply = $this->execute($tenant, $convo, $action['intent'], $action['items'] ?? [], $action['note'] ?? '');
+            $reply = $this->execute($tenant, $convo, $action['intent'], $action['items'] ?? [], $action['note'] ?? '', $text);
             return $this->maybeAskModifier($tenant, $convo) ?? $reply;
         }
         $reply = $this->keywordRespond($tenant, $convo, $text);
@@ -397,7 +397,7 @@ class BotBrain
              . "\n\nNeed anything else? Tell me a product or say *menu*.";
     }
 
-    protected function execute(Tenant $tenant, Conversation $convo, string $intent, array $items, string $note = ''): string
+    protected function execute(Tenant $tenant, Conversation $convo, string $intent, array $items, string $note = '', string $origText = ''): string
     {
         $cart = is_array($convo->cart) ? $convo->cart : [];
 
@@ -464,17 +464,43 @@ class BotBrain
                 return $msg.($this->cartSummary($tenant, $cart) ?: "Your basket is now empty.");
 
             case 'add':
-                $added = []; $missed = [];
+                $added = []; $missed = []; $sizeAsk = [];
                 foreach ($items as $it) {
                     $p = $this->search->find($it['query'])->first();
                     if (! $p) { $missed[] = $it['query']; continue; }
-                    $cart = $this->addResolvedLine($tenant, $cart, $p, $it, $added);
+                    // Phase-0 safety guard on the LLM path: an OpenAI extraction can fold a weight/volume
+                    // size into qty ("250g" -> qty 250). Whenever a size is in play, DISTRUST the model's
+                    // qty and let UnitGuard decide against the full product model. Only a size-free item
+                    // may use the model's count as the quantity.
+                    $nluQty = max(1, (int) ($it['qty'] ?? 1));
+                    $size   = \App\Services\Bot\UnitGuard::sizeForItem((string) ($it['query'] ?? ''), $nluQty, $origText);
+                    if ($size === null) {
+                        $cart = $this->addResolvedLine($tenant, $cart, $p, ['qty' => $nluQty], $added);
+                        continue;
+                    }
+                    $decision = \App\Services\Bot\UnitGuard::decide([
+                        'name'           => (string) $p->name,
+                        'sold_by_weight' => ! empty($p->sold_by_weight),
+                        'size'           => $size,
+                        'count'          => null,
+                    ]);
+                    if ($decision['mode'] === 'weight' && $this->weightPriceFor($p, (int) $decision['grams'])) {
+                        $cart = $this->addResolvedLine($tenant, $cart, $p, ['weight_grams' => (int) $decision['grams']], $added);
+                    } elseif ($decision['mode'] === 'count') {
+                        $cart = $this->addResolvedLine($tenant, $cart, $p, ['qty' => (int) $decision['qty']], $added);
+                    } else {
+                        // A size we can't resolve into a whole unit or a priced weight — ask, never guess.
+                        $sizeAsk[] = trim($p->name . ' (' . $size . ')');
+                    }
                 }
                 $convo->cart = $cart; $convo->save();
-                if (! $added && $missed) {
+                if (! $added && ! $sizeAsk && $missed) {
                     return "I couldn't find ".implode(', ', $missed).". Try another name, or say *cart* / *checkout*.";
                 }
-                $head = "Added *".implode('*, *', $added)."*.";
+                $head = $added ? ("Added *".implode('*, *', $added)."*.") : '';
+                if ($sizeAsk) {
+                    $head .= ($head ? "\n" : '') . "For *".implode('*, *', $sizeAsk)."* — how much would you like? Tell me a size (e.g. *250g*, *1kg*) or a number of packs.";
+                }
                 if ($missed) $head .= "\n(I couldn't find: ".implode(', ', $missed).".)";
                 return $head."\n\n".$this->cartSummary($tenant, $cart)."\n\nAdd more, or say *checkout*.";
 
@@ -2591,9 +2617,17 @@ class BotBrain
                 'name'         => (string) $p->name,
                 'category'     => (string) ($p->category ?? ''),
                 'keywords'     => (string) ($p->keywords ?? ''),
+                // Model/part/SKU codes so the matcher resolves "8389E"/"A9F74101" to the exact item
+                // even when the code isn't a word in the product name.
+                'sku'          => (string) ($p->sku ?? ''),
+                'oem_number'   => (string) ($p->oem_number ?? ''),
                 'product_type' => (string) ($p->product_type ?? ''),   // drives matcher +250 tier
                 'price'        => Pricing::net($tenant, (float) $p->price),
                 'stock'        => $p->stock ?? 1,
+                // Phase-0 unit safety: the engine needs to know a product is weight-priced so a size
+                // ("250g") is asked back rather than mistaken for a quantity. Pricing stays on the
+                // full-model path (this array carries no pricing refs).
+                'sold_by_weight' => (bool) ($p->sold_by_weight ?? false),
                 // v4.54 — hidden rows STAY in this array on purpose. Searching by name has to find
                 // them ("do you have two apple?" is a customer asking, and asking gets answered);
                 // it is BROWSING that must not list them, so the flag rides along and the browse
@@ -2733,7 +2767,8 @@ class BotBrain
         foreach ($cart as $l) {
             $sub = $l['price'] * $l['qty']; $total += $sub; $i++;
             if (! empty($l['weight_grams'])) {
-                $lines[] = "{$i}. " . $this->lineLabel($l) . " (" . \App\Services\Bot\Pricing\WeightParser::label((int) $l['weight_grams']) . ") — " . Pricing::money($tenant, $sub);
+                // lineLabel() already carries the weight, e.g. "Fafda (250g)"; no "x1" for a weight line.
+                $lines[] = "{$i}. " . $this->lineLabel($l) . " — " . Pricing::money($tenant, $sub);
             } else {
                 $lines[] = "{$i}. " . $this->lineLabel($l) . " x{$l['qty']} — " . Pricing::money($tenant, $sub);
             }
@@ -2746,14 +2781,14 @@ class BotBrain
     }
 
     /** Display label for a cart line, with any chosen accompaniment/add-ons folded in ("Butter Chicken + Naan"). */
+    /**
+     * Canonical line label — name + modifiers + weight — via the shared LineLabel formatter, so the
+     * chat basket, the quotation and the order line can never disagree (Phase-0 Fix #2). The weight
+     * suffix now lives here, so callers must NOT append it again.
+     */
     protected function lineLabel(array $l): string
     {
-        $name = (string) ($l['name'] ?? '');
-        if (! empty($l['modifiers']) && is_array($l['modifiers'])) {
-            $mods = array_values(array_filter(array_map(fn ($m) => trim((string) ($m['name'] ?? '')), $l['modifiers'])));
-            if ($mods) $name .= ' + ' . implode(', ', $mods);
-        }
-        return $name;
+        return \App\Services\Bot\Pricing\LineLabel::make($l);
     }
 
     /**
@@ -2779,7 +2814,8 @@ class BotBrain
             $price = (float) ($l['price'] ?? 0);
             $lines[] = [
                 'matched' => true,
-                'name'    => (string) ($l['name'] ?? $this->lineLabel($l)),
+                // Canonical label so the quotation shows the weight/variant the chat showed (Fix #2).
+                'name'    => $this->lineLabel($l),
                 'qty'     => $qty,
                 'price'   => $price,
                 'sum'     => $price * $qty,
@@ -2941,7 +2977,8 @@ class BotBrain
                     : [];
                 OrderItem::create([
                     'order_id' => $order->id, 'product_id' => $l['product_id'],
-                    'name' => $l['name'] . ($mods ? ' + ' . implode(', ', $mods) : ''),
+                    // Canonical label carries modifiers AND weight — same string as chat/quotation (Fix #2).
+                    'name' => $this->lineLabel($l),
                     'price' => $l['price'], 'qty' => $l['qty'],
                     'notes' => trim((string) ($l['note'] ?? '')) ?: null,
                     'modifiers' => $mods ? $l['modifiers'] : null,

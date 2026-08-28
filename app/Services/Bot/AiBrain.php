@@ -109,6 +109,7 @@ class AiBrain
             : '';
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant, $channel)
             .\App\Services\Relationship\ProfileContext::block($tenant, $from)
+            .$this->outstandingQuoteBlock($tenant, $from)
             .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')
             .$photoBlock]], $prior, [$current]);
 
@@ -211,6 +212,11 @@ class AiBrain
             $reply = trim(substr($reply, 0, $srp));   // truncated block — never leaks
         }
 
+        // 3a-quote. Customer ACCEPTED their outstanding quotation — the model emits a hidden
+        //     <<ACCEPT_QUOTE>> line. Convert that quote into a real order through the one authoritative
+        //     converter (idempotent), instead of the bot re-asking what items they want.
+        $reply = $this->acceptQuote($tenant, $from, $reply);
+
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
@@ -280,6 +286,15 @@ class AiBrain
                 if (empty($imgs) && self::promisedPhoto((string) $reply)) {
                     $imgs = $responder->imagesFor($tenant, $convo, (string) $reply);
                 }
+                // v4.73 — the reply LISTED several products ("1. Foil… 2. Cling…") and the customer
+                // asked for pictures. imagesFor() only serves ONE confident product, so a list sent
+                // nothing and we apologised. Resolve each listed product and send the photos it has.
+                if (empty($imgs) && $this->photoRequested($text)) {
+                    foreach (self::productNamesFromReply((string) $reply) as $nm) {
+                        foreach ($responder->imagesFor($tenant, $convo, $nm) as $im) { $imgs[] = $im; }
+                        if (count($imgs) >= 3) break;
+                    }
+                }
                 $sent = 0;
                 foreach (array_slice($imgs, 0, 3) as $im) {
                     if (empty($im['media'])) continue;
@@ -306,7 +321,70 @@ class AiBrain
                 Log::warning('AiBrain product image failed: ' . $e->getMessage());
             }
         }
+
+        // Hand off to the website: when the customer is browsing a category, send ONE link to that
+        // category on our storefront (filter pre-applied). Deterministic — the URL is built from the
+        // real /c/{slug} route, never invented by the model.
+        try {
+            $this->maybeSendCategoryLink($tenant, $from, $text, (string) $reply, $gateway);
+        } catch (\Throwable $e) {
+            Log::warning('AiBrain category link failed: ' . $e->getMessage());
+        }
+
         return true;
+    }
+
+    /**
+     * Send a "see the full category on our site" link when the customer is browsing. Guarded to a
+     * browse/pictures intent, to categories that actually have >1 product and are named in the
+     * message or our reply, and to once per category per customer per 30 min.
+     */
+    private function maybeSendCategoryLink(Tenant $tenant, string $from, string $text, string $reply, $gateway): void
+    {
+        if (! (bool) $tenant->setting('send_category_links', true)) return;
+
+        $t = mb_strtolower($text);
+        $browse = $this->photoRequested($text)
+            || (bool) preg_match('/\b(show|see|do you have|got any|any more|list|range|catalogue|catalog|browse|options|what.{0,6}have|price list)\b/u', $t);
+        if (! $browse) return;
+
+        // Category → product count (cached), live active products only.
+        $counts = Cache::remember("catcounts:{$tenant->id}", 300, function () use ($tenant) {
+            $out = [];
+            foreach (Product::where('tenant_id', $tenant->id)->where('active', true)
+                        ->whereNotNull('category')->where('category', '<>', '')->get(['category']) as $p) {
+                $c = trim((string) $p->category);
+                if ($c !== '') $out[$c] = ($out[$c] ?? 0) + 1;
+            }
+            return $out;
+        });
+        if (! $counts) return;
+
+        $pick = self::pickCategoryLink($counts, $text . ' ' . $reply);
+        if ($pick === null) return;
+
+        $url = $tenant->publicUrl('/c/' . \Illuminate\Support\Str::slug($pick['category']));
+        if (! Cache::add('catlink:' . $tenant->id . ':' . $from . ':' . md5($url), 1, 1800)) return;
+
+        $msg = 'See all ' . $pick['count'] . ' ' . $pick['category'] . ' products 👉 ' . $url;
+        $gateway->sendText($tenant->whatsapp_instance, $from, $msg);
+        MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $msg, null, null, ['kind' => 'category_link']);
+    }
+
+    /**
+     * Pick the category to link: the one named in the haystack (customer text + our reply) with the
+     * most products, requiring >1 product. Pure/testable. @return array{category:string,count:int}|null
+     */
+    public static function pickCategoryLink(array $counts, string $haystack): ?array
+    {
+        $hay = mb_strtolower($haystack);
+        $best = null; $bestN = 0;
+        foreach ($counts as $cat => $n) {
+            $c = mb_strtolower(trim((string) $cat));
+            if ($c === '' || (int) $n <= 1) continue;
+            if (str_contains($hay, $c) && (int) $n > $bestN) { $best = (string) $cat; $bestN = (int) $n; }
+        }
+        return $best !== null ? ['category' => $best, 'count' => $bestN] : null;
     }
 
     /**
@@ -350,6 +428,25 @@ class AiBrain
     {
         return (bool) preg_match('/(sending|send you|share|attaching|attached|here is|here\'s).{0,24}(photo|picture|image|pic)\b/iu', $reply)
             || str_contains($reply, "\u{1F4F7}");
+    }
+
+    /**
+     * Product names the reply LISTED — the "1. Foil…  2. Cling…" a photo request produces. Takes each
+     * numbered/bulleted line and keeps the name up to the first "📷", "(", or " - description" tail, so
+     * each can be looked up for its photo. Returns up to 5, deduped.
+     *
+     * @return array<int,string>
+     */
+    public static function productNamesFromReply(string $reply): array
+    {
+        $out = [];
+        foreach (preg_split('/\R+/u', $reply) as $line) {
+            if (! preg_match('/^\s*(?:\d+[\.\)]|[-*•])\s*(.+)$/u', (string) $line, $m)) continue;
+            $name = (string) preg_split('/\s*(?:\x{1F4F7}|\x{1F5BC}|\(|[-\x{2013}\x{2014}]\s)/u', trim($m[1]))[0];
+            $name = trim(str_replace('*', '', $name));
+            if (mb_strlen($name) >= 4) $out[] = $name;
+        }
+        return array_slice(array_values(array_unique($out)), 0, 5);
     }
 
     /** Customer is asking for a product photo/picture (in several languages). */
@@ -776,7 +873,123 @@ class AiBrain
      * saved so it appears under Quotations in v3 for staff to convert), instead of creating a sales
      * order. Reuses the same OrderCalculator-priced $quote and the QuotationService the AI bot already
      * uses for price requests — no new quoting logic. Best-effort send; the quotation is always saved.
-     */    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean, string $channel = 'whatsapp', ?WhatsAppGateway $gateway = null): string
+     */
+    /**
+     * Ground the model in the customer's most recent OPEN quotation, so a reply like "please deliver
+     * today" / "confirm" is understood as accepting THAT quote instead of starting a new order and
+     * asking "which items?". Reuses the Quotation model, its isOpen() status set, and the digits-only
+     * phone format already used on the write side — no new quote logic. Best-effort: never breaks the
+     * brain, returns '' when there is no open quote.
+     */
+    private function outstandingQuoteBlock(Tenant $tenant, string $from): string
+    {
+        try {
+            $digits = preg_replace('/[^0-9]/', '', $from);
+            if ($digits === '') return '';
+
+            $q = \App\Models\Quotation::where('tenant_id', $tenant->id)
+                ->where('customer_phone', $digits)
+                ->whereNotIn('status', ['converted', 'declined', 'expired', 'archived'])
+                ->with('items')
+                ->orderByDesc('id')->first();
+            if (! $q) return '';
+
+            $cur   = strtoupper((string) ($q->currency ?: 'USD'));
+            $total = number_format((float) $q->total, \App\Services\Pricing::decimalsForCurrency($cur));
+            $items = [];
+            foreach ($q->items as $it) {
+                $items[] = '• ' . trim((string) $it->name) . ' ×' . (int) $it->qty;
+            }
+            $itemsTxt = $items ? implode('; ', $items) : '(the items already listed on the quotation)';
+            $valid    = $q->valid_until ? (' valid until ' . $q->valid_until->toDateString()) : '';
+
+            $acceptLine = (bool) $tenant->setting('bot_quote_autoconvert', true)
+                ? ' When the customer has CLEARLY accepted this quotation — confirming, approving, asking to proceed, or asking to deliver it (e.g. "please deliver today", "confirm", "yes go ahead", "ok send it") — append the hidden line <<ACCEPT_QUOTE>> as the VERY LAST thing in your reply. That line turns THIS quotation into a confirmed order and notifies the team; do NOT create a new quotation for it. Emit it ONLY on clear acceptance, and only once. If they are only asking a question about the quote, do not emit it.'
+                : '';
+
+            return "\n\nOUTSTANDING QUOTATION FOR THIS CUSTOMER: {$q->quote_no} — {$cur} {$total}{$valid}. Items: {$itemsTxt}. "
+                . 'If the customer replies about delivery, confirming, accepting, or paying (e.g. "please deliver today", "confirm", "yes", "ok send it"), THIS is the quotation they mean — do NOT ask what items they want. '
+                . 'Acknowledge it by its number, treat it as confirmed, and ask only for anything still missing (such as their exact delivery area). Only start a fresh order if they clearly ask for different or additional items.'
+                . $acceptLine;
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    /**
+     * The model emitted a hidden <<ACCEPT_QUOTE>> line — the customer accepted their outstanding
+     * quotation. Convert that quote into a real order through the ONE authoritative converter
+     * (QuotationConvertService, the same path the panel uses), never a second writer. Idempotent:
+     * the converter no-ops if the quote already has an order, and a short cache lock stops a message
+     * burst from racing. Gated by bot_quote_autoconvert (default on); when off, the acceptance is
+     * flagged to the owner to convert by hand instead of created automatically. Never breaks the chat.
+     */
+    private function acceptQuote(Tenant $tenant, string $from, string $reply): string
+    {
+        if (! preg_match('/<<\s*ACCEPT_QUOTE\s*(\{.*?\})?\s*>>/is', $reply, $m)) {
+            return $reply;
+        }
+        $stripped = trim((string) preg_replace('/<<\s*ACCEPT_QUOTE\s*(\{.*?\})?\s*>>/is', '', $reply));
+
+        try {
+            $digits = preg_replace('/[^0-9]/', '', $from);
+            if ($digits === '') return $stripped;
+
+            $wantNo = '';
+            if (! empty($m[1])) { $j = json_decode($m[1], true); $wantNo = trim((string) ($j['quote_no'] ?? '')); }
+
+            $qy = \App\Models\Quotation::where('tenant_id', $tenant->id)
+                ->where('customer_phone', $digits)
+                ->whereNotIn('status', ['converted', 'declined', 'expired', 'archived']);
+            if ($wantNo !== '') $qy->where('quote_no', $wantNo);
+            $q = $qy->with('items')->orderByDesc('id')->first();
+
+            if (! $q) {
+                \App\Support\BotTrace::log($tenant->id, 'accept_quote_none', $from, $wantNo ?: '(latest)', null);
+
+                return $stripped;
+            }
+
+            // Kill-switch: when auto-convert is off, don't create the order — flag the acceptance so
+            // a human converts it in Quotations. Still far better than the bot re-asking for items.
+            if (! (bool) $tenant->setting('bot_quote_autoconvert', true)) {
+                try { \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{2705} {$from} accepted quotation {$q->quote_no} — please convert it to an order in Quotations."); } catch (\Throwable $e) { }
+                \App\Support\BotTrace::log($tenant->id, 'accept_quote_manual', $from, (string) $q->quote_no, null);
+
+                return $stripped;
+            }
+
+            // One conversion per quote even across a burst of jobs.
+            if (! Cache::add("acceptquote:{$tenant->id}:{$q->id}", 1, 120)) {
+                return $stripped;
+            }
+
+            $res     = app(\App\Services\Sales\QuotationConvertService::class)->convert($tenant, $q);
+            $order   = $res['order'] ?? null;
+            $orderNo = $order ? (string) $order->order_no : '';
+            \App\Support\BotTrace::log($tenant->id, ! empty($res['already']) ? 'accept_quote_already' : 'accept_quote',
+                $from, $q->quote_no . ($orderNo !== '' ? " -> {$orderNo}" : ''), null);
+
+            // The converter dispatches NotifyOrderConfirmation (formal order details) + a staff alert,
+            // so we only ensure the customer-facing text isn't empty; the model's own line usually is
+            // the friendly acknowledgement.
+            if ($stripped === '') {
+                $stripped = $orderNo !== ''
+                    ? "Done! I've confirmed your order *{$orderNo}* from quotation {$q->quote_no}. Our team will arrange delivery. \u{1F64F}"
+                    : "Done! I've confirmed your order from quotation {$q->quote_no}. Our team will arrange delivery. \u{1F64F}";
+            }
+
+            return $stripped;
+        } catch (\Throwable $e) {
+            // no_items or any failure — never break the chat; put it in front of a human.
+            \App\Support\BotTrace::log($tenant->id, 'accept_quote_failed', $from, mb_substr($e->getMessage(), 0, 120), null);
+            try { \App\Jobs\NotifyOwner::dispatch($tenant->id, "\u{26A0}\u{FE0F} {$from} accepted a quotation but auto-conversion failed ({$e->getMessage()}). Please convert it manually in Quotations."); } catch (\Throwable $e2) { }
+
+            return $stripped;
+        }
+    }
+
+    private function captureOrderAsQuote(Tenant $tenant, Conversation $convo, string $from, array $quote, string $itemsText, string $delivery, string $clean, string $channel = 'whatsapp', ?WhatsAppGateway $gateway = null): string
     {
         $svc = app(\App\Services\Bot\QuotationService::class);
         $cur = (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX'));
@@ -1346,8 +1559,45 @@ class AiBrain
             }
 
             $convoRow = Conversation::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)->first() ?: $convo;
-            $quote = app(OrderCalculator::class)->quote($tenant, $items, $from);
+            $quote = app(OrderCalculator::class)->quote($tenant, $items, $from, true);   // skipOutOfStock: never quote what we can't supply
             app(PartRequestService::class)->captureUnmatched($tenant, $from, $quote, mb_substr($text, 0, 300));   // v4.9.2
+
+            // Out-of-stock items were left off the quotation — tell the customer plainly rather than
+            // pricing something we don't have (which reads as a firm offer we can't honour).
+            $oosNames = array_values(array_unique(array_filter(array_map(
+                fn ($l) => empty($l['out_of_stock']) ? '' : (string) ($l['name'] ?? ''),
+                $quote['lines']
+            ))));
+            if ($oosNames) {
+                $isOne = count($oosNames) === 1;
+                $clean = trim((string) $clean) . "\n\n(Note: " . implode(', ', $oosNames) . ' '
+                    . ($isOne ? 'is' : 'are') . ' currently out of stock, so ' . ($isOne ? "it's" : "they're")
+                    . ' not on this quotation. I can let you know as soon as we restock.)';
+            }
+
+            // Ambiguity guard: a generic term (e.g. "aluminium foil") matched several SKUs at very
+            // different prices with no distinguishing word. Never guess/quote the wrong one — ask which
+            // product, listing the real options and our prices. (Mirrors the invented-quantity block.)
+            $ambLines = array_values(array_filter($quote['lines'], fn ($l) => ! empty($l['ambiguous'])));
+            if ($ambLines) {
+                $cur = strtoupper((string) ($tenant->setting('currency', 'UGX') ?: 'UGX'));
+                $dec = \App\Services\Pricing::decimalsForCurrency($cur);
+                $first = $ambLines[0];
+                $opts = array_map(
+                    fn ($c) => '• ' . (string) ($c['name'] ?? '') . ' — ' . $cur . ' ' . number_format((float) ($c['price'] ?? 0), $dec),
+                    array_slice((array) ($first['candidates'] ?? []), 0, 5)
+                );
+                $ask = ($clean !== '' ? rtrim((string) $clean) . "\n\n" : '')
+                    . 'We stock a few options for "' . (string) $first['name'] . '" at different prices — which one would you like?' . "\n"
+                    . implode("\n", $opts);
+                \App\Support\QuotationPipeline::stage($tenant->id, $from, 'blocked_ambiguous', false, '', 'query matched multiple SKUs with a wide price spread — asked which one');
+                try {
+                    $gateway->sendText($tenant->whatsapp_instance, $from, $ask);
+                    MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $ask, null, null, ['via' => 'ai', 'kind' => 'quote_needs_pick']);
+                } catch (\Throwable $e2) { /* still block the wrong quote below */ }
+
+                return ['reply' => '', 'sent' => true];
+            }
 
             // Guard: only send if at least one line actually matched a priced product. This is what
             // stops the old "wrong items / random products" quotations from going out.
@@ -1786,6 +2036,7 @@ class AiBrain
         $p .= "- PHOTOS: if the customer sends a PHOTO of a product, look carefully and READ any visible model / part number / rating printed on it (e.g. \"A9F74101\", \"LC1D32P7\", \"63A\", \"3P\") and match that to the catalogue — this is the reliable way to identify the exact item, so a customer can photograph a failed/old part and get the same one. If no number or label is legible, identify the product TYPE from the image and ask a short question for the rating/size/spec you need. NEVER guess an exact model, rating or price from shape or colour alone — read it or ask. Once identified, confirm the catalogue match and offer to quote; if it isn't stocked, offer a special order.\n";
         $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
+        $p .= "- OUR PRICES ARE FIXED from the catalogue. If a customer proposes, assumes, states, or haggles their OWN price (e.g. \"30\", \"can you do 30\", \"10 cartons for 30\"), you must NEVER accept, confirm, agree to, or repeat their number as our price, and never compute a total from it. Politely restate OUR listed price for that exact product (e.g. \"Our price for that is 33 per carton\"), and if they want it in writing emit the <<QUOTE>> line so the system prices it. You have no authority to give a discount or match a customer's price.\n";
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
         $deliverFrom = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
@@ -2039,8 +2290,13 @@ class AiBrain
                 }
                 $off = ($p->hidden ?? false) ? ' [OFF-CATALOGUE: never mention or list this unless the customer names it first]' : '';
                 $spec = isset($specTxt[(int) $p->id]) ? ', specs: ' . $specTxt[(int) $p->id] : '';
+                // v4.72 — the unit_size column (e.g. a container's dimensions/capacity) was recorded but
+                // never reached the bot, so "what size is this?" had no ground truth even when the shop
+                // HAD entered it. Surface it as a size fact; the prompt still forbids inventing an absent one.
+                $sizeTxt = trim((string) ($p->unit_size ?? ''));
+                $size = $sizeTxt !== '' ? ', size: ' . $sizeTxt : '';
 
-                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
+                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
             })->all();
         });
         return implode("\n", $rows);

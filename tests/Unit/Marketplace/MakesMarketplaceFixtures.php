@@ -34,7 +34,7 @@ trait MakesMarketplaceFixtures
         );
     }
 
-    protected function result(string $name, int $ugx, string $img = 'https://ug.jumia.is/x.jpg'): MarketplaceResult
+    protected function makeResult(string $name, int $ugx, string $img = 'https://ug.jumia.is/x.jpg'): MarketplaceResult
     {
         return new MarketplaceResult($name, $ugx, 'UGX', $img, 'https://www.jumia.ug/p', 'jumia', false);
     }

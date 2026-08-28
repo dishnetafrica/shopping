@@ -110,6 +110,25 @@ final class SalesOrderListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'search') {
+            // Read-only lookup for the global command center (⌘K). No writes.
+            $q = trim((string) ($input['q'] ?? ''));
+            $digits = preg_replace('/[^0-9]/', '', $q);
+            $rows = Order::where('tenant_id', $ctx->tenantId())
+                ->when($q !== '', fn ($qq) => $qq->where(fn ($w) => $w
+                    ->where('order_no', 'ilike', '%' . $q . '%')
+                    ->orWhere('customer_name', 'ilike', '%' . $q . '%')
+                    ->when($digits !== '', fn ($d) => $d->orWhere('customer_phone', 'like', '%' . $digits . '%'))))
+                ->orderByDesc('created_at')->limit(20)->get();
+            $items = $rows->map(fn ($o) => [
+                'id' => (int) $o->id,
+                'name' => (string) ($o->order_no ?: ('Order #' . $o->id)),
+                'sub' => trim(implode(' · ', array_filter([(string) $o->customer_name, (string) $o->customer_phone, ucfirst((string) $o->status)]))),
+            ])->all();
+
+            return ['ok' => true, 'items' => $items];
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }

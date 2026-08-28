@@ -143,6 +143,22 @@ class ProcessIncomingMessage implements ShouldQueue
                 return;   // an opt-out is not routed into the ordering bot
             }
 
+            // Marketing opt-IN (SUBSCRIBE / JOIN / OPT IN) — the mirror of STOP. Records explicit consent
+            // and confirms. recordOptIn deliberately does NOT lift a prior opt-out (that stays admin-only),
+            // so an unsubscribed customer texting SUBSCRIBE is acknowledged but not silently re-enabled.
+            if ($body !== '' && \App\Services\Comms\Marketing\OptInKeywords::isOptIn($body)) {
+                \App\Services\Comms\Marketing\MarketingConsent::recordOptIn($tenant, $digits, 'inbound-optin');
+                try {
+                    $gateway->sendText($replyInst, $digits,
+                        "You're subscribed ✅ — we'll send you occasional offers and restock alerts. "
+                        . "Reply STOP any time to unsubscribe.");
+                } catch (\Throwable $e) {
+                    // A failed confirmation must not undo the opt-in — the consent stamp is already written.
+                }
+                BotTrace::log($this->tenantId, (string) $mid, $from, 'marketing_opt_in', 'inbound opt-in: ' . mb_substr($body, 0, 40));
+                return;   // handled — not routed into the ordering bot
+            }
+
             // Not a STOP — if we recently sent this number a marketing message, credit the reply.
             try {
                 \App\Services\Comms\WhatsAppStatusIngest::recordReply($this->tenantId, $digits);
@@ -219,9 +235,18 @@ class ProcessIncomingMessage implements ShouldQueue
                 'address' => trim((string) ($this->incoming['loc_address'] ?? '')) ?: null,
             ])];
         }
+        // Persist a media caption as the message body when there's no separate text —
+        // otherwise a forwarded/shared product card logs blank and the AI history (which
+        // reads `body`) loses the product the customer referenced, so a later "what's the
+        // MOQ?" has nothing to bind to. The media meta still carries kind+key for the inbox
+        // thumbnail; this only makes the customer's own caption words visible/searchable.
+        $logText = $this->incoming['text'];
+        if (trim((string) $logText) === '' && ! empty($mMeta['media']['caption'])) {
+            $logText = (string) $mMeta['media']['caption'];
+        }
         $inMsg = MessageLog::record(
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
-            'in', 'customer', $this->incoming['text'], $this->incoming['messageId'] ?: null,
+            'in', 'customer', $logText, $this->incoming['messageId'] ?: null,
             null, $mMeta
         );
 
@@ -433,7 +458,7 @@ class ProcessIncomingMessage implements ShouldQueue
                     // ad topic. Strict patterns only, so it never hijacks a real product query.
                     $st = is_array($convo->state) ? $convo->state : [];
                     if (! empty($st['ad_topic']) && (time() - (int) ($st['ad_topic_at'] ?? 0) < 1800)
-                        && (preg_match('/^\s*(what\'?s\s+the\s+)?(moq|minimum\s*order(\s*quantity)?|price|cost|rate)\s*\??\s*$/i', $q)
+                        && (preg_match('/^\s*(what(?:\'?s|\s+is)\s+the\s+)?(moq|min(?:imum)?\s*order(\s*(qty|quantity))?|price|cost|rate)\s*\??\s*$/i', $q)
                             || preg_match('/^\s*how\s+much\s*\??\s*$/i', $q)
                             || preg_match('/^\s*(is\s+it\s+|are\s+they\s+)?(available|in\s+stock)\s*\??\s*$/i', $q))) {
                         $this->incoming['text'] = 'About "' . $st['ad_topic'] . '": ' . $q;

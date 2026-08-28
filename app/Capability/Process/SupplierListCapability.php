@@ -148,6 +148,26 @@ final class SupplierListCapability implements ProcessCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
+        if ($action === 'search') {
+            // Read-only lookup for the global command center (⌘K). No writes.
+            $q = trim((string) ($input['q'] ?? ''));
+            $digits = preg_replace('/[^0-9]/', '', $q);
+            $rows = Supplier::where('tenant_id', $ctx->tenantId())
+                ->when($q !== '', fn ($qq) => $qq->where(fn ($w) => $w
+                    ->where('name', 'ilike', '%' . $q . '%')
+                    ->orWhere('business_name', 'ilike', '%' . $q . '%')
+                    ->orWhere('contact_name', 'ilike', '%' . $q . '%')
+                    ->when($digits !== '', fn ($d) => $d->orWhere('phone', 'like', '%' . $digits . '%'))))
+                ->orderBy('name')->limit(20)->get();
+            $items = $rows->map(fn ($s) => [
+                'id' => (int) $s->id,
+                'name' => (string) ($s->name ?: ('Supplier #' . $s->id)),
+                'sub' => trim(implode(' · ', array_filter([(string) $s->business_name, (string) $s->phone]))),
+            ])->all();
+
+            return ['ok' => true, 'items' => $items];
+        }
+
         return ['ok' => false, 'error' => 'unknown_action'];
     }
 }

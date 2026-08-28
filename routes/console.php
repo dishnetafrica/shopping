@@ -10,10 +10,22 @@ Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->
 Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:learn')->dailyAt('02:30')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('demand:digest')->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
+// Supplier Pay Advisor — WhatsApp the owner who to pay (overdue balances), once + weekly. Advisory only,
+// never pays. No-ops unless pay_advisor_enabled is ON and pay_advisor_notify_phone is set (preview-first).
+Schedule::command('suppliers:pay-advisor')->dailyAt('08:20')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:autosend')->dailyAt('08:15')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:stages')->dailyAt('03:15')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:attribute')->dailyAt('06:50')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:plan')->dailyAt('07:30')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
+// Phase 1 — Customer Re-engagement Engine: build the daily "who to contact today" plan (NO sending).
+// Runs after relationship:stages (03:15) so RFM health is fresh. No-ops unless engagement_enabled is ON.
+Schedule::command('reengage:plan')->dailyAt('06:20')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
+// Phase 2b — PACED sender for the daily plan. Small batches, daytime-gated inside the command.
+// No-ops unless BOTH engagement_enabled AND engagement_send_enabled are ON (the latter is OFF by default).
+Schedule::command('reengage:send-tick')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+// Phase-0 Stock & Loss — resolve PENDING vision movement events to MATCH or escalate to UNRECONCILED.
+// No-ops unless vision.reconcile.enabled is on.
+Schedule::command('vision:reconcile-sweep')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:review')->monthlyOn(1, '08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 // Weekly WhatsApp to the owner: items customers asked for that we don't stock + bot gaps (purchasing signal).
 Schedule::command('demand:weekly')->weeklyOn(1, '08:00')->timezone('Africa/Kampala')->withoutOverlapping()->onOneServer();

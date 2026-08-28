@@ -7,6 +7,8 @@ use App\Models\LedgerEntry;
 use App\Observers\LedgerEntryObserver;
 use App\Observers\OrderLedgerObserver;
 use CloudBSS\App\CashSettlementPolicy;
+use CloudBSS\App\CogsCorrectionPolicy;
+use CloudBSS\App\SaleFxCorrectionPolicy;
 use CloudBSS\App\CompositeAccountingPolicy;
 use CloudBSS\App\InterestPolicy;
 use CloudBSS\App\UgandaVatPurchasePolicy;
@@ -52,6 +54,16 @@ class LedgerServiceProvider extends ServiceProvider
                 new UgandaVatPurchasePolicy($clock, $ids),
                 new CashSettlementPolicy($clock, $ids),
                 new InterestPolicy($clock, $ids),
+                // Phase 3B: handles the 'CogsCorrected' event only (Dr 1200 Inventory / Cr 5000 COGS for
+                // the overstatement). Adds a NEW event name — never alters existing sale/purchase/payment
+                // postings. The wildcard resolver above applies it to every book, so cogs:remediate can
+                // correct any affected tenant (e.g. Family Shoppers t_17/e1). Nothing posts until a
+                // 'CogsCorrected' event is authored, i.e. only when `cogs:remediate --confirm` is run.
+                new CogsCorrectionPolicy($clock, $ids),
+                // Handles 'SaleFxCorrected' — reverses the revenue-leg overstatement (Dr 4000 / Dr 2200
+                // / Cr 1100) for orders whose sell-currency net was booked as base without conversion.
+                // New event name only; posts nothing until sales:remediate --confirm authors the event.
+                new SaleFxCorrectionPolicy($clock, $ids),
             ]);
             $resolver = new class($policy) implements AccountingPolicyResolver {
                 public function __construct(private AccountingPolicy $p) {}

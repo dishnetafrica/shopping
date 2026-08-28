@@ -967,6 +967,15 @@
             <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setSendImg" style="width:auto"> Send product photos</label>
               <div class="note">When a customer asks about an item, the bot replies with its photo and a price card. Turn off to send text only.</div>
             </div>
+            <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setWebChat" style="width:auto"> Website chat</label>
+              <div class="note">Show a chat bubble on your storefront so website visitors can chat with the shop. Turn off to hide it.</div>
+            </div>
+            <div class="mfield" style="margin-left:18px"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setWebChatAuto" style="width:auto"> &nbsp;↳ Bot answers automatically</label>
+              <div class="note">On: the bot replies to website visitors like it does on WhatsApp. Off: it just takes their message and hands it to your team.</div>
+            </div>
+            <div class="mfield" style="margin-left:18px"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setWebChatContact" style="width:auto"> &nbsp;↳ Ask for name &amp; number first</label>
+              <div class="note">On: a visitor gives a name/phone before chatting (so you can follow up). Off: chat opens straight away.</div>
+            </div>
             <div class="mfield"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="setComboRec" style="width:auto"> Suggest items often bought together</label>
               <div class="note">Adds a &ldquo;Goes well with&hellip;&rdquo; line and an &ldquo;Often bought together&rdquo; follow-up, learned automatically from past orders. Turn off to stop all suggestions.</div>
             </div>
@@ -4748,6 +4757,9 @@ function applySettings(s){
   if(s.inventoryMode==='shared'||s.inventoryMode==='branch')INVENTORY_MODE=s.inventoryMode;
   if(s.comboRecommendations!=null)SETTINGS.comboRec=!!s.comboRecommendations;
   if(s.sendProductImages!=null)SETTINGS.sendImg=!!s.sendProductImages;
+  if(s.webChat!=null)SETTINGS.webChat=!!s.webChat;
+  if(s.webChatAuto!=null)SETTINGS.webChatAuto=!!s.webChatAuto;
+  if(s.webChatContact!=null)SETTINGS.webChatContact=!!s.webChatContact;
   if(s.bot_mode!=null)SETTINGS.botMode=s.bot_mode;
   if(s.features&&typeof s.features==='object'){FEATURES=s.features;applyFeatureGates();}
   applyStoreIdentity();renderBotSwitch();
@@ -4797,6 +4809,9 @@ function settingsInit(){
   if($('setShowCur'))$('setShowCur').checked=SHOW_SWITCHER;
   if($('setComboRec')){$('setComboRec').checked=SETTINGS.comboRec!==false;$('setComboRec').onchange=function(){botToggle('combo_recommendations',this.checked,'Item suggestions');};}
   if($('setSendImg')){$('setSendImg').checked=SETTINGS.sendImg!==false;$('setSendImg').onchange=function(){botToggle('send_product_images',this.checked,'Product photos');};}
+  if($('setWebChat')){$('setWebChat').checked=!!SETTINGS.webChat;$('setWebChat').onchange=function(){botToggle('web_chat',this.checked,'Website chat');};}
+  if($('setWebChatAuto')){$('setWebChatAuto').checked=SETTINGS.webChatAuto!==false;$('setWebChatAuto').onchange=function(){botToggle('web_chat_mode',this.checked,'Website chat auto-reply');};}
+  if($('setWebChatContact')){$('setWebChatContact').checked=SETTINGS.webChatContact!==false;$('setWebChatContact').onchange=function(){botToggle('web_chat_contact',this.checked,'Ask contact first');};}
   if($('setReengage')){var RE=SETTINGS.reengage||{};
     $('setReengage').checked=!!RE.enabled;
     $('setReengage').onchange=function(){botToggle('reengage_followup',this.checked,'Lead follow-up');};

@@ -6,22 +6,27 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
   jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping',
-  tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence' };
-const GROUPS = [ ['Overview',['setup','briefing','worklist','guide']],
-  ['Sales',['pos','advisor','customers','growth','discovery','visits','leads','demand','tenders','followups','salesOrders','scheduled','quotations','invoices','payments','collections']],
-  ['Messaging',['chats','communication','diagnostics']],
-  ['Inventory',['products','demand','suggestions','categories','purchase.process','suppliers','consignments']],
-  ['Procurement',['procurement.hub','demand.plans','juba.stock']],
-  ['Operations',['jobs','maintenance','claims','tasks','warehouse','dispatch','transport']],
-  ['Finance',['finance','pnl','books','cashbook','evidence','partners']],
-  ['Marketing',['ai.campaign','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery']],
-  ['Settings',['settings','team','modules','billing']] ];
+  tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence', engagement:'Customer Engagement', 'vision.review':'Stock & Loss' };
+// Navigation IA (2026-08) — grouped around the operator's question in the moment (Am I selling? buying?
+// counting stock? handling money?), each screen under exactly one group. Group HEADERS live here; item
+// LABELS live in LABELS above; has() gates by key regardless of group, so moving a key between groups
+// never changes what a role can see. Renames/order only — no routes, permissions or keys change.
+const GROUPS = [ ['Home',['briefing','worklist','setup','guide']],
+  ['Sell',['pos','salesOrders','quotations','invoices','payments','collections','advisor']],
+  ['Customers',['customers','leads','followups','growth','discovery','visits','demand','tenders','evidence']],
+  ['Buy',['purchase.process','suppliers','procurement.hub','demand.plans','juba.stock']],
+  ['Stock',['products','categories','suggestions','warehouse','consignments','vision.review']],
+  ['Money',['finance','cashbook','partners']],
+  ['Communication',['chats','communication','campaigns','engagement','ai.campaign','ads','diagnostics']],
+  ['Operations',['jobs','maintenance','claims','tasks','dispatch','transport','scheduled']],
+  ['Reports',['pnl','books','storefront.insights']],
+  ['Settings',['settings','team','modules','billing','storefront.collections','storefront.kits','storefront.delivery']] ];
 // Which nav key reads which count from the catalog's counts map.
 const NAVCOUNT = { growth:'growth', demand:'demand', discovery:'discovery', visits:'visits', suggestions:'suggestions', followups:'followups', diagnostics:'diagnostics', chats:'chats', communication:'communication', consignments:'consignments', scheduled:'scheduled', customers:'customers', salesOrders:'salesOrder', quotations:'quotations', invoices:'invoice', payments:'payment', products:'product', categories:'categories', suppliers:'supplier', 'purchase.process':'purchase.process' };
 // DOCUMENTATION ONLY — read by nothing. What actually gates a menu item is has() below,
 // via the permission keys the server sends. Left here as a list of what has been built,
 // and labelled because four test contracts were written against it as though it were a gate.
-const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence']);
+const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence','engagement','vision.review']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -80,6 +85,8 @@ const P = {
   ads:'M11 5 6 9H2v6h4l5 4V5zM19 12a7 7 0 0 0-2-4.9M15.5 8.5a3 3 0 0 1 0 5',
   demand:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z', discovery:'M21 21l-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z', visits:'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', growth:'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6', leads:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8M19 8v6M22 11h-6',
   campaigns:'M22 2 11 13M22 2l-7 20-4-9-9-4z',
+  engagement:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z',
+  'vision.review':'M2 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM12 10a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z',
   'storefront.insights':'M3 3v18h18M7 15l3-4 3 3 4-6',
   'storefront.collections':'M3 9l1-5h16l1 5M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 9a3 3 0 0 0 6 0',
   'storefront.kits':'M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
@@ -126,16 +133,59 @@ let LAST_REC = null;        // last record payload, so tab switches re-render wi
 
 // Append the active report-currency override (?cur=) so every workspace + command call is consistent.
 function withCur(u){ const c=CFG.cur; if(!c) return u; return u+(u.indexOf('?')<0?'?':'&')+'cur='+encodeURIComponent(c); }
+// v4.91 — CFG.csrf was read once, at page load, and never looked at again. Every write for the rest
+// of the day used that one frozen token, so when the session rotated it hours later every save and
+// every upload failed with a 419 the staff reported as "token missing". Refreshing the page always
+// "fixed" it, because a refresh is the only thing that ever re-read the token — which is exactly why
+// it looked random and unfixable from the floor.
+//
+// A write that meets a stale token now fetches a live one and retries itself, once. A dead SESSION is
+// a different failure and must NOT be retried: that one says so plainly and goes to the login screen,
+// instead of the silent nothing staff were getting.
+let __csrfBusy = null;
+async function refreshCsrf(){
+  if(__csrfBusy) return __csrfBusy;      // one refresh in flight no matter how many writes queue behind it
+  __csrfBusy = (async () => {
+    try{
+      const r = await fetch('/api/v1/workspace/_token', { credentials:'include',
+        headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
+      if(r.status === 401) return null;   // the session is gone; a new token would not help
+      const d = await r.json();
+      if(d && d.token){
+        CFG.csrf = d.token;
+        const m = document.querySelector('meta[name=csrf-token]'); if(m) m.content = d.token;
+        return d.token;
+      }
+    }catch(e){}
+    return null;
+  })();
+  const out = await __csrfBusy; __csrfBusy = null; return out;
+}
+function sessionExpired(){
+  toast('Your session ended — please sign in again', true);
+  setTimeout(()=>{ location.href = '/app/login'; }, 1600);
+}
 async function api(path){
   const r = await fetch(withCur(CFG.base+path), { credentials:'include', headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest' } });
+  if(r.status === 401){ sessionExpired(); return { _error:401 }; }
   if(!r.ok && r.status!==200){ return { _error:r.status }; }
   return r.json();
 }
 async function post(endpoint, body){
-  const r = await fetch(withCur(endpoint), { method:'POST', credentials:'include',
+  const send = () => fetch(withCur(endpoint), { method:'POST', credentials:'include',
     headers:{ 'Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':CFG.csrf,'Content-Type':'application/json' },
     body: JSON.stringify(body||{}) });
-  return r.json();
+  let r = await send();
+  if(r.status === 419){                  // stale token — get a live one and send it again, once only
+    const t = await refreshCsrf();
+    if(t) r = await send();
+  }
+  if(r.status === 401){ sessionExpired(); return { ok:false, error:'Your session ended — please sign in again.' }; }
+  if(r.status === 419){ return { ok:false, error:'Could not verify that request. Please refresh the page and try once more.' }; }
+  // A non-JSON body (an HTML error page, a proxy timeout) used to throw here and surface as nothing
+  // at all. Say what happened instead.
+  try{ return await r.json(); }
+  catch(e){ return { ok:false, error:'The server did not send a readable reply (status ' + r.status + ').' }; }
 }
 // GET-with-query write, for reusing legacy panel endpoints that read $request->query() (e.g. /papi/lead-save).
 // No body/JSON — every field goes on the query string, exactly like the panel does.
@@ -394,7 +444,7 @@ function renderNav(caps){
      this gate can only ever reveal too much, never hide a tool someone is using. */
   const vert = (CFG.flags && typeof CFG.flags.vertical === 'string') ? CFG.flags.vertical : '';
   const solarish = k => k!=='advisor' || vert==='' || vert==='solar';
-  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
+  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || (k==='engagement' && keys.has('campaigns')) || k==='vision.review' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';
@@ -585,6 +635,10 @@ async function route(key, id){
   if(key==='consignments'){ document.getElementById('view').innerHTML='<iframe title="Consignments" src="/panel/consignment?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // AI Campaign generator (v4.5) — owner tool; embedded like settings/pos.
   if(key==='ai.campaign'){ document.getElementById('view').innerHTML='<iframe title="AI Campaign" src="/panel/ai-campaign?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // Customer Engagement (re-engagement plan) — read-only dashboard, embedded like the other owner tools.
+  if(key==='engagement'){ document.getElementById('view').innerHTML='<iframe title="Customer Engagement" src="/panel/engagement?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
+  // Vision Stock & Loss — read-only movement-exception review feed, embedded like the other owner tools.
+  if(key==='vision.review'){ document.getElementById('view').innerHTML='<iframe title="Stock & Loss" src="/panel/vision-review?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
   // TenderBot (v4.21) — the AI bid desk; owner tool, embedded like POS/AI Campaign. Menu entry only
   // appears when Settings → Tenders → Watch for tenders is ON (server flag), but the route always works.
   if(key==='evidence'){ document.getElementById('view').innerHTML='<iframe title="Evidence" src="/papi/evidence?embed=1" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)"></iframe>'; return; }
@@ -1309,6 +1363,9 @@ async function setImgUpload(k){
   try{
     var fd=new FormData(); fd.append('key',k); fd.append('file',f);
     var res=await fetch('/papi/branding-upload',{method:'POST',credentials:'same-origin',headers:{'X-CSRF-TOKEN':CFG.csrf,'Accept':'application/json'},body:fd});
+    // papi/* is CSRF-exempt, so a 419 cannot happen here — but the auth middleware still 401s on a
+    // dead session, and the old code then threw on res.json() and showed a bare "Upload failed".
+    if(res.status===401){ if(st) st.textContent='Session ended — sign in again'; sessionExpired(); return; }
     var d=await res.json();
     if(d&&d.ok&&d.url){ document.getElementById('sfimgv_'+k).value=d.url; var pv=document.getElementById('sfimg_'+k); if(pv) pv.style.backgroundImage='url(\''+d.url+'\')'; if(st) st.textContent='\u2713 uploaded \u2014 press Save'; }
     else { if(st) st.textContent=(d&&(d.error||d.message))||'Upload failed'; }
@@ -2328,6 +2385,7 @@ function withScope(a){
 }
 async function doAction(a){
   if(a.href){ const u=withScope(a); try{ window.open(u,'_blank'); }catch(e){ location.href=u; } return; }
+  if(a.statement){ return statementModal(a); }
   if(a.chooser){ return chooserModal(a); }
   // queryWrite: reuse a legacy panel GET endpoint. With a schema → open the form (submit builds the
   // query string); without → an optional confirm then a direct GET-query write, then refresh.
@@ -2415,6 +2473,35 @@ function chooserModal(a){
   document.getElementById('ov').classList.add('on');
 }
 function chooserPick(i){ const act=(window.__CHOOSER__||[])[i]; closeM(); if(act) setTimeout(()=>doAction(act),60); }
+// Statement download picker: choose currency + PDF/CSV + an optional date range, then open the doc.
+// The endpoint (…/doc/supplier-statement) already accepts id/currency/format/from/to as query params.
+function statementModal(a){
+  const st=a.statement||{}; const curs=(st.currencies&&st.currencies.length)?st.currencies:['USD'];
+  const curOpts=curs.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
+  document.getElementById('modal').innerHTML=
+    '<div class="h">Download statement'+(st.name?' — '+esc(st.name):'')+'<button class="x" onclick="closeM()"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>'+
+    '<div class="b">'+
+      '<div class="fld"><label>Currency</label><select id="stm_cur">'+curOpts+'</select></div>'+
+      '<div class="fld"><label>Format</label><select id="stm_fmt"><option value="pdf">PDF</option><option value="csv">CSV (Excel)</option></select></div>'+
+      '<div class="fld"><label>From <span class="mut" style="font-weight:400">(optional)</span></label><input type="date" id="stm_from"></div>'+
+      '<div class="fld"><label>To <span class="mut" style="font-weight:400">(optional)</span></label><input type="date" id="stm_to"></div>'+
+      '<div class="mut" style="font-size:12px;margin-bottom:12px">Leave the dates empty for the full history. Anything before the "From" date is rolled into the opening balance.</div>'+
+      '<button class="btn pri" onclick="statementGo('+(parseInt(st.id,10)||0)+')">Download</button>'+
+    '</div>';
+  document.getElementById('ov').classList.add('on');
+}
+function statementGo(id){
+  const cur=(document.getElementById('stm_cur')||{}).value||'USD';
+  const fmt=(document.getElementById('stm_fmt')||{}).value||'pdf';
+  const from=(document.getElementById('stm_from')||{}).value||'';
+  const to=(document.getElementById('stm_to')||{}).value||'';
+  if(from&&to&&from>to){ toast('The "From" date is after the "To" date.',true); return; }
+  let u='/api/v1/doc/supplier-statement?id='+encodeURIComponent(id)+'&currency='+encodeURIComponent(cur)+'&format='+encodeURIComponent(fmt);
+  if(from) u+='&from='+encodeURIComponent(from);
+  if(to) u+='&to='+encodeURIComponent(to);
+  closeM();
+  try{ window.open(u,'_blank'); }catch(e){ location.href=u; }
+}
 window.GAL={};
 function formModal(a){
   const pf=a.prefill||{};
@@ -2460,6 +2547,13 @@ function formModal(a){
         '<div class="mp-chips" id="mpchips_'+k+'"></div></div>'; }
     else if(String(type).startsWith('enum:')){ const opts=String(type).slice(5).split(',');
       fields+='<div class="fld"><label>'+lbl+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></div>'; }
+    else if(String(type).startsWith('perday:')){ const opts=String(type).slice(7).split(','); const cur=String(val==null?'0':val);
+      /* Preset "send X per day" buttons — write a hidden f_<k> the generic save already reads, so a big
+         audience trickles out over days instead of a single blast (safer for the number). */
+      fields+='<div class="fld"><label>'+lbl+'</label>'+
+        '<div class="set-segs" id="pd_'+k+'">'+opts.map(function(o){ var lb=(o==='0')?'All at once':(o+' / day'); return '<button type="button" class="set-seg'+(o===cur?' on':'')+'" data-v="'+esc(o)+'" onclick="pdPick(\''+k+'\',\''+esc(o)+'\')">'+esc(lb)+'</button>'; }).join('')+'</div>'+
+        '<input type="hidden" id="f_'+k+'" value="'+esc(cur)+'">'+
+        '<div class="mut" id="pdplan_'+k+'" style="font-size:12px;margin-top:6px"></div></div>'; }
     else if(String(type).startsWith('combo:')){ const opts=String(type).slice(6).split('|').filter(Boolean);
       fields+='<div class="fld"><label>'+lbl+' <span class="mut" style="font-weight:400">(type a new one or pick existing)</span></label>'+
         '<input id="f_'+k+'" list="dl_'+k+'" autocomplete="off" value="'+esc(val)+'" placeholder="Type or choose…">'+
@@ -2675,6 +2769,25 @@ async function mpUpload(k){
   };
   reader.readAsDataURL(f);
 }
+/* Preset "send per day" picker — sets the hidden value and (on the campaign form, which has an
+   audience field) shows a live "~N days at X/day" plan from the same endpoint the classic screen uses. */
+async function pdPick(k,v){
+  var h=document.getElementById('f_'+k); if(h) h.value=String(v);
+  var box=document.getElementById('pd_'+k);
+  if(box){ var bs=box.querySelectorAll('.set-seg'); for(var i=0;i<bs.length;i++){ bs[i].classList.toggle('on', bs[i].getAttribute('data-v')===String(v)); } }
+  var plan=document.getElementById('pdplan_'+k); if(!plan) return;
+  var audEl=document.getElementById('f_audience'); var perDay=parseInt(v,10)||0;
+  if(!audEl){ plan.textContent=''; return; }
+  if(perDay<=0){ plan.textContent='Sends the whole list at once.'; return; }
+  var catEl=document.getElementById('f_category');
+  plan.textContent='Counting…';
+  try{
+    var d=await post('/papi/campaign/audience',{audience:audEl.value,category:catEl?catEl.value:null,daily_send_cap:perDay});
+    if(d&&d.ok&&d.days){ var bd=(d.breakdown||[]); var shown=bd.slice(0,7).join(' + ')+(bd.length>7?(' + … ('+(bd.length-7)+' more days)'):'');
+      plan.innerHTML='📅 ~<b>'+d.days+' day'+(d.days===1?'':'s')+'</b> at '+perDay+'/day — '+esc(shown)+' · '+(d.count||0)+' customers'; }
+    else { plan.textContent=''; }
+  }catch(e){ plan.textContent=''; }
+}
 /* ===== Live WhatsApp preview (mobile frame) for the campaign form ===== */
 var __WAPV=null;
 function waPhoneShell(a){
@@ -2745,8 +2858,150 @@ function uploadFileField(k){
 function closeM(){ document.getElementById('ov').classList.remove('on'); __WAPV=null; var m=document.getElementById('modal'); if(m) m.classList.remove('wa-modal'); }
 document.getElementById('ov').addEventListener('click',e=>{ if(e.target.id==='ov') closeM(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeM(); });
-document.getElementById('search').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const p=e.target.value.trim().split(/\s+/); if(p[0]&&p[1]) route(p[0].toLowerCase(),p[1]); } });
+// The header search box is now the entry point to the ⌘K command center — focusing it (tap or click)
+// opens the palette. The old "customer 5" quick-jump is kept as a keydown fallback for the rare case
+// the box is typed into directly (e.g. before scripts wire up).
+(function(){ const s=document.getElementById('search'); if(!s) return;
+  s.setAttribute('placeholder','Search…  ⌘K');
+  s.addEventListener('focus',()=>{ openCmdk(); s.blur(); });
+  s.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const p=e.target.value.trim().split(/\s+/); if(p[0]&&p[1]) route(p[0].toLowerCase(),p[1]); } });
+})();
 window.addEventListener('hashchange',()=>{ const h=parseHash(); if(h.key && (h.key!==CUR.key||h.id!==CUR.id)) route(h.key,h.id); });
+
+/* ============================================================================
+   ⌘K COMMAND CENTER (Phase B) — one palette for: find a record · jump to a screen · run an action.
+   Additive & read-only against existing endpoints:
+     • records come from each list capability's `search` command (/api/v1/workspace/<list>/_/search)
+       — the SAME command the New-invoice customer/product pickers already use; no new query logic.
+     • "Go to" targets are read straight off the rendered sidebar, so the palette can only ever offer
+       screens the role already has (permissions stay the single gate).
+     • Quick actions route to the existing create flows — no new create logic here.
+   Entities are gated on CFG.capKeys so a role never queries a workspace it cannot open.
+   ========================================================================== */
+const CMD_ENTITIES = [
+  { list:'customers',   obj:'customer',   label:'Customers', icon:'user' },
+  { list:'salesOrders', obj:'salesOrder', label:'Orders',    icon:'cart' },
+  { list:'invoices',    obj:'invoice',    label:'Invoices',  icon:'receipt' },
+  { list:'products',    obj:'product',    label:'Products',  icon:'box' },
+  { list:'suppliers',   obj:'supplier',   label:'Suppliers', icon:'truck' },
+];
+// Quick actions hand off to flows that already exist; the palette adds no create logic of its own.
+const CMD_ACTIONS = [
+  { label:'New sale',       hint:'Open the POS till',    icon:'cart',    gate:()=>capHas('pos'),             run:()=>route('pos') },
+  { label:'Add customer',   hint:'Create a customer',    icon:'user',    gate:()=>capHas('customers'),       run:()=>quickAdd('customers') },
+  { label:'New invoice',    hint:'Raise an invoice',     icon:'receipt', gate:()=>capHas('invoices'),        run:()=>quickAdd('invoices') },
+  { label:'Record payment', hint:'Open Payments',        icon:'dollar',  gate:()=>capHas('payments'),        run:()=>route('payments') },
+  { label:'Receive stock',  hint:'Open Purchasing',      icon:'truck',   gate:()=>capHas('purchase.process'),run:()=>route('purchase.process') },
+];
+function capHas(k){ return !!(CFG.capKeys && CFG.capKeys.has(k)); }
+// Jump targets = whatever the sidebar actually rendered for this role (permission-accurate by construction).
+function cmdkNavTargets(){
+  return Array.from(document.querySelectorAll('#nav .nitem')).map(n=>({
+    key: n.dataset.key,
+    label: (n.querySelector('.nl') ? n.querySelector('.nl').textContent : n.dataset.key) || n.dataset.key,
+  }));
+}
+let PAL = { open:false, seq:0, sel:-1, rows:[], q:'', loading:false, last:[] };
+function ensureCmdk(){
+  let ov = document.getElementById('cmdk'); if(ov) return ov;
+  ov = document.createElement('div'); ov.id='cmdk'; ov.className='cmdk-ov';
+  ov.innerHTML = '<div class="cmdk" role="dialog" aria-label="Command center" aria-modal="true">'
+    + '<div class="cmdk-h"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
+    + '<input id="cmdkInput" placeholder="Search records, jump to a screen, or run an action…" autocomplete="off" spellcheck="false" aria-label="Search">'
+    + '<span class="cmdk-esc">esc</span></div>'
+    + '<div class="cmdk-body" id="cmdkBody"></div>'
+    + '<div class="cmdk-foot"><span><b>↑↓</b> move</span><span><b>↵</b> open</span><span><b>esc</b> close</span></div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) closeCmdk(); });
+  document.body.appendChild(ov);
+  const inp = ov.querySelector('#cmdkInput');
+  inp.addEventListener('input', e=>palInput(e.target.value));
+  inp.addEventListener('keydown', palKey);
+  return ov;
+}
+function openCmdk(seed){
+  const ov = ensureCmdk(); ov.classList.add('on'); PAL.open=true;
+  const inp = document.getElementById('cmdkInput');
+  inp.value = seed || ''; palInput(inp.value);
+  setTimeout(()=>{ inp.focus(); inp.select(); }, 20);
+}
+function closeCmdk(){ const ov=document.getElementById('cmdk'); if(ov) ov.classList.remove('on'); PAL.open=false; }
+function palInput(v){
+  PAL.q = v; const q = v.trim();
+  clearTimeout(PAL._t);
+  if(q.length < 2){ PAL.loading=false; PAL.last=[]; palRender(q, []); return; }
+  PAL.loading = true; palRender(q, PAL.last);          // instant: actions + nav, with a "searching" spinner
+  PAL._t = setTimeout(()=>palSearch(q), 170);
+}
+async function palSearch(q){
+  const seq = ++PAL.seq;
+  const ents = CMD_ENTITIES.filter(e=>capHas(e.list));
+  const results = await Promise.all(ents.map(async e=>{
+    try{ const r = await post('/api/v1/workspace/'+e.list+'/_/search', { q }); return { e, items: (r && r.ok && Array.isArray(r.items)) ? r.items : [] }; }
+    catch(_){ return { e, items: [] }; }
+  }));
+  if(seq !== PAL.seq) return;                          // a newer keystroke already superseded this query
+  PAL.loading = false; PAL.last = results; palRender(q, results);
+}
+function palSection(t, busy){ return '<div class="cmdk-sec">'+esc(t)+(busy?'<span class="cmdk-busy"></span>':'')+'</div>'; }
+function palRow(i, ic, title, sub, tag){
+  return '<button class="cmdk-row" data-i="'+i+'" onmouseenter="PAL.sel='+i+';palHighlight()" onclick="palActivate('+i+')">'
+    + '<span class="cmdk-ic">'+icon(ic)+'</span>'
+    + '<span class="cmdk-txt"><span class="cmdk-t">'+esc(title)+'</span>'+(sub?'<span class="cmdk-s">'+esc(sub)+'</span>':'')+'</span>'
+    + (tag?'<span class="cmdk-tag">'+esc(tag)+'</span>':'') + '</button>';
+}
+function palRender(q, results){
+  const ql = q.toLowerCase();
+  const rows = []; let html = '';
+  const acts = CMD_ACTIONS.filter(a=>a.gate() && (!ql || a.label.toLowerCase().indexOf(ql)>=0 || a.hint.toLowerCase().indexOf(ql)>=0));
+  if(acts.length){
+    html += palSection('Quick actions');
+    acts.forEach(a=>{ const i=rows.length; rows.push({ kind:'action', run:a.run }); html += palRow(i, a.icon, a.label, a.hint, 'Action'); });
+  }
+  if(ql){
+    const navs = cmdkNavTargets().filter(n=>String(n.label).toLowerCase().indexOf(ql)>=0).slice(0,6);
+    if(navs.length){
+      html += palSection('Go to');
+      navs.forEach(n=>{ const i=rows.length; rows.push({ kind:'nav', key:n.key }); html += palRow(i, 'file', n.label, '', 'Screen'); });
+    }
+  }
+  (results||[]).forEach(g=>{
+    if(!g.items.length) return;
+    html += palSection(g.e.label);
+    g.items.slice(0,6).forEach(it=>{ const i=rows.length; rows.push({ kind:'record', obj:g.e.obj, id:it.id }); html += palRow(i, g.e.icon, it.name, it.sub||'', ''); });
+  });
+  if(PAL.loading && ql.length>=2){ html += palSection('Searching…', true); }
+  if(!rows.length && !PAL.loading){
+    html = ql.length>=2
+      ? '<div class="cmdk-empty">No matches for “'+esc(q)+'”.<br>Try a name, number, or phone.</div>'
+      : '<div class="cmdk-empty">Search customers, orders, invoices, products and suppliers —<br>or jump to any screen. Start typing.</div>';
+  }
+  PAL.rows = rows; PAL.sel = rows.length ? 0 : -1;
+  const body = document.getElementById('cmdkBody'); if(body){ body.innerHTML = html; palHighlight(); }
+}
+function palHighlight(){
+  const body = document.getElementById('cmdkBody'); if(!body) return;
+  const els = body.querySelectorAll('.cmdk-row');
+  els.forEach((el,i)=>{ const on = i===PAL.sel; el.classList.toggle('on', on); if(on) el.scrollIntoView({ block:'nearest' }); });
+}
+function palMove(d){ if(!PAL.rows.length) return; PAL.sel = (PAL.sel + d + PAL.rows.length) % PAL.rows.length; palHighlight(); }
+function palActivate(i){
+  const r = PAL.rows[i]; if(!r) return; closeCmdk();
+  if(r.kind==='record') route(r.obj, r.id);
+  else if(r.kind==='nav') route(r.key);
+  else if(r.kind==='action' && typeof r.run==='function') r.run();
+}
+function palKey(e){
+  if(e.key==='ArrowDown'){ e.preventDefault(); palMove(1); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); palMove(-1); }
+  else if(e.key==='Enter'){ e.preventDefault(); if(PAL.sel>=0) palActivate(PAL.sel); }
+  else if(e.key==='Escape'){ e.preventDefault(); closeCmdk(); }
+}
+// ⌘K / Ctrl+K toggles the palette anywhere; Escape closes it when open.
+document.addEventListener('keydown', e=>{
+  if((e.metaKey||e.ctrlKey) && (e.key==='k' || e.key==='K')){ e.preventDefault(); PAL.open ? closeCmdk() : openCmdk(); return; }
+  if(e.key==='Escape' && PAL.open){ closeCmdk(); }
+});
 
 /* ============ quotation builder (multi-line) ============ */
 let QBT=null;

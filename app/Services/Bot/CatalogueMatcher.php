@@ -135,6 +135,55 @@ class CatalogueMatcher
         return trim(preg_replace('/\s+/', ' ', mb_strtolower(preg_replace('/[^a-z0-9 ]+/i', ' ', $name))));
     }
 
+    /**
+     * Model/part/SKU-code tokens in a string — alphanumeric runs a wholesale buyer quotes to name an
+     * exact item ("8389E", "A9F74101", "63A", "8389"). A code has a letter AND a digit, or is 4+ pure
+     * digits; plain size/qty tokens ("500g", "2kg") are excluded. Case-insensitive, deduped.
+     *
+     * @return array<int,string>
+     */
+    public static function queryCodes(string $s): array
+    {
+        $out = [];   // a list, not a keyed set: numeric-string keys would silently cast to int
+        foreach (preg_split('/[^a-z0-9]+/i', mb_strtolower($s), -1, PREG_SPLIT_NO_EMPTY) as $t) {
+            if (preg_match('/^\d+(kg|kgs|g|gm|gms|mg|ml|l|ltr|cl|pc|pcs|pk|pack|dozen|cm|mm|m|in|inch|ft)$/', $t)) continue;
+            $isCode = (preg_match('/[a-z]/', $t) && preg_match('/\d/', $t)) || preg_match('/^\d{4,}$/', $t);
+            if ($isCode && mb_strlen($t) >= 3) $out[] = $t;
+        }
+        return array_values(array_unique($out));
+    }
+
+    /** Codes that identify a product: its sku, oem_number, and any code embedded in its name. */
+    public static function productCodes(array $p): array
+    {
+        $out = [];
+        foreach (['sku', 'oem_number'] as $f) {
+            $v = mb_strtolower(trim((string) ($p[$f] ?? '')));
+            if ($v === '') continue;
+            foreach (preg_split('/[^a-z0-9]+/i', $v, -1, PREG_SPLIT_NO_EMPTY) as $t) {
+                if (mb_strlen($t) >= 3) $out[] = $t;
+            }
+        }
+        foreach (self::queryCodes((string) ($p['name'] ?? '')) as $t) $out[] = $t;
+        return array_values(array_unique($out));
+    }
+
+    /** True if a query code equals or is the leading stem of a product code (so "8389" ↦ "8389E"). */
+    public static function codesIntersect(array $queryCodes, array $productCodes): bool
+    {
+        if (! $queryCodes || ! $productCodes) return false;
+        $pcSet = array_flip($productCodes);
+        foreach ($queryCodes as $q) {
+            if (isset($pcSet[$q])) return true;
+            foreach ($productCodes as $c) {
+                $short = strlen($q) <= strlen($c) ? $q : $c;
+                $long  = $short === $q ? $c : $q;
+                if (strlen($short) >= 3 && str_starts_with($long, $short)) return true;
+            }
+        }
+        return false;
+    }
+
     /** Damerau optimal-string-alignment distance (catches single transpositions e.g. rcie->rice). */
     public static function damerau(string $a, string $b): int
     {
@@ -160,7 +209,10 @@ class CatalogueMatcher
     public function search(string $query, array $products): array
     {
         $q = $this->tokens($query);
-        if (!$q) return [];
+        // Model/SKU codes are resolved even when the word tokenizer yields nothing (a bare "8389" is
+        // dropped as a number) — so a code-only message still finds its product.
+        $qCodes = self::queryCodes($query);
+        if (!$q && !$qCodes) return [];
         $qWords = [];
         foreach ($q as $w) {
             $qWords[$w] = true;
@@ -182,6 +234,8 @@ class CatalogueMatcher
             $hasExact[$w] = isset($allTokens[$w]) || ($sing !== null && isset($allTokens[$sing]));
         }
 
+        // ($qCodes computed above — model/SKU codes like "8389E", matched to each product's
+        // sku/oem_number/name so a customer who quotes a code gets that exact item.)
         $scored = [];
         foreach ($products as $p) {
             $pt = $this->productTokens($p);
@@ -191,6 +245,8 @@ class CatalogueMatcher
             $nameSet = array_flip($nameToks);               // NAME tokens weigh more than keyword/category
             $score = 0.0; $hits = 0;
             if ($this->normName($p['name'] ?? '') === $nq) $score += 1000;
+            // Exact model/SKU-code hit — a strong identifier (just under a full-name match).
+            if ($qCodes && self::codesIntersect($qCodes, self::productCodes($p))) { $score += 900; $hits++; }
             foreach ($q as $w) {                     // count hits over ORIGINAL query tokens (coverage)
                 $cand = [$w];
                 if (mb_strlen($w) > 3 && str_ends_with($w, 's')) $cand[] = rtrim($w, 's');
@@ -256,6 +312,41 @@ class CatalogueMatcher
             return strlen($a['product']['name']) <=> strlen($b['product']['name']);
         });
         return $scored;
+    }
+
+    /**
+     * Ambiguity guard for the bot QUOTE path. Given a search() result, decide whether the top is a
+     * near-tie among SKUs that span a WIDE price range with no clear leader — the "aluminium foil →
+     * $33…$155, no distinguishing word" case that must never be silently quoted as hits[0].
+     *
+     * Returns up to 4 candidate {name,price} (cheapest first) when ambiguous, or null when the match
+     * is safe: an exact-name hit (score ≥ 1000), OR a clear leader pulled ahead by a distinguishing
+     * word (e.g. "golden" adds +120, beyond $gap), OR a narrow price spread. Pure over the search()
+     * result — unit-testable without a catalogue. Mirrors clarifyCheck()'s ≥3× spread test, but works
+     * for multi-token queries (which clarifyCheck deliberately skips).
+     *
+     * @param array<int,array{product:array,score:float}> $hits
+     * @return array<int,array{name:string,price:float}>|null
+     */
+    public function ambiguityCandidates(array $hits, float $spread = 3.0, float $gap = 90.0): ?array
+    {
+        $priced = array_values(array_filter($hits, fn ($h) => (float) ($h['product']['price'] ?? 0) > 0));
+        if (count($priced) < 2) return null;
+
+        $top = $priced[0];
+        if ((float) ($top['score'] ?? 0) >= 1000.0) return null;   // exact name match — unambiguous
+
+        // The near-tied top cluster: SKUs within one distinguishing-word gap of the leader.
+        $cluster = array_values(array_filter($priced, fn ($h) => ((float) $top['score'] - (float) $h['score']) <= $gap));
+        if (count($cluster) < 2) return null;                       // a clear leader → unambiguous
+
+        $prices = array_map(fn ($h) => (float) $h['product']['price'], $cluster);
+        if (min($prices) <= 0 || (max($prices) / min($prices)) < $spread) return null;   // narrow spread → fine
+
+        usort($cluster, fn ($a, $b) => (float) $a['product']['price'] <=> (float) $b['product']['price']);
+
+        return array_map(fn ($h) => ['name' => (string) $h['product']['name'], 'price' => (float) $h['product']['price']],
+            array_slice($cluster, 0, 4));
     }
 
     /**

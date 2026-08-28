@@ -317,7 +317,9 @@ class StorefrontController extends Controller
 
         // Solar Experience Center CTA — a top strip on solar shops linking to the guided assessment.
         if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::SOLAR) {
-            $cta = '<a href="' . e($base) . '/solar" style="display:block;background:linear-gradient(135deg,#d97706,#f59e0b);'
+            // Themed from the shop's palette (var --green-d/--green, set by the SPA applyTheme) with the
+            // original amber as the fallback, so this solar-only strip follows each solar shop's colours.
+            $cta = '<a href="' . e($base) . '/solar" style="display:block;background:linear-gradient(135deg,var(--green-d,#0A6E1A),var(--green,#0C831F));'
                 . 'color:#fff;text-align:center;padding:11px 14px;font-weight:700;text-decoration:none;'
                 . 'font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px">'
                 . '☀️ Design your solar system in 3 minutes — Start my free assessment →</a>';
@@ -1058,7 +1060,12 @@ class StorefrontController extends Controller
                         // To show it again once the two screens agree:
                         //   Tenant::find(17)->update(['settings' => [...$s, 'storefront_show_stock' => true]])
                         'Stock'        => $showStock ? ($p->stock === null ? null : (int) $p->stock) : null,
-                        'Image'        => $this->imageUrl($p->image_url),
+                        // Primary card photo. Falls back hero → gallery_1..3 so a product whose only photos
+                        // are in the gallery still shows its first photo on the card, matching the detail
+                        // page instead of a placeholder. NOTE: this query uses ->toBase(), so $p is a
+                        // stdClass, not a Product model — resolve via the pure static helper on the raw
+                        // columns, never a model method (that would fatal on stdClass).
+                        'Image'        => $this->imageUrl(\App\Models\Product::firstImage($p->image_url, $p->gallery_1, $p->gallery_2, $p->gallery_3)),
                         'Modifiers'    => $mods[$p->id] ?? [],
                         'MOQ'          => $p->moq === null ? null : (int) $p->moq,
                         'PackSize'     => $p->pack_size === null ? null : (int) $p->pack_size,
@@ -1435,6 +1442,15 @@ class StorefrontController extends Controller
             }
         });
 
+        // Checkout opt-in: a "keep me updated on WhatsApp" tick records explicit marketing consent for
+        // this number. Best-effort and never lifts a prior opt-out (recordOptIn is one-way). Only acts
+        // when the customer actively ticked it — an absent/false flag records nothing.
+        if ($o->wasRecentlyCreated && $r->boolean('marketing_opt_in')) {
+            try {
+                \App\Services\Comms\Marketing\MarketingConsent::recordOptIn($tenant, $phone, 'checkout');
+            } catch (\Throwable $e) { /* consent capture must never fail an order */ }
+        }
+
         return response()->json([
             'ok'        => true,
             'order_no'  => (string) $o->order_no,
@@ -1541,6 +1557,14 @@ class StorefrontController extends Controller
                 'ok'    => false,
                 'error' => (string) ($res['message'] ?? 'Could not create the quotation. Please try again shortly.'),
             ], 422);
+        }
+
+        // Checkout opt-in (quotation path): a ticked "keep me updated" records explicit marketing consent.
+        // Best-effort; never lifts a prior opt-out; never fails the quotation.
+        if ($r->boolean('marketing_opt_in')) {
+            try {
+                \App\Services\Comms\Marketing\MarketingConsent::recordOptIn($tenant, $phone, 'checkout');
+            } catch (\Throwable $e) { /* consent capture must never fail a quotation */ }
         }
 
         // Stamp storefront extras (delivery address, note, source) onto the persisted record and
@@ -1767,6 +1791,32 @@ class StorefrontController extends Controller
             $v = $tenant->setting($setting, null);
             if ($v !== null && $v !== '') $t[$key] = filter_var($v, FILTER_VALIDATE_BOOLEAN);
         }
+
+        // Premium palette (2026-08) — expose the rest of the storefront's CSS variables as per-tenant
+        // settings so a shop can commit to a full look (e.g. dark-green + gold solar) rather than just
+        // recolouring the green accent. EMPTY BY DEFAULT: a tenant that sets none gets an empty `vars`
+        // map and the SPA applies nothing, so every other shop renders byte-identical (freeze-safe,
+        // per STOREFRONT-THEME-NOTES). Keys are a fixed server-side allow-list mapped to CSS vars;
+        // values are owner-set colour strings. --green/--green-d stay handled by accent/accentDark above.
+        $palette = [
+            '--amber'    => 'theme_gold',       // primary CTA / highlight (solar gold)
+            '--bg'       => 'theme_bg',          // page canvas
+            '--ink'      => 'theme_ink',         // body text
+            '--muted'    => 'theme_muted',
+            '--line'     => 'theme_line',        // hairlines / borders
+            '--card'     => 'theme_card',        // card surface
+            '--tile'     => 'theme_tile',        // category-tile wash
+            '--tileicon' => 'theme_tile_icon',
+        ];
+        $vars = [];
+        foreach ($palette as $cssVar => $setting) {
+            $v = $tenant->setting($setting, null);
+            if ($v !== null && $v !== '' && preg_match('/^#[0-9a-fA-F]{3,8}$|^(?:rgb|hsl)a?\([\d%.,\/\s]+\)$/', trim((string) $v))) {
+                $vars[$cssVar] = trim((string) $v);
+            }
+        }
+        $t['vars'] = $vars;
+
         return $t;
     }
 

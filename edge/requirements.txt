@@ -1,0 +1,19 @@
+# ShopBot Vision edge — MANDATORY Python dependencies (hardware-neutral).
+# Pinned for reproducibility: the same image builds identically on arm64 (RK3588 / Jetson) and amd64.
+#
+# Deliberately NOT here (they are hardware- or detector-specific overlays, never in the base image):
+#   • torch / torchvision / onnxruntime — the detector's inference runtime
+#   • tensorrt, pycuda            — Jetson only (comes from JetPack on the host)
+#   • rknn-toolkit-lite2          — RK3588 only
+#   • groundingdino + torch       — the research zero-shot BOOTSTRAP detector (bench/, not production)
+#   • onvif/wsdiscovery           — optional LAN camera discovery
+# See docs/vision-edge-deployment-architecture.md §2 and §8.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3
+numpy==2.1.3
+opencv-python-headless==4.10.0.84   # headless: no GUI libs; ships its own ffmpeg for RTSP decode
+supervision==0.30.0                 # ByteTrack + LineZone; ByteTrack isolated in MovementPipeline
+pydantic==2.10.4
+pynacl==1.5.0                       # Ed25519 device identity + offline license verify (libsodium; interops with PHP sodium)

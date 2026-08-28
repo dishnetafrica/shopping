@@ -10,7 +10,7 @@ class Campaign extends Model
 
     protected $fillable = [
         'tenant_id', 'name', 'campaign_no', 'type', 'audience', 'category', 'message',
-        'image_url', 'product_ids', 'cta', 'status', 'scheduled_for', 'stats',
+        'image_url', 'product_ids', 'cta', 'status', 'scheduled_for', 'stats', 'daily_send_cap',
     ];
 
     protected $casts = [

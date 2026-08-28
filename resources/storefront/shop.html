@@ -1806,7 +1806,11 @@ var SHOP = window.SHOP || {};
 /* Vertical-driven storefront mode. 'snacks' = advance-booking pickup (no delivery). */
 var VERTICAL  = SHOP.vertical || 'grocery';
 var IS_PICKUP = (VERTICAL === 'snacks');
+var IS_SOLARHOME = !!(SHOP.home && SHOP.home.enabled && SHOP.home.layout === 'solar');
 function applyVertical(){
+  // Solar is quote \u2192 site survey \u2192 install, not a same-day grocery delivery ETA, so the
+  // "Set your location for delivery time" bar is grocery chrome that doesn't belong here.
+  if(IS_SOLARHOME){ var db=document.getElementById('delvBar'); if(db) db.style.display='none'; }
   if(!IS_PICKUP) return;                       // grocery/restaurant: unchanged
   var bar=document.getElementById('delvBar'); if(bar) bar.style.display='none';
   var sub=document.getElementById('hdrSub');   if(sub) sub.textContent='Order ahead \u00B7 collect on WhatsApp';
@@ -1818,6 +1822,9 @@ function applyTheme(){
   var root=document.documentElement.style;
   if(THEME.accent)     root.setProperty('--green', THEME.accent);
   if(THEME.accentDark) root.setProperty('--green-d', THEME.accentDark);
+  // Premium palette overrides (empty for every tenant that sets none → no-op, byte-identical render).
+  // Keys come from a fixed server-side allow-list; values are validated colour strings.
+  if(THEME.vars){ for(var k in THEME.vars){ if(THEME.vars[k]) root.setProperty(k, THEME.vars[k]); } }
   var q=document.getElementById('q');           if(q && THEME.searchHint) q.placeholder=THEME.searchHint;
   var sub=document.getElementById('hdrSub');     if(sub && THEME.tagline) sub.textContent=THEME.tagline;
   var eb=document.getElementById('hdrEyebrow');  if(eb && THEME.eyebrow){eb.textContent=THEME.eyebrow;eb.style.display='block';}
@@ -1876,7 +1883,7 @@ function loadWMode(){try{var v=localStorage.getItem(WMODE_KEY);if(v==='1'){WMODE
      up front, which is the offer. Owner-approved for wholesale-home tenants. Purely presentational
      (labels + the mode bar; prices and cart maths are untouched), gated on cfg.home so no other
      tenant changes, and a person's own saved toggle (WMODE_SET) still outranks the default. */
-  if(!WMODE_SET&&SHOP.home&&SHOP.home.enabled){WMODE=true;}}
+  if(!WMODE_SET&&SHOP.home&&SHOP.home.enabled&&SHOP.home.layout!=='solar'){WMODE=true;}}
 function isWholesaleBuyer(){return BUYER.mode==='wholesale'||BUYER.mode==='institutional';}
 function applyBuyer(b){ if(!b||typeof b!=='object')return; BUYER={mode:b.mode||'retail',segment:b.segment||null,credit:b.credit||null}; if(!WMODE_SET&&isWholesaleBuyer())WMODE=true; }
 function setWMode(on){WMODE=!!on;WMODE_SET=true;try{localStorage.setItem(WMODE_KEY,WMODE?'1':'0');}catch(e){}render();try{bar();}catch(e){}}
@@ -4414,9 +4421,96 @@ function whCats(){
   var more=CATS.length>12?'<button class="whallcats" onclick="showCategories()">All '+CATS.length+' categories →</button>':'';
   return '<div class="whsec"><div class="section-title">📦 Browse categories</div><div class="catgrid">'+tiles+'</div>'+more+'</div>';
 }
+/* Solar guided-shopping band ("Not sure what you need?") — solar-vertical tenants only. Pure entry
+   affordance into the EXISTING /solar advisor (StorefrontSolarController); no sizing/logic here.
+   Styled from the theme tokens so it follows each solar shop's palette. Hidden for every other shop. */
+function solarGuide(){
+  if((SHOP.vertical||'')!=='solar') return '';
+  var base=(SHOP.base||'');
+  var tiles=[['home','🏠','Home'],['business','🏢','Business'],['farm','🌾','Farm'],['institution','🏫','Institution'],['other','⚡','Other']];
+  var opts=tiles.map(function(t){
+    return '<a class="sg-opt" href="'+base+'/solar?customer_type='+t[0]+'"><span class="sg-ic">'+t[1]+'</span><span>'+esc(t[2])+'</span></a>';
+  }).join('');
+  return '<style id="sgCss">'
+    +'.solarGuide{padding:12px 14px}'
+    +'.sg-in{max-width:1100px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:14px;padding:16px 18px;display:flex;flex-wrap:wrap;align-items:center;gap:14px}'
+    +'.sg-head{flex:1 1 260px}.sg-head h2{margin:0 0 4px;font-size:19px;color:var(--green)}.sg-head p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.4}'
+    +'.sg-opts{display:flex;flex-wrap:wrap;gap:8px}'
+    +'.sg-opt{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:72px;padding:9px 8px;border:1px solid var(--line);border-radius:12px;background:var(--bg);font-size:12px;font-weight:600;color:var(--ink);text-decoration:none;transition:.12s}'
+    +'.sg-opt:hover{border-color:var(--green);color:var(--green)}.sg-ic{font-size:20px;line-height:1}'
+    +'.sg-cta{white-space:nowrap;background:var(--green);color:#fff;font-weight:800;padding:12px 18px;border-radius:12px;text-decoration:none}.sg-cta:hover{background:var(--green-d)}'
+    +'@media(max-width:640px){.sg-in{flex-direction:column;align-items:stretch}.sg-opts{justify-content:space-between}.sg-cta{text-align:center}}'
+    +'</style>'
+    +'<section class="solarGuide"><div class="sg-in">'
+    +'<div class="sg-head"><h2>Not sure what you need?</h2><p>Tell us what you want to power and we’ll help you choose the right solar solution.</p></div>'
+    +'<div class="sg-opts">'+opts+'</div>'
+    +'<a class="sg-cta" href="'+base+'/solar">Find My Solar Solution →</a>'
+    +'</div></section>';
+}
+
+/* ============================ DEDICATED SOLAR HOME (storefront_home=solar) ============================
+   A purpose-built solar marketing homepage — dark cinematic hero, category cards, guided advisor band,
+   solar-solutions tiles, popular products, a dark "why choose" band, real-brand strip and a dark final
+   CTA. Reuses the SPA's real primitives (prodCard, setCat, /solar advisor, cart/checkout) and real data
+   (CATS, PRODUCTS, brand names). No wholesale chrome (wsBar/carton bar suppressed for this layout).
+   Everything shop-specific comes from SHOP.home config + the live catalogue — nothing fabricated. */
+function solarHome(){
+  var H=SHOP.home||{}, hero=H.hero||{}, ben=H.benefits||[], trust=H.trust||[], ctas=H.ctas||['Shop Solar Products','Get a Solar Quote'];
+  var base=(SHOP.base||''), wa=SHOP.waNumber||'', himg=hero.img||'';
+  var t1=hero.title||'Power Your Future', t2=hero.title2||'', t3=hero.title3||'', hsub=hero.sub||'';
+  var beIc=['🛡️','🎧','✅','🔧','🚚'];
+  var beHtml=ben.slice(0,5).map(function(b,i){return '<div class="sol-be"><span class="sol-bei">'+(beIc[i]||'✅')+'</span><div><b>'+esc(b.t||'')+'</b><span>'+esc(b.s||'')+'</span></div></div>';}).join('');
+  // CATS entries are {name,img,count} objects (built from the live catalogue), not strings —
+  // the category already carries its own representative image.
+  var catHtml=(CATS||[]).slice(0,6).map(function(c){ var nm=(c&&c.name)?String(c.name):''; if(!nm)return ''; var im=(c&&c.img)?c.img:''; var pic=im?('<img src="'+esc(im)+'" alt="'+esc(nm)+'" loading="lazy">'):'<div class="sol-catph">☀</div>'; return '<a class="sol-cat" onclick="setCat('+jk(nm)+')">'+pic+'<b>'+esc(nm)+'</b></a>'; }).join('');
+  var sols=[['home','Residential','Reliable power for your home'],['business','Commercial','Clean energy for your business'],['business','Industrial','High-performance systems for industry'],['institution','Institutions','Schools, clinics &amp; offices'],['farm','Farms &amp; Agriculture','Solar for pumps &amp; irrigation']];
+  var solHtml=sols.map(function(s){return '<a class="sol-sol" href="'+base+'/solar?customer_type='+s[0]+'"><b>'+s[1]+'</b><span>'+s[2]+'</span><em>Explore →</em></a>';}).join('');
+  var pop=PRODUCTS.slice().sort(function(a,b){return (b.popularity||0)-(a.popularity||0);}).slice(0,8);
+  var popHtml=pop.map(function(p){return prodCard(p);}).join('');
+  var whyHtml=trust.slice(0,5).map(function(t){return '<div class="sol-why-i"><b>'+esc(t.t||'')+'</b><span>'+esc(t.s||'')+'</span></div>';}).join('');
+  var bset={},blist=[]; PRODUCTS.forEach(function(p){var b=(p.brand||'').trim(); if(b&&!bset[b]){bset[b]=1;blist.push(b);}});
+  var brandHtml=blist.slice(0,14).map(function(b){return '<span class="sol-brand">'+esc(b)+'</span>';}).join('');
+  var waLink=wa?('https://wa.me/'+wa):(base+'/solar');
+  var css='<style id="solCss">'
+    +'.sol-hero{background:linear-gradient(115deg,var(--green-d,#0A6E1A) 0%,#0b1f15 62%);color:#fff}'
+    +'.sol-in{max-width:1180px;margin:0 auto;padding:0 16px}'
+    +'.sol-hero-in{max-width:1180px;margin:0 auto;display:flex;gap:30px;align-items:center;padding:34px 16px 20px}'
+    +'.sol-hcopy{flex:1 1 430px;min-width:290px}.sol-hcopy h1{font-size:clamp(30px,4.4vw,46px);line-height:1.06;margin:0 0 12px;font-weight:850}.sol-hcopy h1 .g{color:#5fd68f}'
+    +'.sol-hsub{color:#d7e5dc;font-size:16px;max-width:52ch;margin:0 0 20px;line-height:1.5}'
+    +'.sol-hbtns{display:flex;gap:12px;flex-wrap:wrap}.sol-btn{padding:13px 22px;border-radius:12px;font-weight:800;text-decoration:none;cursor:pointer;border:0;font-size:15px;display:inline-block}.sol-btn.p{background:var(--green,#12A150);color:#fff}.sol-btn.s{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.55)}'
+    +'.sol-himg{flex:1 1 470px;min-width:280px}.sol-himg img{width:100%;max-height:370px;object-fit:cover;border-radius:14px;display:block}'
+    +'.sol-bene{background:rgba(0,0,0,.2);border-top:1px solid rgba(255,255,255,.12)}.sol-bene-in{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;gap:16px;padding:14px 16px}.sol-be{display:flex;gap:9px;align-items:center;flex:1 1 170px}.sol-bei{font-size:20px}.sol-be b{display:block;font-size:13.5px}.sol-be span{color:#c8d8cf;font-size:12px}'
+    +'.sol-sec{padding:32px 0}.sol-h2{text-align:center;font-size:24px;font-weight:800;color:var(--ink,#14201a);margin:0 0 22px}'
+    +'.sol-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}.sol-cat{display:flex;flex-direction:column;align-items:center;gap:10px;border:1px solid var(--line,#e5e5e5);border-radius:14px;padding:16px;text-decoration:none;color:var(--ink,#14201a);cursor:pointer;background:#fff;transition:.15s}.sol-cat:hover{border-color:var(--green);box-shadow:0 10px 26px -16px rgba(0,0,0,.35)}.sol-cat img{width:96px;height:96px;object-fit:contain}.sol-catph{width:96px;height:96px;display:grid;place-items:center;font-size:40px;color:var(--green)}.sol-cat b{font-size:14px;text-align:center}'
+    +'.sol-solutions{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}.sol-sol{border:1px solid var(--line);border-radius:14px;padding:16px;text-decoration:none;color:var(--ink,#14201a);background:#fff;display:block}.sol-sol b{display:block;font-size:16px}.sol-sol span{display:block;color:var(--muted,#6b7684);font-size:13px;margin:4px 0 8px}.sol-sol em{color:var(--green);font-weight:700;font-style:normal;font-size:13px}'
+    +'.sol-prodgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}'
+    +'.sol-why{background:linear-gradient(120deg,var(--green-d,#0A6E1A),#0b1f15);color:#fff;padding:32px 0}.sol-why h2{text-align:center;font-size:22px;font-weight:800;margin:0 0 22px}.sol-why-grid{display:flex;flex-wrap:wrap;gap:22px;justify-content:center}.sol-why-i{flex:1 1 180px;max-width:210px}.sol-why-i b{display:block;margin-bottom:5px}.sol-why-i span{color:#c8d8cf;font-size:13px;line-height:1.45}'
+    +'.sol-brands{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}.sol-brand{border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-weight:700;color:var(--ink-2,#33413a);background:#fff;font-size:14px}'
+    +'.sol-final{background:linear-gradient(120deg,var(--green-d,#0A6E1A),#0b1f15);color:#fff;border-radius:16px;padding:26px 28px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin:26px 0}.sol-final h3{margin:0;font-size:22px}.sol-final p{margin:5px 0 0;color:#cfe0d6}'
+    +'@media(max-width:760px){.sol-hero-in{flex-direction:column}.sol-himg{order:-1;width:100%}}'
+    +'</style>';
+  return css
+    +'<section class="sol-hero"><div class="sol-hero-in">'
+      +'<div class="sol-hcopy"><h1>'+esc(t1)+(t2?'<br>'+esc(t2):'')+(t3?'<br><span class="g">'+esc(t3)+'</span>':'')+'</h1>'
+        +(hsub?'<p class="sol-hsub">'+esc(hsub)+'</p>':'')
+        +'<div class="sol-hbtns"><a class="sol-btn p" onclick="document.getElementById(\'solPop\').scrollIntoView({behavior:\'smooth\'})">'+esc(ctas[0]||'Shop Solar Products')+'</a>'
+        +'<a class="sol-btn s" href="'+base+'/solar">'+esc(ctas[1]||'Get a Solar Quote')+'</a></div></div>'
+      +(himg?'<div class="sol-himg"><img src="'+esc(himg)+'" alt="Solar"></div>':'')
+    +'</div>'+(beHtml?'<div class="sol-bene"><div class="sol-bene-in">'+beHtml+'</div></div>':'')+'</section>'
+    +(catHtml?'<section class="sol-sec"><div class="sol-in"><h2 class="sol-h2">What are you looking for?</h2><div class="sol-cats">'+catHtml+'</div></div></section>':'')
+    +solarGuide()
+    +'<section class="sol-sec"><div class="sol-in"><h2 class="sol-h2">Solar Solutions for Every Need</h2><div class="sol-solutions">'+solHtml+'</div></div></section>'
+    +(popHtml?'<section class="sol-sec" id="solPop"><div class="sol-in"><h2 class="sol-h2">Popular Solar Products</h2><div class="sol-prodgrid">'+popHtml+'</div></div></section>':'')
+    +(whyHtml?'<section class="sol-why"><div class="sol-in"><h2>Why Choose '+esc(SHOP.name||'Us')+'?</h2><div class="sol-why-grid">'+whyHtml+'</div></div></section>':'')
+    +(brandHtml?'<section class="sol-sec"><div class="sol-in"><h2 class="sol-h2">Our Trusted Brands</h2><div class="sol-brands">'+brandHtml+'</div></div></section>':'')
+    +'<div class="sol-in"><div class="sol-final"><div><h3>Need help choosing the right solar solution?</h3><p>Chat with our solar experts or request a free quote.</p></div>'
+      +'<div class="sol-hbtns"><a class="sol-btn p" href="'+base+'/solar">Find My Solar Solution</a><a class="sol-btn s" href="'+waLink+'" target="_blank" rel="noopener">Chat on WhatsApp</a></div></div></div>';
+}
+
 function whHome(){
   return wsBar()
     +whHero()
+    +solarGuide()
     +'<div id="whBiz">'+whBizGrid()+'</div>'
     +'<div id="whBest">'+trendingRail()+popularRail('🔥 Wholesale Best Sellers')+'</div>'
     +'<div id="whPromo">'+whPromoSec()+'</div>'
@@ -4496,7 +4590,7 @@ function render(){
     // v4.67 (ADR-017 M1) — the wholesale home replaces the home COMPOSITION only. Search, category
     // browsing (CATLIST above), collections, business views, cart and checkout are all untouched;
     // for every tenant without cfg.home this line is a no-op and the classic homes below render.
-    if(whOn()){c.innerHTML=whHome();bizInit();return;}
+    if(whOn()){c.innerHTML=(SHOP.home&&SHOP.home.layout==='solar'?solarHome():whHome());bizInit();return;}
     var bb=businessBanners();
     if(useDepartments()){c.innerHTML=wsBar()+bb+homeRails()+groceryHome();bizInit();return;}
     if(useRestaurantMenus()){c.innerHTML=wsBar()+bb+homeRails()+welcomeBanner()+comboStrip()+restaurantHome();bizInit();return;}
@@ -4861,7 +4955,9 @@ function openCheckout(){
   var extras='<div class="cosec"><button class="colink" onclick="toggleEl(\'coNoteWrap\')">+ Add a note</button>'
     +'<div id="coNoteWrap" style="display:none"><textarea id="coNote" rows="2" placeholder="e.g. leave at gate, call on arrival"></textarea></div>'
     +'<button class="colink" onclick="toggleEl(\'coWhenWrap\')">+ Schedule for later</button>'
-    +'<div id="coWhenWrap" style="display:none"><input id="coWhen" type="datetime-local"></div></div>';
+    +'<div id="coWhenWrap" style="display:none"><input id="coWhen" type="datetime-local"></div>'
+    +'<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:12.5px;color:#475467;cursor:pointer;line-height:1.4"><input type="checkbox" id="coOptIn" style="width:auto;margin-top:2px;flex:none"><span>Keep me updated on WhatsApp — occasional offers &amp; restock alerts. Reply STOP any time.</span></label>'
+    +'</div>';
   /* Quotation-first: this is a Quotation request, not a payment. The bill shows an
      estimated total; final pricing (discounts, VAT, freight) is confirmed on the quotation. */
   var bill='<div class="billbox"><div class="billrow"><span>Items ('+cartCount()+')</span><span>'+ugx(sub)+'</span></div>'
@@ -4903,7 +4999,7 @@ async function placeOrder(){
   if(!IS_PICKUP && !addr && !GEO){toast('Add your delivery address or share your location','err');return;}
   var onCredit=/credit/i.test(pay);
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
@@ -4935,7 +5031,7 @@ async function requestQuotation(){
   if(!name){toast('Please enter your name','err');return;}
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
+  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
   if(GEO){payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');if(btn){btn.disabled=true;btn.textContent='Preparing your quotation…';}
   try{

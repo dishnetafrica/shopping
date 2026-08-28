@@ -95,8 +95,13 @@ final class SupplierCapability implements ObjectCapability
 
         $billRows = [];
         $boughtByProduct = [];
+        $curTally = [];   // which currency this supplier actually invoices in (drives the native statement)
         foreach ($bills as $c) {
             $voided = in_array((string) $c->status, ['void', 'rejected'], true);
+            if (! $voided) {
+                $cc = strtoupper(trim((string) $c->currency));
+                if ($cc !== '') { $curTally[$cc] = ($curTally[$cc] ?? 0) + 1; }
+            }
             $ref = (string) ($c->order_no ?: ('PUR-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)));
             $when = $c->created_at ? Carbon::parse($c->created_at) : null;
             $isCredit = strtolower((string) $c->pay_status) === 'credit';
@@ -150,7 +155,7 @@ final class SupplierCapability implements ObjectCapability
 
         $billsCard = ['kind' => 'table', 'title' => 'Purchases (bills)', 'sub' => count($billRows) . ' recorded', 'searchable' => true,
             'columns' => [['label' => 'Date'], ['label' => 'Ref'], ['label' => 'Item'], ['label' => 'Quantity', 'align' => 'right'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Pay'], ['label' => '', 'align' => 'right']],
-            'rows' => $billRows, 'empty' => 'No purchases recorded for this supplier yet', 'pageSize' => 25];
+            'rows' => $billRows, 'empty' => 'No purchases recorded for this supplier yet', 'pageSize' => 25, 'dateFilter' => true];
 
         // --- payments list ---
         $pays = OrderCost::where('tenant_id', $t)->where('supplier_id', $s->id)
@@ -167,7 +172,7 @@ final class SupplierCapability implements ObjectCapability
         }
         $paysCard = ['kind' => 'table', 'title' => 'Payments made', 'sub' => count($payRows) . ' payments', 'searchable' => true,
             'columns' => [['label' => 'Date'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Paid by'], ['label' => 'Note']],
-            'rows' => $payRows, 'empty' => 'No payments recorded yet', 'pageSize' => 25];
+            'rows' => $payRows, 'empty' => 'No payments recorded yet', 'pageSize' => 25, 'dateFilter' => true];
 
         // --- contact card ---
         $contactCard = ['kind' => 'dl', 'title' => 'Contact & terms', 'rows' => array_values(array_filter([
@@ -222,15 +227,44 @@ final class SupplierCapability implements ObjectCapability
             'prefill' => ['name' => (string) ($s->business_name ?: $s->name), 'contact_name' => (string) $s->contact_name, 'phone' => (string) $s->phone, 'email' => (string) $s->email, 'tax_number' => (string) $s->tax_number, 'pay_term_days' => $s->pay_term_days, 'opening_balance' => $s->opening_balance, 'opening_currency' => (string) $s->opening_currency, 'address' => (string) $s->address],
             'body' => ['business_name' => (string) ($s->business_name ?: $s->name)]];
         $statement = ['key' => 'statement', 'label' => 'View statement', 'href' => '/api/v1/doc/supplier-statement?id=' . $s->id, 'actor' => 'human', 'tone' => 'default'];
+        // Native-currency statement (e.g. UGX) — figures taken from each bill's native amount so it
+        // reconciles line-for-line against the supplier's own invoice. Offered only when the supplier
+        // trades in a non-USD currency; the USD "View statement" above stays the consolidated view.
+        // The supplier's real invoicing currency = the most common currency across their bills
+        // (NOT the tenant base — a USD-reporting tenant still buys foil in UGX). Falls back to the
+        // opening/base currency only when there are no bills yet.
+        arsort($curTally);
+        $txnCur = strtoupper((string) (array_key_first($curTally) ?: $baseCur));
+        $nativeCur = $txnCur !== 'USD' ? $txnCur : null;
+        // "Download statement…" — a picker (currency + PDF/CSV + optional date range) rather than a
+        // fixed link, so the owner chooses the period before it generates. The supplier's own
+        // currency (e.g. UGX) is offered first when they invoice in one; USD (consolidated) is always
+        // available. The plain "View statement" above stays a one-click USD PDF.
+        $statementDl = ['key' => 'statement_dl', 'label' => 'Download statement…', 'actor' => 'human', 'tone' => 'default',
+            'statement' => ['id' => $s->id, 'name' => (string) ($s->business_name ?: $s->name),
+                'currencies' => $nativeCur ? [$nativeCur, 'USD'] : ['USD']]];
+        // Pay Advisor next-best-action: "Pay UGX X — N days overdue", opening the Pay supplier form.
+        // Advisory only; the pay endpoint still gates on menu:purchases. Read-only if it throws.
+        $nba = null;
+        if ($canEdit) {
+            try {
+                $adv = app(\App\Services\Finance\PayAdvisor::class)->forSupplier($ctx->tenant, $s);
+                if ($adv && in_array($adv['state'], ['pay', 'tension'], true)) {
+                    $nba = ['text' => \App\Services\Finance\PayAdvisor::line($adv), 'action' => $paySupplier];
+                }
+            } catch (\Throwable $e) {
+                $nba = null;
+            }
+        }
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
 
         $header = $canEdit ? [$buyProduct, $recordBill, $paySupplier] : [];
-        $quick = $canEdit ? [$buyProduct, $recordBill, $paySupplier, $statement, $editSupplier] : [$statement];
-        $more = $canEdit ? [$statement, $sendStatement, $editSupplier, $deleteSup] : [$statement];
+        $quick = $canEdit ? array_values(array_filter([$buyProduct, $recordBill, $paySupplier, $statement, $statementDl, $editSupplier])) : array_values(array_filter([$statement, $statementDl]));
+        $more = $canEdit ? array_values(array_filter([$statement, $statementDl, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementDl]));
 
-        return (new WorkspacePayload)
+        $payload = (new WorkspacePayload)
             ->object([
                 'type' => 'supplier', 'id' => (string) $s->id, 'ref' => (string) $s->name, 'title' => (string) ($s->business_name ?: $s->name),
                 'subtitle' => trim(implode(' · ', array_filter([$s->contact_id ? ('#' . $s->contact_id) : '', (string) $s->contact_name, (string) $s->address]))),
@@ -260,6 +294,10 @@ final class SupplierCapability implements ObjectCapability
             ->actions($header)
             ->more($more)
             ->meta(['capability' => 'supplier', 'ttl' => 30, 'layout' => 'record', 'permissions' => ['menu:purchases']]);
+        if ($nba) {
+            $payload->nba($nba['text'], $nba['action']);
+        }
+        return $payload;
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array

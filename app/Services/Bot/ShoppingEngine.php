@@ -418,9 +418,28 @@ class ShoppingEngine
         $cands = $this->matcher->search($query, $products);
         if (!$cands) return ['status' => 'none'];
 
-        // single candidate: resolve directly; a size token here just means count
+        // single candidate: resolve directly. A size token must NEVER silently become the quantity
+        // (UnitGuard, Phase-0 safety). It either confirms an exact pack (count), or -- when it can't
+        // be resolved into a whole unit the engine can price -- prompts a clarification. The engine
+        // has no weight pricing (the catalogue row carries no pricing refs), so a sold-by-weight size
+        // is asked back rather than guessed; the full-model path (BotBrain) prices weight lines.
         if (count($cands) === 1) {
-            return ['status' => 'single', 'product' => $cands[0]['product'], 'qty' => $qty, 'confidence' => self::CONF_HIGH];
+            $p = $cands[0]['product'];
+            $decision = \App\Services\Bot\UnitGuard::decide([
+                'name'           => (string) ($p['name'] ?? ''),
+                'sold_by_weight' => ! empty($p['sold_by_weight']),
+                'size'           => $size,
+                'count'          => $count,
+            ]);
+            if ($decision['mode'] === 'count') {
+                return ['status' => 'single', 'product' => $p, 'qty' => $decision['qty'], 'confidence' => self::CONF_HIGH];
+            }
+            $have = CatalogueMatcher::skuSize((string) ($p['name'] ?? ''));
+            $available = $decision['mode'] === 'weight'
+                ? ['a size like 250g, 500g or 1kg']
+                : ($have !== null ? [$have] : ['the standard pack']);
+            return ['status' => 'size_unavailable', 'products' => [$p],
+                    'requested' => (string) $size, 'available' => $available];
         }
 
         // explicit browse ("show me rice" / "which rice") -> always list, never auto-pick

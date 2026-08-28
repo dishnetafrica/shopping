@@ -47,6 +47,10 @@ tr:hover td{background:#fafcfa}
 .x{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)}
 .subt{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 4px}
 .note{font-size:12px;color:var(--muted)}
+.pd{display:flex;gap:6px;flex-wrap:wrap}
+.pd .b{border:1.5px solid var(--line);background:#fff;color:#1f2937;border-radius:18px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;user-select:none}
+.pd .b:hover{border-color:var(--green)}
+.pd .b.on{background:var(--green);border-color:var(--green);color:#fff}
 .err{color:var(--red);font-size:12px;font-weight:700}
 .okmsg{color:var(--green);font-size:12px;font-weight:700}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;word-break:break-all}
@@ -186,6 +190,16 @@ tr:hover td{background:#fafcfa}
     <div class="f"><label>Name *</label><input id="cName" placeholder="July promo"></div>
     <div class="f"><label>Channel *</label><select id="cChannel" onchange="campContentFields()"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Email + WhatsApp</option></select></div>
     <div class="f"><label>Throttle / minute</label><input id="cThrottle" type="number" min="1" max="600" value="60"></div>
+    <div class="f"><label>Send per day <span class="note" style="font-weight:400">(spread a big list over days)</span></label>
+      <div class="pd" id="cPerDayBtns">
+        <span class="b on" data-v="0" onclick="setPerDay(0,this)">All at once</span>
+        <span class="b" data-v="20" onclick="setPerDay(20,this)">20 / day</span>
+        <span class="b" data-v="40" onclick="setPerDay(40,this)">40 / day</span>
+        <span class="b" data-v="60" onclick="setPerDay(60,this)">60 / day</span>
+        <span class="b" data-v="100" onclick="setPerDay(100,this)">100 / day</span>
+      </div>
+      <input id="cPerDay" type="hidden" value="0">
+      <span class="note" id="cPlan" style="display:block;margin-top:4px"></span></div>
   </div>
   <div class="f"><label>Template <span class="note">(blank = write inline content below)</span></label>
     <select id="cTemplate"><option value="">— inline content —</option></select></div>
@@ -521,7 +535,7 @@ async function campOpen(id){
   const c=id?campCache.find(x=>x.id===id):null;
   $('cTitle').textContent=c?c.name:'New campaign';
   $('cId').value=c?c.id:'';$('cName').value=c?c.name:'';$('cChannel').value=c?c.channel:'email';
-  $('cThrottle').value=c?c.throttle_per_minute:60;$('cTemplate').value=c?(c.template_key||''):'';
+  $('cThrottle').value=c?c.throttle_per_minute:60;reflectPerDay(c?(c.daily_send_cap||0):0);$('cTemplate').value=c?(c.template_key||''):'';
   $('cSubject').value=c?(c.subject||''):'';$('cHtml').value=c?(c.html_body||''):'';$('cText').value=c?(c.text_body||''):'';
   const sg=c&&c.segment?c.segment:{};
   $('cSeg').value=sg.segment||'';$('cCity').value=sg.city||'';
@@ -537,17 +551,33 @@ function campSegment(){
   if($('cOrdOut').value)sg.not_ordered_within_days=parseInt($('cOrdOut').value,10);
   return sg;
 }
+// Reflect a per-day value into the hidden input + preset buttons (no estimate call).
+function reflectPerDay(v){
+  const h=$('cPerDay');if(h)h.value=String(v);
+  const btns=document.querySelectorAll('#cPerDayBtns .b');
+  btns.forEach(b=>b.classList.toggle('on',(+b.getAttribute('data-v'))===(+v)));
+}
+function setPerDay(v,el){reflectPerDay(v);campEstimate();}
 async function campEstimate(){
   $('cEst').textContent='Counting…';
-  const j=await api('/papi/comms/campaigns/estimate',{method:'POST',body:{segment:campSegment(),channel:$('cChannel').value}});
+  const perDay=parseInt($('cPerDay').value||'0',10)||0;
+  const j=await api('/papi/comms/campaigns/estimate',{method:'POST',body:{segment:campSegment(),channel:$('cChannel').value,daily_send_cap:perDay}});
   if(!j.ok){$('cEst').innerHTML='<span class="err">'+esc(j.error||'error')+'</span>';return}
   const e=j.estimate;
   $('cEst').innerHTML='&#128231; '+e.email+' &middot; &#128172; '+e.whatsapp+' (of '+e.total_profiles+' customers)';
+  const plan=$('cPlan');
+  if(plan){
+    if(perDay>0 && e.days){
+      const bd=(e.breakdown||[]);
+      const shown=bd.slice(0,7).join(' + ')+(bd.length>7?(' + … ('+(bd.length-7)+' more days)'):'');
+      plan.innerHTML='&#128197; ~<b>'+e.days+' day'+(e.days===1?'':'s')+'</b> at '+perDay+'/day &mdash; '+esc(shown);
+    } else { plan.textContent=''; }
+  }
 }
 async function campSave(){
   const body={id:$('cId').value||null,name:$('cName').value.trim(),channel:$('cChannel').value,
     template_key:$('cTemplate').value||null,subject:$('cSubject').value,html_body:$('cHtml').value,
-    text_body:$('cText').value,segment:campSegment(),throttle_per_minute:parseInt($('cThrottle').value||'60',10)};
+    text_body:$('cText').value,segment:campSegment(),throttle_per_minute:parseInt($('cThrottle').value||'60',10),daily_send_cap:parseInt($('cPerDay').value||'0',10)||0};
   if(!body.name){$('cMsg').innerHTML='<span class="err">Name is required.</span>';return}
   const j=await api('/papi/comms/campaigns/save',{method:'POST',body});
   if(!j.ok){$('cMsg').innerHTML='<span class="err">'+esc(j.error||'error')+'</span>';return}

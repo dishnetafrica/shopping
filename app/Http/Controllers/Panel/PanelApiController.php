@@ -270,6 +270,9 @@ class PanelApiController extends Controller
             'ssMarkupPct'   => (float) ($s['ssMarkupPct'] ?? 0),
             'comboRecommendations' => (bool) ($s['combo_recommendations'] ?? true),
             'sendProductImages'    => (bool) ($s['send_product_images'] ?? true),
+            'webChat'        => (bool) ($s['web_chat'] ?? false),
+            'webChatAuto'    => ((string) ($s['web_chat_mode'] ?? 'auto')) !== 'off',
+            'webChatContact' => (bool) ($s['web_chat_contact'] ?? true),
             'features'      => $this->tenantFeatures($t),
         ]);
     }
@@ -2787,7 +2790,11 @@ class PanelApiController extends Controller
             $shotList = $shots[$pid];
             usort($shotList, fn ($a, $b) => $a['idx'] <=> $b['idx']);
 
-            $hasMain = trim((string) $p->image_url) !== '';
+            // A bare-filename image_url ("Diamond Solar Lawn Light.jpg") is a broken value that resolves
+            // to a dead /storage path — it must NOT count as an existing main photo, or the importer
+            // would skip the product and leave it permanently photo-less. Only a real stored path/URL
+            // counts (Product::isUsableImageRef), so a re-import heals broken links without needing override.
+            $hasMain = Product::isUsableImageRef($p->image_url);
             $hasMain ? $withPhoto++ : $withoutPhoto++;
 
             $mainShot = $shotList[0];                 // lowest index = the main photo
@@ -2806,7 +2813,8 @@ class PanelApiController extends Controller
             // Gallery slots: fill the first open slots (empty, or all if override).
             $openSlots = [];
             foreach (['gallery_1', 'gallery_2', 'gallery_3'] as $col) {
-                if ($override || trim((string) ($p->$col ?? '')) === '') $openSlots[] = $col;
+                // Same rule as the main photo: a broken bare-filename gallery value is an open slot.
+                if ($override || ! Product::isUsableImageRef($p->$col)) $openSlots[] = $col;
             }
             foreach ($galShots as $shot) {
                 if (! $openSlots) break;
@@ -3446,7 +3454,8 @@ class PanelApiController extends Controller
         $t->putSetting('category_order', array_values($order));
 
         $this->catFlush($t);
-        return response()->json(['ok' => true, 'moved' => (int) $moved]);
+        return response()->json(['ok' => true, 'moved' => (int) $moved,
+            'message' => 'Renamed to "' . $new . '"' . ($moved > 0 ? ' — ' . (int) $moved . ' product' . ($moved === 1 ? '' : 's') . ' moved' : '')]);
     }
 
     /** Delete a category — only when empty. Products must be moved away first. */
@@ -5120,6 +5129,7 @@ class PanelApiController extends Controller
                 'audience'   => $c->audience,
                 'status'     => $c->status,
                 'when'       => optional($c->scheduled_for)->toIso8601String(),
+                'daily_send_cap' => $c->daily_send_cap,
                 'stats'      => is_array($c->stats) ? $c->stats : [],
             ])->values();
 
@@ -5148,6 +5158,8 @@ class PanelApiController extends Controller
             'image_url'   => trim((string) $r->input('image_url', '')) ?: null,
             'product_ids' => array_values(array_filter(array_map('intval', (array) $r->input('product_ids', [])))),
             'cta'         => trim((string) $r->input('cta', '')) ?: 'Reply BUY to order instantly.',
+            // 0/blank → no per-campaign daily limit (send straight through, as before).
+            'daily_send_cap' => (int) $r->input('daily_send_cap', 0) > 0 ? (int) $r->input('daily_send_cap') : null,
         ];
         if ($data['message'] === '' && ! $data['product_ids']) {
             return response()->json(['ok' => false, 'error' => 'empty'], 422);
@@ -5199,7 +5211,16 @@ class PanelApiController extends Controller
         // v4.32 — count() already has the do-not-message list applied, so this is the number
         // that will actually be contacted. `excluded` says how many were removed.
         $count = $aud->count((string) $r->input('audience', 'all'), $r->input('category'));
-        return response()->json(['ok' => true, 'count' => $count, 'excluded' => $aud->lastRemoved()]);
+
+        // Weekly-plan maths for "send X/day": how many days at that pace, and the per-day breakdown.
+        $perDay = (int) $r->input('daily_send_cap', 0);
+        $days      = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::days($count, $perDay) : 1;
+        $breakdown = $perDay > 0 ? \App\Services\Comms\Marketing\BatchPlan::breakdown($count, $perDay) : [];
+
+        return response()->json([
+            'ok' => true, 'count' => $count, 'excluded' => $aud->lastRemoved(),
+            'per_day' => $perDay > 0 ? $perDay : null, 'days' => $days, 'breakdown' => $breakdown,
+        ]);
     }
 
     /** AI suggests a promotion the owner can review and approve. */
@@ -5293,6 +5314,154 @@ class PanelApiController extends Controller
             ])->values();
 
         return response()->json(['ok' => true, 'events' => $rows]);
+    }
+
+    /**
+     * Customer Engagement dashboard data (Phase 1, read-only). Returns the latest re-engagement plan
+     * snapshot for this tenant — the eligibility funnel + today's chosen list + why each was picked.
+     * It only READS engagement_candidates; it never builds a plan or sends anything.
+     */
+    public function engagementPlan(Request $r)
+    {
+        $tid = $r->user()->tenant->id;
+
+        $latest = \App\Models\EngagementCandidate::withoutGlobalScopes()
+            ->where('tenant_id', $tid)->max('plan_date');
+
+        if (! $latest) {
+            return response()->json([
+                'ok' => true, 'plan_date' => null, 'enabled' => (bool) $r->user()->tenant->setting('engagement_enabled', false),
+                'send_enabled' => (bool) $r->user()->tenant->setting('engagement_send_enabled', false),
+                'send_cap' => (int) $r->user()->tenant->setting('engagement_send_daily_cap', 15),
+                'target' => (int) $r->user()->tenant->setting('engagement_daily_target', 40),
+                'cooldown_days' => (int) $r->user()->tenant->setting('engagement_cooldown_days', 14),
+                'counts' => ['past_buyers' => 0, 'opted_in' => 0, 'eligible' => 0, 'chosen' => 0],
+                'blocked' => (object) [], 'candidates' => [],
+            ]);
+        }
+
+        $all = \App\Models\EngagementCandidate::withoutGlobalScopes()
+            ->where('tenant_id', $tid)->where('plan_date', $latest)->get();
+
+        $blocked = [];
+        foreach ($all as $c) {
+            if ($c->blocked_reason) { $blocked[$c->blocked_reason] = ($blocked[$c->blocked_reason] ?? 0) + 1; }
+        }
+
+        $candidates = $all->where('chosen', true)->sortByDesc('score')->values()->map(fn ($c) => [
+            'name'          => (string) ($c->name ?: $c->phone),
+            'phone_tail'    => substr((string) $c->phone, -4),
+            'score'         => (int) $c->score,
+            'campaign_type' => $c->campaign_type,
+            'campaign_label' => \App\Services\Engagement\CampaignType::LABEL[$c->campaign_type] ?? $c->campaign_type,
+            'product'       => $c->product_name,
+            'reason'        => $c->reason,
+            'next_eligible' => optional($c->next_eligible_at)->toDateString(),
+            'send_status'   => $c->send_status,          // null=not sent, queued|sent|blocked|skipped|failed
+        ])->all();
+
+        return response()->json([
+            'ok'            => true,
+            'plan_date'     => $latest,
+            'enabled'       => (bool) $r->user()->tenant->setting('engagement_enabled', false),
+            'send_enabled'  => (bool) $r->user()->tenant->setting('engagement_send_enabled', false),
+            'send_cap'      => (int) $r->user()->tenant->setting('engagement_send_daily_cap', 15),
+            'target'        => (int) $r->user()->tenant->setting('engagement_daily_target', 40),
+            'cooldown_days' => (int) $r->user()->tenant->setting('engagement_cooldown_days', 14),
+            'counts'        => [
+                'past_buyers' => $all->count(),
+                'opted_in'    => $all->filter(fn ($c) => ! in_array($c->blocked_reason, ['not_opted_in', 'opted_out', 'suppressed'], true))->count(),
+                'eligible'    => $all->where('eligible', true)->count(),
+                'chosen'      => $all->where('chosen', true)->count(),
+                'sent'        => $all->whereIn('send_status', ['queued', 'sent'])->count(),
+            ],
+            'blocked'       => (object) $blocked,
+            'candidates'    => $candidates,
+        ]);
+    }
+
+    /**
+     * Owner picks the daily send volume for the re-engagement engine right on the
+     * Customer Engagement screen (the same idea as a campaign's "Send per day", but here
+     * it's the engine's paced daily cap). Writes the single `engagement_send_daily_cap`
+     * setting the sender already reads — no new knob. The planner target is nudged up to
+     * match so enough candidates are chosen to actually fill the cap (planner clamps at 50).
+     */
+    public function engagementSaveCap(Request $r)
+    {
+        $t   = $r->user()->tenant;
+        $cap = (int) $r->input('send_daily_cap', -1);
+        if ($cap < 0 || $cap > 100) {
+            return response()->json(['ok' => false, 'error' => 'bad_value'], 422);
+        }
+
+        $s = $t->settings ?? [];
+        $s['engagement_send_daily_cap'] = $cap;
+        $curTarget = (int) ($s['engagement_daily_target'] ?? 40);
+        if ($cap > $curTarget) {
+            $s['engagement_daily_target'] = min($cap, 50);   // planner never marks more than 50 chosen
+        }
+        $t->settings = $s;
+        $t->save();
+
+        return response()->json([
+            'ok'       => true,
+            'send_cap' => $cap,
+            'target'   => (int) ($s['engagement_daily_target'] ?? 40),
+        ]);
+    }
+
+    /**
+     * Vision Stock & Loss — read-only review feed of movement exceptions. Lists the reconciliation
+     * outcomes that need a human eye (🔴 review-required first, then 🟠 pending), straight from the
+     * vision_events recon columns + the self-contained evidence block. Read-only for now — the
+     * confirm/investigate/false-positive actions are the next step.
+     */
+    public function visionReview(Request $r)
+    {
+        $tid = (int) $r->user()->tenant->id;
+
+        $rows = \App\Models\VisionEvent::withoutGlobalScopes()
+            ->where('tenant_id', $tid)
+            ->whereNotNull('recon_result')
+            ->whereIn('recon_result', ['UNRECONCILED', 'QTY_DISCREPANCY', 'ACCESS_VIOLATION', 'PENDING'])
+            ->orderByRaw('CASE WHEN review_required THEN 0 ELSE 1 END')
+            ->orderByDesc('occurred_at')
+            ->limit(100)->get();
+
+        $items = $rows->map(function ($e) {
+            $pl  = is_array($e->payload) ? $e->payload : [];
+            $rec = (array) ($pl['reconciliation'] ?? []);
+            $ev  = (array) ($rec['evidence'] ?? []);
+
+            return [
+                'id'          => (int) $e->id,
+                'time'        => optional($e->occurred_at)->toIso8601String(),
+                'camera'      => (string) ($e->camera ?? ''),
+                'zone'        => (string) ($e->zone ?? ''),
+                'direction'   => (string) ($ev['direction'] ?? ($pl['direction'] ?? '')),
+                'qty'         => (int) ($ev['qty'] ?? data_get($pl, 'object.qty', 0)),
+                'confidence'  => $ev['confidence'] ?? ($rec['confidence'] ?? null),
+                'result'      => (string) $e->recon_result,
+                'severity'    => (string) ($rec['severity'] ?? ''),
+                'review'      => (bool) $e->review_required,
+                'attribution' => (string) ($rec['attribution'] ?? ''),
+                'track'       => $ev['track_id'] ?? data_get($pl, 'assoc.track_id'),
+                'assoc_conf'  => data_get($pl, 'assoc.assoc_conf'),
+                'reason'      => (string) ($rec['reason'] ?? ''),
+                'matched'     => $rec['matched'] ?? null,
+            ];
+        })->values();
+
+        return response()->json([
+            'ok'      => true,
+            'enabled' => \App\Services\Vision\Reconciliation\VisionReconciler::enabledForTenant($tid),
+            'counts'  => [
+                'review'  => $rows->where('review_required', true)->count(),
+                'pending' => $rows->where('recon_result', 'PENDING')->count(),
+            ],
+            'items'   => $items,
+        ]);
     }
 
     // AI bot setup — owner describes the business in plain words, we generate the persona.
@@ -5584,7 +5753,7 @@ class PanelApiController extends Controller
     {
         $t   = $r->user()->tenant;
         $key = (string) $r->query('key', '');
-        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup', 'intro_catalog', 'credit_reminder'], true)) {
+        if (! in_array($key, ['combo_recommendations', 'send_product_images', 'reengage_followup', 'intro_catalog', 'credit_reminder', 'web_chat', 'web_chat_contact', 'web_chat_mode'], true)) {
             return response()->json(['ok' => false, 'error' => 'bad_key'], 422);
         }
         $on = in_array((string) $r->query('on', '1'), ['1', 'true', 'on', 'yes'], true);
@@ -5592,6 +5761,9 @@ class PanelApiController extends Controller
             $cfg = (array) $t->setting($key, []);
             $cfg['enabled'] = $on;
             $t->putSetting($key, $cfg);
+        } elseif ($key === 'web_chat_mode') {
+            // Website chat: bot answers automatically (auto) vs. only collect + hand to WhatsApp (off).
+            $t->putSetting('web_chat_mode', $on ? 'auto' : 'off');
         } else {
             $t->putSetting($key, $on);
         }

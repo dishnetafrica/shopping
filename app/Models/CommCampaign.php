@@ -31,12 +31,13 @@ class CommCampaign extends Model
 
     protected $fillable = [
         'tenant_id', 'name', 'channel', 'template_key', 'subject', 'html_body', 'text_body',
-        'segment', 'status', 'scheduled_at', 'started_at', 'finished_at',
-        'total_estimated', 'enqueued_count', 'throttle_per_minute', 'last_enqueued_id', 'created_by',
+        'segment', 'offer', 'status', 'scheduled_at', 'started_at', 'finished_at',
+        'total_estimated', 'enqueued_count', 'throttle_per_minute', 'daily_send_cap', 'last_enqueued_id', 'created_by',
     ];
 
     protected $casts = [
         'segment'      => 'array',
+        'offer'        => 'array',
         'scheduled_at' => 'datetime',
         'started_at'   => 'datetime',
         'finished_at'  => 'datetime',

@@ -21,7 +21,7 @@ class V3TasksTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function seed(): array
+    private function seedFixture(): array
     {
         $t = Tenant::factory()->create();
         app(\App\Support\TenantContext::class)->set($t->id);
@@ -32,7 +32,7 @@ class V3TasksTest extends TestCase
 
     public function test_everyone_has_tasks_menu(): void
     {
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $this->assertContains('tasks', $mgr->effectiveMenus(), 'owner sees tasks');
         $this->assertContains('tasks', $savan->effectiveMenus(), 'staff sees own tasks');
     }
@@ -40,7 +40,7 @@ class V3TasksTest extends TestCase
     public function test_capability_lists_the_persons_tasks(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         app(TaskEngine::class)->assignAdHoc($t, $savan, 'Enter book details', null, 2, $mgr);
 
         $ctx = CapabilityContext::fromUser($savan->fresh());
@@ -53,7 +53,7 @@ class V3TasksTest extends TestCase
     public function test_manager_can_assign_via_capability_command(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $ctx = CapabilityContext::fromUser($mgr);
         $res = app(TasksCapability::class)->command($ctx, 'assign', [
             'assignee_id' => $savan->id, 'title' => 'Count fridge', 'priority' => 2,
@@ -65,7 +65,7 @@ class V3TasksTest extends TestCase
     public function test_non_manager_cannot_assign(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $ctx = CapabilityContext::fromUser($savan);
         $res = app(TasksCapability::class)->command($ctx, 'assign', [
             'assignee_id' => $mgr->id, 'title' => 'Nope', 'priority' => 2,
@@ -77,7 +77,7 @@ class V3TasksTest extends TestCase
     public function test_ad_hoc_task_gets_a_link_nonce(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $res = app(TaskEngine::class)->assignAdHoc($t, $savan, 'With link', null, 2, $mgr);
         $task = OrderTask::find($res['task_id']);
         $this->assertNotEmpty($task->link_nonce, 'ad-hoc task carries a tokenized link nonce');
@@ -86,7 +86,7 @@ class V3TasksTest extends TestCase
     public function test_public_link_shows_and_completes_task(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $res = app(TaskEngine::class)->assignAdHoc($t, $savan, 'Public task', null, 2, $mgr);
         $nonce = OrderTask::find($res['task_id'])->link_nonce;
 
@@ -108,7 +108,7 @@ class V3TasksTest extends TestCase
     public function test_all_tasks_shows_every_persons_tasks(): void
     {
         \Illuminate\Support\Facades\Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         app(TaskEngine::class)->assignAdHoc($t, $savan, 'Savan task', null, 2, $mgr);
         app(TaskEngine::class)->assignAdHoc($t, $mgr, 'Mgr task', null, 2, $mgr);
 
@@ -125,7 +125,7 @@ class V3TasksTest extends TestCase
     public function test_manager_can_set_status_from_list(): void
     {
         \Illuminate\Support\Facades\Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $id = app(TaskEngine::class)->assignAdHoc($t, $savan, 'Move me', null, 2, $mgr)['task_id'];
 
         $r1 = app(TaskEngine::class)->setStatusById($t, $id, 'in_progress', $mgr);
@@ -140,7 +140,7 @@ class V3TasksTest extends TestCase
     public function test_invalid_status_rejected(): void
     {
         \Illuminate\Support\Facades\Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $id = app(TaskEngine::class)->assignAdHoc($t, $savan, 'x', null, 2, $mgr)['task_id'];
         $r = app(TaskEngine::class)->setStatusById($t, $id, 'bogus', $mgr);
         $this->assertFalse($r['ok']);
@@ -149,7 +149,7 @@ class V3TasksTest extends TestCase
     public function test_completed_tasks_excluded_from_active_all_tasks(): void
     {
         \Illuminate\Support\Facades\Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $id = app(TaskEngine::class)->assignAdHoc($t, $savan, 'done soon', null, 2, $mgr)['task_id'];
         app(TaskEngine::class)->setStatusById($t, $id, 'completed', $mgr);
 
@@ -162,7 +162,7 @@ class V3TasksTest extends TestCase
     public function test_nonce_a_cannot_touch_task_b(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $a = OrderTask::find(app(TaskEngine::class)->assignAdHoc($t,$savan,'Task A',null,2,$mgr)['task_id']);
         $b = OrderTask::find(app(TaskEngine::class)->assignAdHoc($t,$savan,'Task B',null,2,$mgr)['task_id']);
 

@@ -65,19 +65,61 @@ class VisionEventController extends Controller
             $payload['_box_uid'] = $box->box_uid;   // provenance without a schema change
         }
 
-        $ev = VisionEvent::create([
-            'tenant_id' => $tenantId,
-            'event' => $data['event'],
-            'store' => $data['store'] ?? ($box->store ?? null),
-            'camera' => $data['camera'] ?? null,
-            'zone' => $data['zone'] ?? null,
-            'from_state' => $data['from_state'] ?? null,
-            'to_state' => $data['to_state'] ?? null,
-            'fill' => isset($data['fill']) ? (float) $data['fill'] : null,
-            'payload' => $payload,
-            'occurred_at' => isset($data['timestamp']) ? date('Y-m-d H:i:s', strtotime($data['timestamp']) ?: time()) : now(),
-        ]);
+        // Idempotency: the edge outbox retries at-least-once, so a re-delivered event (same uid) must
+        // return the ORIGINAL row and decision — never a second row or a duplicate reconciliation.
+        $uid = (string) ($payload['uid'] ?? '');
+        if ($uid !== '') {
+            $dup = VisionEvent::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)->where('event_uid', $uid)->first();
+            if ($dup) {
+                return response()->json([
+                    'ok' => true, 'id' => $dup->id, 'duplicate' => true,
+                    'reconciliation' => is_array($dup->payload) ? ($dup->payload['reconciliation'] ?? null) : null,
+                ]);
+            }
+        }
 
-        return response()->json(['ok' => true, 'id' => $ev->id]);
+        try {
+            $ev = VisionEvent::create([
+                'tenant_id' => $tenantId,
+                'event_uid' => $uid !== '' ? $uid : null,
+                'event' => $data['event'],
+                'store' => $data['store'] ?? ($box->store ?? null),
+                'camera' => $data['camera'] ?? null,
+                // A movement event carries its instrumented boundary in `zone_uid`; fall back to `zone`.
+                'zone' => $payload['zone_uid'] ?? ($data['zone'] ?? null),
+                'from_state' => $data['from_state'] ?? null,
+                'to_state' => $data['to_state'] ?? null,
+                'fill' => isset($data['fill']) ? (float) $data['fill'] : null,
+                'payload' => $payload,
+                'occurred_at' => isset($data['timestamp']) ? date('Y-m-d H:i:s', strtotime($data['timestamp']) ?: time()) : now(),
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Unique (tenant_id, event_uid) race — a concurrent re-delivery won. Return the original.
+            $dup = $uid !== '' ? VisionEvent::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)->where('event_uid', $uid)->first() : null;
+            if ($dup) {
+                return response()->json([
+                    'ok' => true, 'id' => $dup->id, 'duplicate' => true,
+                    'reconciliation' => is_array($dup->payload) ? ($dup->payload['reconciliation'] ?? null) : null,
+                ]);
+            }
+            throw $e;
+        }
+
+        // Phase-0 Stock & Loss: reconcile MOVEMENT events against the ledger (opt-in; shelf events are
+        // never touched). Best-effort — a reconciliation failure must never drop the event.
+        $decision = null;
+        if (\App\Services\Vision\Reconciliation\VisionReconciler::enabledForTenant($tenantId)
+            && \App\Services\Vision\Reconciliation\VisionReconciler::handles((string) $data['event'])) {
+            try {
+                $decision = app(\App\Services\Vision\Reconciliation\VisionReconciler::class)
+                    ->reconcile($tenantId, $payload, $ev);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('vision reconcile failed: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json(['ok' => true, 'id' => $ev->id, 'reconciliation' => $decision]);
     }
 }

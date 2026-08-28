@@ -1,0 +1,80 @@
+{
+  "clip_id": "juba_door2_2026-08-20_0007",
+  "video": "clips/juba_door2_2026-08-20_0007.mp4",
+  "store": "wh-juba-01",
+  "zone_uid": "D->EXIT",
+  "line": [
+    [
+      0,
+      540
+    ],
+    [
+      1920,
+      540
+    ]
+  ],
+  "fps": 25.0,
+  "session": "juba-2026-08-20-am",
+  "split": "train",
+  "capture": {
+    "camera_height_m": 3.2,
+    "lens": "2.8mm",
+    "resolution": [
+      1920,
+      1080
+    ],
+    "lighting": "mixed daylight + overhead fluorescent",
+    "door_geometry": "roll-up door, ~3m wide, camera above and inside",
+    "carton_types": [
+      "standard 40x30x30 brown",
+      "taped mixed sizes"
+    ],
+    "datetime": "2026-08-20T09:14:00+03:00",
+    "location": "Juba warehouse \u2014 dispatch door 2"
+  },
+  "frames": {
+    "120": {
+      "carton_present": true,
+      "occluded": false,
+      "continuously_visible": true,
+      "boxes": [
+        {
+          "box": [
+            900,
+            480,
+            1040,
+            620
+          ],
+          "label": "carton"
+        }
+      ]
+    },
+    "121": {
+      "carton_present": true,
+      "occluded": true,
+      "continuously_visible": true,
+      "boxes": [
+        {
+          "box": [
+            905,
+            490,
+            1045,
+            630
+          ],
+          "label": "carton"
+        }
+      ]
+    }
+  },
+  "crossings": [
+    {
+      "gt_id": "A",
+      "direction": "out",
+      "frame": 132,
+      "ts": 5.28,
+      "num_cartons": 1,
+      "occluded": false,
+      "continuously_visible": true
+    }
+  ]
+}

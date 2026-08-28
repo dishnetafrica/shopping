@@ -100,19 +100,23 @@ final class SettingsCapability implements ProcessCapability
             ['Guidance', $ledgerOn ? ($liveStockOn ? 'Fully live.' : 'Building up — switch on “live stock” once your on-hand counts are trusted.') : 'Turn the ledger on to start accumulating real stock from goods receipts.'],
         ]];
 
-        // --- bot automation toggles (item suggestions, product photos) ---
+        // --- bot automation toggles (item suggestions, product photos, website chat) ---
         $comboOn = (bool) $t->setting('combo_recommendations', true);
         $photosOn = (bool) $t->setting('send_product_images', true);
+        $webChatOn = (bool) $t->setting('web_chat', false);
+        $webChatAuto = ((string) $t->setting('web_chat_mode', 'auto')) !== 'off';
+        $webChatContact = (bool) $t->setting('web_chat_contact', true);
         $editAutomation = [
-            'key' => 'edit_automation', 'label' => 'Bot suggestions & photos', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
-            'schema' => ['combo_recommendations' => 'enum:off,on', 'send_product_images' => 'enum:off,on'],
-            'labels' => ['combo_recommendations' => 'Item suggestions ("Goes well with" / "Often bought together")', 'send_product_images' => 'Send product photos with replies'],
-            'prefill' => ['combo_recommendations' => $comboOn ? 'on' : 'off', 'send_product_images' => $photosOn ? 'on' : 'off'],
+            'key' => 'edit_automation', 'label' => 'Bot suggestions, photos & website chat', 'method' => 'POST', 'endpoint' => $ep . '/save_settings', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['combo_recommendations' => 'enum:off,on', 'send_product_images' => 'enum:off,on', 'web_chat' => 'enum:off,on', 'web_chat_mode' => 'enum:auto,off', 'web_chat_contact' => 'enum:off,on'],
+            'labels' => ['combo_recommendations' => 'Item suggestions ("Goes well with" / "Often bought together")', 'send_product_images' => 'Send product photos with replies', 'web_chat' => 'Website chat — show a chat bubble on your storefront', 'web_chat_mode' => 'Website chat: bot answers (auto) or collect message only (off)', 'web_chat_contact' => 'Website chat: ask for name & number before chatting'],
+            'prefill' => ['combo_recommendations' => $comboOn ? 'on' : 'off', 'send_product_images' => $photosOn ? 'on' : 'off', 'web_chat' => $webChatOn ? 'on' : 'off', 'web_chat_mode' => $webChatAuto ? 'auto' : 'off', 'web_chat_contact' => $webChatContact ? 'on' : 'off'],
         ];
         $automationCard = ['kind' => 'dl', 'title' => 'Bot automation', 'rows' => [
             ['Item suggestions', $comboOn ? 'On — "Goes well with" & combos' : 'Off — no cross-sell suggestions'],
             ['Product photos', $photosOn ? 'On — sends product images' : 'Off — text only'],
-            ['Note', 'Item suggestions learn from real past orders and can lift basket size; turn off if you don\'t want the bot cross-selling.'],
+            ['Website chat', $webChatOn ? ('On — bubble on your storefront (' . ($webChatAuto ? 'bot answers' : 'collect only') . ')') : 'Off — no chat bubble on the website'],
+            ['Note', 'Item suggestions learn from real past orders and can lift basket size; turn off if you don\'t want the bot cross-selling. Website chat puts the same bot on familyshoppers.net.'],
         ]];
 
         // --- display cards ---

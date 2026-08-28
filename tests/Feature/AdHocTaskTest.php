@@ -19,7 +19,7 @@ class AdHocTaskTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function seed(): array
+    private function seedFixture(): array
     {
         $t = Tenant::factory()->create();
         app(\App\Support\TenantContext::class)->set($t->id);
@@ -31,7 +31,7 @@ class AdHocTaskTest extends TestCase
     public function test_assign_ad_hoc_creates_task_for_the_person(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
 
         $res = app(TaskEngine::class)->assignAdHoc($t, $savan, 'Enter the new products', null, 2, $mgr);
         $this->assertTrue($res['ok']);
@@ -49,7 +49,7 @@ class AdHocTaskTest extends TestCase
     public function test_ad_hoc_task_appears_in_persons_my_tasks(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         app(TaskEngine::class)->assignAdHoc($t, $savan, 'Count the fridge stock', null, 2, $mgr);
 
         $mine = app(TaskEngine::class)->myTasks($t, $savan);
@@ -60,7 +60,7 @@ class AdHocTaskTest extends TestCase
     public function test_empty_title_is_rejected(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $res = app(TaskEngine::class)->assignAdHoc($t, $savan, '   ', null, 2, $mgr);
         $this->assertFalse($res['ok']);
     }
@@ -68,7 +68,7 @@ class AdHocTaskTest extends TestCase
     public function test_cross_tenant_assignee_is_rejected(): void
     {
         Queue::fake();
-        [$t,$mgr,] = $this->seed();
+        [$t,$mgr,] = $this->seedFixture();
         $otherTenant = Tenant::factory()->create();
         $outsider = User::create(['tenant_id'=>$otherTenant->id,'name'=>'Outsider','phone'=>'900','role'=>'staff','password'=>'x']);
 
@@ -79,7 +79,7 @@ class AdHocTaskTest extends TestCase
     public function test_explicit_due_date_is_honoured(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         $due = now()->addDays(3)->setTime(12, 0);
         $res = app(TaskEngine::class)->assignAdHoc($t, $savan, 'Deadline task', $due, 3, $mgr);
 
@@ -91,7 +91,7 @@ class AdHocTaskTest extends TestCase
     public function test_order_derived_task_queries_ignore_ad_hoc_rows(): void
     {
         Queue::fake();
-        [$t,$mgr,$savan] = $this->seed();
+        [$t,$mgr,$savan] = $this->seedFixture();
         app(TaskEngine::class)->assignAdHoc($t, $savan, 'Ad hoc', null, 2, $mgr);
 
         // A query for real order tasks (order_id > 0) must not pick up the ad-hoc row.

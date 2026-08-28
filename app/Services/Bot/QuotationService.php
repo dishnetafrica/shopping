@@ -471,8 +471,10 @@ HTML;
     {
         try {
             if (class_exists(\BaconQrCode\Writer::class)) {
+                // Margin is the QUIET ZONE in modules. The QR spec requires >= 4; the previous
+                // value of 1 produced a QR many phone cameras refused to scan. 4 restores it.
                 $renderer = new \BaconQrCode\Renderer\ImageRenderer(
-                    new \BaconQrCode\Renderer\RendererStyle\RendererStyle(220, 1),
+                    new \BaconQrCode\Renderer\RendererStyle\RendererStyle(220, 4),
                     new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
                 );
                 $svg = (new \BaconQrCode\Writer($renderer))->writeString($text);

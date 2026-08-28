@@ -55,36 +55,15 @@ final class CashbookCapability implements ProcessCapability
         // Base query: approved cash rows (credit purchases move no cash → excluded). Staff see only theirs.
         $scoped = fn ($q) => $isOwner ? $q : $q->where(fn ($w) => $w->where('holder_user_id', $ctx->user->id)->orWhere('holder', $me));
 
-        // --- cash position: per currency AND per holder (frozen IN_STAGES sign rule) ---
-        // Same basis as the cash book & entries below (every live cash entry, native_amount) so the
-        // Cash-by-person totals ALWAYS reconcile to each person's cash book to the cent.
-        $posRows = $scoped(OrderCost::where('tenant_id', $t)
-            ->where(fn ($w) => $w->where('pay_status', '!=', 'credit')->orWhereNull('pay_status'))
-            ->whereNotIn('status', ['void', 'rejected']))
-            // USD value = the dated dollars actually recorded on the row (usd_amount), the SAME basis the
-            // Entries list and Company-account running balance already use — so cash-by-person, the combined
-            // position and the entries can never disagree. Fall back to native ÷ rate only for legacy rows
-            // that never stored a usd_amount. (Re-deriving native ÷ rate here mis-valued currency whenever a
-            // legacy conversion leg carried a stale default rate, e.g. SSP stamped at 5,180/8,000 instead of
-            // the real deal rate — the "SSP counted at the wrong rate" bug.)
-            ->select('currency', 'stage', 'holder', DB::raw('SUM(native_amount) as native'),
-                DB::raw('SUM(COALESCE(NULLIF(usd_amount,0), native_amount / NULLIF(rate_to_usd,0), 0)) as usd'))
-            ->groupBy('currency', 'stage', 'holder')->get();
-
-        $pos = ['USD' => ['native' => 0.0, 'usd' => 0.0], 'UGX' => ['native' => 0.0, 'usd' => 0.0], 'SSP' => ['native' => 0.0, 'usd' => 0.0]];
-        $holders = [];   // holder => ['USD'=>x,'UGX'=>y,'SSP'=>z,'usd'=>total]
-        foreach ($posRows as $r) {
-            $sign = in_array($r->stage, CashService::IN_STAGES, true) ? 1 : -1;
-            $c = (string) $r->currency;
-            $native = $sign * (float) $r->native;
-            $usd = $sign * (float) $r->usd;
-            if (isset($pos[$c])) { $pos[$c]['native'] += $native; $pos[$c]['usd'] += $usd; }
-            $h = trim((string) ($r->holder ?: '')) ?: 'Unassigned';
-            if (! isset($holders[$h])) { $holders[$h] = ['USD' => 0.0, 'UGX' => 0.0, 'SSP' => 0.0, 'usd' => 0.0]; }
-            if (isset($holders[$h][$c])) { $holders[$h][$c] += $native; }
-            $holders[$h]['usd'] += $usd;
-        }
-        $combinedUsd = round($pos['USD']['usd'] + $pos['UGX']['usd'] + $pos['SSP']['usd'], 2);
+        // --- cash position: per currency AND per holder (the ONE cash-on-hand reader) ---
+        // CashOnHand is the shared reader behind this screen, the cash-book exports AND the Pay Advisor,
+        // so cash-by-person, the combined position and each person's cash book can never disagree.
+        $cash = $isOwner
+            ? \App\Services\Finance\CashOnHand::position($t)
+            : \App\Services\Finance\CashOnHand::position($t, (int) $ctx->user->id, $me);
+        $pos = $cash['pos'];
+        $holders = $cash['holders'];   // holder => ['USD'=>x,'UGX'=>y,'SSP'=>z,'usd'=>total]
+        $combinedUsd = $cash['combined_usd'];
 
         // Rail: per-currency position cards.
         $financials = [];
@@ -281,6 +260,53 @@ final class CashbookCapability implements ProcessCapability
         $payablesCard = ['kind' => 'table', 'title' => 'Suppliers you owe', 'sub' => count($payRows) . ' with an open balance', 'searchable' => true,
             'columns' => [['label' => 'Supplier'], ['label' => 'Owed', 'align' => 'right'], ['label' => '', 'align' => 'right']],
             'rows' => $payRows, 'empty' => 'Nothing outstanding — you are square with every supplier 🎉', 'pageSize' => 25];
+
+        // "Who to pay today" — the Pay Advisor's plan, in-app. Cash-aware (pay/hold vs the payer's cash,
+        // keeping the buffer) when a cash holder is configured; otherwise a simple overdue list. Owner-only,
+        // read-only; tapping a row opens that supplier (where "Pay supplier" lives). Never breaks the page.
+        $payPlanCard = null;
+        if ($isOwner) {
+            try {
+                $adv = app(\App\Services\Finance\PayAdvisor::class);
+                $PA = \App\Services\Finance\PayAdvisor::class;
+                $holderSet = trim((string) $ctx->tenant->setting('pay_advisor_cash_holder', '')) !== '';
+                $planRows = [];
+                $sub = '';
+                $ageCell = fn ($a) => ['value' => $a['oldest_days'] . 'd overdue', 'tone' => $a['oldest_days'] >= 15 ? 'danger' : 'warn'];
+                $link = fn ($a) => '/api/v1/workspace/supplier/' . $a['supplier_id'];
+
+                if ($holderSet) {
+                    $plan = $adv->cashPlan($ctx->tenant);
+                    foreach ($plan['pay'] as $a) {
+                        $amt = $a['pay_native'] !== null ? $PA::money((float) $a['pay_native'], $a['currency']) : ('$' . number_format($a['pay_usd'], 0));
+                        $planRows[] = ['cells' => [$a['supplier'], ['value' => 'Pay ' . $amt . ($a['partial'] ? ' (partial)' : ''), 'tone' => 'ok'], $ageCell($a)], 'link' => $link($a)];
+                    }
+                    foreach ($plan['hold'] as $a) {
+                        $planRows[] = ['cells' => [$a['supplier'], ['value' => 'Hold ' . $PA::money((float) $a['overdue'], $a['currency'])], $ageCell($a)], 'link' => $link($a)];
+                    }
+                    if ($planRows) {
+                        $cashUgx = (float) ($plan['cash_native']['UGX'] ?? 0);
+                        $cashBit = $cashUgx > 0 ? $PA::money($cashUgx, 'UGX') : ('$' . number_format($plan['cash_usd'], 0));
+                        $sub = 'Cash ' . $cashBit . ' · keep $' . number_format($plan['buffer_usd'], 0) . ' · ~$' . number_format($plan['spendable_usd'], 0) . ' to spend';
+                    }
+                } else {
+                    foreach ($adv->forTenant($ctx->tenant) as $a) {
+                        if (! in_array($a['state'], ['pay', 'tension'], true) || $a['overdue'] <= 0.005) { continue; }
+                        $amt = $PA::money((float) $a['overdue'], $a['currency']) . $PA::usdBracket((float) $a['overdue'], $a['currency'], (float) ($a['rate'] ?? 0));
+                        $planRows[] = ['cells' => [$a['supplier'], ['value' => 'Pay ' . $amt, 'tone' => 'ok'], $ageCell($a)], 'link' => $link($a)];
+                    }
+                    if ($planRows) { $sub = count($planRows) . ' overdue · set a cash holder to get a cash-aware plan'; }
+                }
+
+                if ($planRows) {
+                    $payPlanCard = ['kind' => 'table', 'title' => 'Who to pay today', 'sub' => $sub,
+                        'columns' => [['label' => 'Supplier'], ['label' => 'Plan'], ['label' => 'Age', 'align' => 'right']],
+                        'rows' => $planRows, 'empty' => 'Nothing overdue', 'pageSize' => 20];
+                }
+            } catch (\Throwable $e) {
+                $payPlanCard = null;
+            }
+        }
 
         // Supplier picker map for the header "Pay supplier" action (pay anyone, incl. advances not yet on account).
         $supIdMap = []; $supNames = []; $seen = [];
@@ -497,7 +523,7 @@ final class CashbookCapability implements ProcessCapability
                 ['tone' => 'info', 'label' => 'WC ' . Money::fmt($workingCapital, 'USD')]))
             ->financials($financials)
             ->quickActions($actions)
-            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'company' => [$companyCard], 'receivables' => [$receivablesCard], 'payables' => [$payablesCard]])
+            ->tabSections(['holders' => [$holderCard], 'entries' => [$entriesCard], 'company' => [$companyCard], 'receivables' => [$receivablesCard], 'payables' => array_values(array_filter([$payPlanCard, $payablesCard]))])
             ->tabs([
                 ['key' => 'holders', 'label' => 'Cash by person', 'count' => count($holderRows)],
                 ['key' => 'entries', 'label' => 'All entries', 'count' => count($entryRows)],
