@@ -1733,6 +1733,7 @@ body.chat-only #whChat .qa #coCartBtn .colbl{ font-weight:800; }
       <span id="dCartTotal">Cart</span><span class="dbadge" id="dCartBadge">0</span>
     </button>
   </nav>
+  <button class="uacct" onclick="shareCurrentView()" aria-label="Share this page" title="Share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
   <button class="uacct" onclick="openLogin()" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg></button>
 </div>
 <div class="trust" id="trustStrip" style="display:none"></div>
@@ -4675,6 +4676,7 @@ function detailHeader(){
   return '<div class="dhdr">'
     +'<button class="dback" onclick="closeDetail()" aria-label="Back">\u2039</button>'
     +'<input id="dq" class="dsearch" placeholder="Search products\u2026" onkeydown="if(event.key===\'Enter\')detailSearch()">'
+    +'<button class="uacct" onclick="shareProduct()" aria-label="Share this product" title="Share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>'
     +'<button class="uacct" onclick="openLogin()" aria-label="Account">'+USER_SVG+'</button>'
     +'</div>';
 }
@@ -4717,6 +4719,34 @@ function nameOfId(id){
   var d=DETAIL_CACHE[id]; return (d&&(d.product?d.product.name:d.name))||'';
 }
 function productHref(id,name){ return (SHOP_BASE||'')+'/p/'+pSlug(name||nameOfId(id),id); }
+/* ---- Share: hand a customer a deep link to the current category or a product ----
+   Category slug mirrors Laravel Str::slug (server route /c/{slug} matches Str::slug of the
+   category name), WITHOUT the product "-id" suffix pSlug adds. Product link reuses productHref,
+   so a shared product previews with its photo (og:image is server-rendered on /p/...). */
+function catSlug(name){ return String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function absShare(path){ return location.origin+(path||''); }
+function doShare(url,title){
+  var t=title||SHOP.name||'Shop';
+  try{ if(navigator.share){ navigator.share({title:(SHOP.name||'Shop'),text:t,url:url}).catch(function(){}); return; } }catch(e){}
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(function(){toast('Link copied — paste to share');},function(){waShare(url,t);});
+      return;
+    }
+  }catch(e){}
+  waShare(url,t);
+}
+function waShare(url,t){ try{ window.open('https://wa.me/?text='+encodeURIComponent((t?t+' — ':'')+url),'_blank','noopener'); }catch(e){ toast('Copy: '+url); } }
+/* Header Share: shares the active category (/c/slug) or the whole shop when none is selected. */
+function shareCurrentView(){
+  if(CAT&&CAT!=='all') doShare(absShare((SHOP_BASE||'')+'/c/'+catSlug(CAT)),(SHOP.name?SHOP.name+' — ':'')+CAT);
+  else doShare(absShare((SHOP_BASE||'')+'/shop'),(SHOP.name||'Shop'));
+}
+/* Detail-overlay Share: shares the open product (/p/slug-id). */
+function shareProduct(){
+  if(!CUR_DETAIL||CUR_DETAIL.id==null) return;
+  doShare(absShare(productHref(CUR_DETAIL.id,CUR_DETAIL.name)),(SHOP.name?SHOP.name+' — ':'')+(CUR_DETAIL.name||''));
+}
 /* current path, minus the shop base, e.g. "/p/sugar-412" */
 function curPath(){
   var p=location.pathname||'/';
