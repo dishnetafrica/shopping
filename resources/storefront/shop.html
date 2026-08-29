@@ -4720,10 +4720,13 @@ function nameOfId(id){
 }
 function productHref(id,name){ return (SHOP_BASE||'')+'/p/'+pSlug(name||nameOfId(id),id); }
 /* ---- Share: hand a customer a deep link to the current category or a product ----
-   Category slug mirrors Laravel Str::slug (server route /c/{slug} matches Str::slug of the
-   category name), WITHOUT the product "-id" suffix pSlug adds. Product link reuses productHref,
-   so a shared product previews with its photo (og:image is server-rendered on /p/...). */
-function catSlug(name){ return String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+   Category link uses /shop?cat=<name>, NOT /c/<slug>: show() renders shop.html for every
+   tenant with no redirect, while /c/<slug> bounces through landing() (which serves the EPC/
+   brand page, not the shop, for auto-parts/brand tenants) and needs an exact Str::slug match
+   (apostrophes/accents would 404). The SPA's applyQuickOrder() matches ?cat by the raw category
+   NAME, so no slug is guessed and the synthetic "Other" bucket is handled by gating to real
+   server categories (CATS). Product link reuses productHref — /p/<slug>-<id> resolves by the id
+   (stale slug still works) and previews with the product photo (og:image server-rendered). */
 function absShare(path){ return location.origin+(path||''); }
 function doShare(url,title){
   var t=title||SHOP.name||'Shop';
@@ -4737,9 +4740,11 @@ function doShare(url,title){
   waShare(url,t);
 }
 function waShare(url,t){ try{ window.open('https://wa.me/?text='+encodeURIComponent((t?t+' — ':'')+url),'_blank','noopener'); }catch(e){ toast('Copy: '+url); } }
-/* Header Share: shares the active category (/c/slug) or the whole shop when none is selected. */
+/* Header Share: shares the active category (/shop?cat=<name>) when it's a real server category,
+   otherwise the whole shop (covers CAT==='all' and the synthetic "Other" bucket). */
 function shareCurrentView(){
-  if(CAT&&CAT!=='all') doShare(absShare((SHOP_BASE||'')+'/c/'+catSlug(CAT)),(SHOP.name?SHOP.name+' — ':'')+CAT);
+  var realCat = CAT && CAT!=='all' && (window.CATS||[]).some(function(c){return c && c.name===CAT;});
+  if(realCat) doShare(absShare((SHOP_BASE||'')+'/shop?cat='+encodeURIComponent(CAT)),(SHOP.name?SHOP.name+' — ':'')+CAT);
   else doShare(absShare((SHOP_BASE||'')+'/shop'),(SHOP.name||'Shop'));
 }
 /* Detail-overlay Share: shares the open product (/p/slug-id). */
