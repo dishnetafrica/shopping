@@ -3307,13 +3307,18 @@ function openMyOrders(){
       '<div class="ordtop"><b>'+esc(o.order_no||('Order '+(i+1)))+'</b><span class="ordst">'+esc(o.status||'')+'</span></div>'+
       '<div class="orditems" title="'+esc(items)+'">'+esc(items)+'</div>'+
       '<div class="ordbot"><span class="ordtot">'+ugx(o.total||0)+'<span class="ordn"> \u00B7 '+n+' item'+(n===1?'':'s')+'</span></span>'+
-      '<button class="ordre" onclick="reorderFrom('+i+')">\u21BB Reorder</button></div></div>';
+      '<button class="ordre" onclick="reorderFrom('+i+')">\u21BB Reorder</button>'+
+      (o.invoice_no?'<button class="ordre" onclick="dlInvoice('+jk(o.order_no)+')" title="Download tax invoice (PDF)">\u2913 Invoice</button>':'')+
+      '</div></div>';
   }).join('');
   var html=stmtHtml+'<div class="ordlist"><div class="ordhd"><div>Order</div><div>Items</div><div>Total</div><div></div></div>'+cards+'</div>';
   $('sheetBody').innerHTML=html+'<button class="place" style="background:#fff;color:var(--green-d);border:1px solid var(--line)" onclick="closeSheet()">Close</button>';
   $('sheet').classList.add('show');
 }
 function reorderFrom(i){if(MYORDERS&&MYORDERS[i])reorderItems(MYORDERS[i].items);}
+/* Open the tax-invoice PDF for a past order in a new tab. Token-gated GET; the server serves the
+   customer's own already-issued invoice (it never creates one). Shown only when invoice_no exists. */
+function dlInvoice(no){ if(!AUTHTOK||!no)return; try{ window.open(authBase()+'/account/invoice?order='+encodeURIComponent(no)+'&token='+encodeURIComponent(AUTHTOK),'_blank','noopener'); }catch(e){ toast('Could not open the invoice'); } }
 /* Customer self-service statement: total outstanding + each invoice's paid/balance. */
 function renderMyStatement(){
   var s=MYSTMT; if(!s||!s.lines||!s.lines.length)return '';
