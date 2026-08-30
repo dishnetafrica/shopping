@@ -95,18 +95,28 @@ class OrderLedgerService
     }
 
     /** COGS from product cost_price × qty (base_price mirrors the SELLING price, so it was
-     *  never a cost — price-drift fix 2026-07-18). Returns 0 if cost isn't tracked. */
+     *  never a cost — price-drift fix 2026-07-18). A loose (per-piece) line prices its qty in
+     *  PIECES while cost_price is per carton, so it is costed at cost_price / pack_size per piece —
+     *  otherwise a 5-piece line would book five cartons of cost. Returns 0 if cost isn't tracked. */
     private function cogs(Order $order): float
     {
         try {
-            $items = $order->items()->get(['product_id', 'qty']);
+            $items = $order->items()->get(['product_id', 'qty', 'unit']);
             if ($items->isEmpty()) return 0.0;
             $ids   = $items->pluck('product_id')->filter()->unique()->all();
             if (! $ids) return 0.0;
-            $cost  = Product::withoutGlobalScopes()->whereIn('id', $ids)->pluck('cost_price', 'id');
+            $prod  = Product::withoutGlobalScopes()->whereIn('id', $ids)
+                ->get(['id', 'cost_price', 'pack_size'])->keyBy('id');
             $total = 0.0;
             foreach ($items as $it) {
-                $total += (float) ($cost[$it->product_id] ?? 0) * (float) $it->qty;
+                $p = $prod->get($it->product_id);
+                if (! $p) continue;
+                $unitCost = (float) ($p->cost_price ?? 0);
+                $pack     = (int) ($p->pack_size ?? 0);
+                if (strtolower(trim((string) $it->unit)) === 'piece' && $pack > 1) {
+                    $unitCost = $unitCost / $pack;   // loose line: cost one piece, not one carton
+                }
+                $total += $unitCost * (float) $it->qty;
             }
             return $total;
         } catch (\Throwable $e) {

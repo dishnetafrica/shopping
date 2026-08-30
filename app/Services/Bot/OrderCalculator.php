@@ -25,7 +25,13 @@ class OrderCalculator
     {
         $products = $this->catalogue($tenant);
         $currency = (string) ($tenant->setting('currency', 'UGX'));
+        $dec      = \App\Services\Pricing::decimalsForCurrency($currency);
         $moqMode  = strtolower((string) ($tenant->setting('moq_mode', 'off'))); // off | roundup
+        // Loose / per-piece retail (same rule as the storefront's repriceCart): a carton item the
+        // customer asked for by the piece is charged carton-price / pack * (1 + markup). Off unless
+        // the tenant enabled it; the carton MOQ does not apply to a loose line.
+        $looseOn  = (bool) $tenant->setting('loose_enabled', false);
+        $loosePct = (float) $tenant->setting('loose_markup_pct', 20);
         $dealer   = \App\Services\Pricing\PriceResolver::profileFor($tenant, $customerPhone);
         $dealerPct = $dealer ? \App\Services\Pricing\PriceResolver::pctFor($tenant, $dealer) : null;
         $floorPct  = $dealer ? \App\Services\Pricing\PriceResolver::floorFor($tenant) : 0.0;
@@ -125,10 +131,22 @@ class OrderCalculator
             $moq      = isset($p['moq']) ? (int) $p['moq'] : null;
             $reqQty   = $qty;
             $adjusted = false;
+            $pack     = (int) ($p['pack_size'] ?? 0);
+
+            // Loose (per-piece) line: the customer asked for pieces of a carton-packed product and the
+            // tenant enabled loose selling. Reprice per piece at the retail markup; the carton MOQ does
+            // NOT apply (loose minimum is 1). Not for weighted items or dealer lines (dealers buy cartons).
+            $loose = $looseOn && ! empty($it['loose']) && $pack > 1 && $price > 0
+                     && ! ($grams > 0 && ! empty($p['sold_by_weight'])) && ! $isDealerLine;
+            if ($loose) {
+                $price = round(($price / $pack) * (1 + $loosePct / 100), $dec);
+            }
+
             // MOQ enforcement — bot/customer quotes only (the POS trusted-price branch above is exempt,
             // since the seller may legitimately sell below MOQ). 'roundup' raises a below-minimum
-            // quantity up to the MOQ and flags it so the customer is told plainly.
-            if ($moqMode === 'roundup' && $moq && $qty < $moq) {
+            // quantity up to the MOQ and flags it so the customer is told plainly. A loose line is
+            // exempt — its minimum is one piece, not one carton.
+            if (! $loose && $moqMode === 'roundup' && $moq && $qty < $moq) {
                 $qty = $moq;
                 $adjusted = true;
             }
@@ -142,7 +160,8 @@ class OrderCalculator
                 'weight_grams' => $grams ?: null,
                 'unit'         => (string) ($p['unit_label'] ?? ''),
                 'moq'          => $moq,
-                'pack'         => (int) ($p['pack_size'] ?? 0),
+                'pack'         => $pack,
+                'loose'        => $loose,
                 'req_qty'      => $reqQty,
                 'adjusted'     => $adjusted,
                 'image'        => (string) ($p['image'] ?? ''),
@@ -167,6 +186,12 @@ class OrderCalculator
         foreach ($quote['lines'] as $l) {
             if (! $l['matched']) {
                 $out[] = "• {$l['qty']} × {$l['name']} — not on the list, team will confirm";
+                continue;
+            }
+            // A loose line is already priced per piece — say so plainly and never show the carton
+            // unit label ("Carton") or a min-order note against it (its minimum is one piece).
+            if (! empty($l['loose'])) {
+                $out[] = "• {$l['qty']} × {$l['name']} (per piece) = {$cur} " . number_format($l['sum'], $dec);
                 continue;
             }
             $unit = $l['unit'] ? " {$l['unit']}" : '';

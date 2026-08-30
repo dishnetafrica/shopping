@@ -1524,6 +1524,8 @@ class StorefrontController extends Controller
                     'name'       => $cl['name'],
                     'price'      => $cl['price'],
                     'qty'        => $cl['qty'],
+                    // 'piece' marks a loose (per-piece) line so COGS costs it per piece, not per carton.
+                    'unit'       => (! empty($cl['unit']) ? (string) $cl['unit'] : null),
                     'notes'      => null,
                     'modifiers'  => ! empty($cl['modifiers']) ? $cl['modifiers'] : null,
                 ]);
