@@ -1063,6 +1063,25 @@ function normalize(json){
     };
   }).filter(function(p){return p.name;});
 }
+/* Infer a system (Engine, Brakes, …) for a part from its name/keywords. Needed when a catalogue's
+   Category is model-based ("Bike Spare Parts - Boxer") instead of system-based, so "browse by system"
+   would otherwise show 0 in every system. Returns a name from CFG.systems, or '' if none apply. */
+function sysGuess(p, sysNames){
+  var h=(String(p.name||'')+' '+String(p.kw||'')).toLowerCase();
+  var R=[
+    ['Brakes',         /brake|caliper|master cylinder/],
+    ['Suspension',     /shock|suspension|\bfork\b|damper|swing ?arm/],
+    ['Fuel System',    /carburet|\bcarb\b|fuel|choke|throttle|petcock|tank cap|air filter/],
+    ['Electrical',     /\bcdi\b|stator|regulator|rectifi|flasher|ignition|\bcoil\b|head ?light|tail ?light|turn signal|indicator|speedo|\bhorn\b|wir(e|ing)|battery|starter motor|magneto|spark plug|\bbulb\b|relay|\bswitch\b/],
+    ['Transmission',   /clutch|\bgear|drive chain|sprocket|kick ?start|transmission|counter ?shaft/],
+    ['Engine',         /piston|camshaft|cam chain|crank|connecting rod|conrod|cylinder|\bvalve\b|rocker|gasket|oil seal|oil pump|\bengine\b|timing|bearing/],
+    ['Wheels & Tyres', /wheel|\btyre|\btire|\brim\b|\btube\b|spoke|\baxle\b|\bhub\b/],
+    ['Controls',       /handle|\bgrip\b|lever|mirror|foot ?rest|foot ?peg|cable|control/],
+    ['Frame & Body',   /frame|fender|mud ?guard|\bguard\b|\bseat\b|tank|panel|cover|\bbody\b|\bstand\b|number plate/],
+  ];
+  for(var i=0;i<R.length;i++){ if(R[i][1].test(h) && sysNames.indexOf(R[i][0])>=0) return R[i][0]; }
+  return (sysNames.indexOf('Accessories')>=0)?'Accessories':'';
+}
 function loadCatalogue(){
   if(!CFG.catalogueUrl){ STATE.error=true; render(); return; }
   fetch(CFG.catalogueUrl,{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){
@@ -1075,7 +1094,11 @@ function loadCatalogue(){
     STATE.products.forEach(function(p){
       (STATE.byCat[p.cat]=STATE.byCat[p.cat]||[]).push(p);
       var segs=String(p.cat||'').split('>').concat(String(p.kw||'').split('|')).map(nk);
-      sysNames.forEach(function(sn){ var k=nk(sn); if(segs.indexOf(k)>=0){ (STATE.bySys[k]=STATE.bySys[k]||[]).push(p); } });
+      var hit=false;
+      sysNames.forEach(function(sn){ var k=nk(sn); if(segs.indexOf(k)>=0){ (STATE.bySys[k]=STATE.bySys[k]||[]).push(p); hit=true; } });
+      // Category didn't name a system (e.g. a model-based catalogue) — infer one from the part name so
+      // "browse by system" isn't empty. Each part lands in exactly one system.
+      if(!hit){ var g=sysGuess(p, sysNames); if(g){ (STATE.bySys[nk(g)]=STATE.bySys[nk(g)]||[]).push(p); } }
     });
     (DIAG&&DIAG.plates||[]).forEach(function(pl){ (pl.parts||[]).forEach(function(x){ STATE.pnPlate[normPn(x.pn)]=pl.plate; }); });
     STATE.loaded=true; render(); try{ dlrLoad(); }catch(e){}
