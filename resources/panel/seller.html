@@ -1292,7 +1292,7 @@ var EP={authReq:'/papi/auth-request',authVer:'/papi/auth-verify',
   orders:'/papi/orders',products:'/papi/products',
   kitchen:'/papi/kitchen',kitchenAdv:'/papi/kitchen-advance',
   updStatus:'/papi/update-status',saveOrder:'/papi/save-order',quoteSend:'/papi/quotation-send',quotations:'/papi/quotations',quoteResend:'/papi/quotation-resend',quoteStatus:'/papi/quotation-status',quoteConvert:'/papi/quotation-convert',quoteShow:'/papi/quotation-show',quoteUpdate:'/papi/quotation-update',quoteDelete:'/papi/quotation-delete',
-  updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',aiIdentify:'/papi/ai-identify',
+  updProduct:'/papi/update-product',addProduct:'/papi/add-product',delProduct:'/papi/delete-product',aiIdentify:'/papi/ai-identify',aiDescribe:'/papi/ai-describe',
   prodLookup:'/papi/product-lookup',rsQueue:'/papi/research-queue',rsApply:'/papi/research-apply',rsDismiss:'/papi/research-dismiss',
   uploadImage:'/papi/upload-image',
   uploadDoc:'/papi/upload-doc',
@@ -3649,6 +3649,7 @@ function openEdit(row){
     '<div class="note" id="mLookupNote" style="margin:0 0 10px"></div>'+
     '<div class="mfield"><label>Description <span style="font-weight:400;color:#6b7280">\u2014 customers read this on the product page</span></label>'+
       '<textarea id="mDesc" rows="3" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit">'+esc(p.desc||'')+'</textarea></div>'+
+    '<button type="button" class="btn ghost" id="mAiDesc" style="width:100%;margin:-4px 0 10px" title="Draft a description from the product photo \u2014 you review before saving">\u2728 Improve description with AI</button>'+
     '<button type="button" class="btn ghost" id="mOOS" style="margin:-4px 0 10px">'+((prodStock(p)<=0)?'\u2713 Out of stock \u2014 Save to apply':'Mark out of stock')+'</button>'+
     prodImgField(p.image)+
     prodGalleryField(p)+
@@ -3659,6 +3660,7 @@ function openEdit(row){
   (function(){function mph(){var v=Number($('mPrice').value)||0;if($('mPriceHint'))$('mPriceHint').textContent=inUGX()?'':('\u2248 '+ugx(v)+' at current rate');}if($('mPrice'))$('mPrice').oninput=mph;mph();})();
   pmMarginBox('mCost','mPrice','mMargin');
   if($('mOOS'))$('mOOS').onclick=toggleOOS;
+  if($('mAiDesc'))$('mAiDesc').onclick=function(){aiDescribeFill(p);};
   bindBarcodeScan('mBarcode');
   if($('mLookup'))$('mLookup').onclick=function(){doLookup('m');};
   ['mName','mBrand','mSize','mPack','mUnit'].forEach(function(id){
@@ -3776,6 +3778,26 @@ async function aiIdentifyFill(){
     else{toast('Could not read the photo \u2014 type the details in');}
   }catch(e){toast('Network error');}
   b.disabled=false;b.innerHTML='\u2728 Identify with AI';
+}
+/* Draft a richer description for an EXISTING product from its photo (grounded on its known
+   name/brand/category so it enriches, not re-identifies). Fills the field for the seller to
+   review and Save \u2014 nothing is written until they click Save. */
+async function aiDescribeFill(p){
+  var url=(($('pImg')?$('pImg').value:'')||(p&&p.image)||'').trim();
+  if(!url){toast('Add a product photo first');return;}
+  var b=$('mAiDesc'),t=b?b.innerHTML:'';
+  if(b){b.disabled=true;b.innerHTML='<span class="spin" style="display:inline-block;width:14px;height:14px;border:2.5px solid #0002;border-top-color:#0007;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px"></span> Writing\u2026';}
+  try{
+    var facts={image:url,name:(p&&p.name)||'',brand:(p&&p.brand)||'',category:(p&&p.category)||'',pack:(p&&(p.packSize||p.unit))||''};
+    var r=await fetch(EP.aiDescribe+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(facts)});
+    var d=await r.json();
+    if(d&&d.ok&&d.description){ if($('mDesc'))$('mDesc').value=d.description; toast('\u2728 AI draft \u2014 review, then Save'); }
+    else if(d&&d.error==='ai_unavailable'){toast('AI is not set up on the server yet');}
+    else if(d&&d.error==='no_image'){toast('Add a product photo first');}
+    else if(d&&d.error==='forbidden'){toast('You don\u2019t have access to this');}
+    else{toast('Could not generate a description');}
+  }catch(e){toast('Network error');}
+  if(b){b.disabled=false;b.innerHTML=t||'\u2728 Improve description with AI';}
 }
 async function saveNewProduct(){
   /* The name is already assembled from brand/size/pack by the builder, so `variant` is

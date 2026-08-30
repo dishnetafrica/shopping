@@ -702,6 +702,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::get('delete-product', [PanelApiController::class, 'deleteProduct']);
         Route::get('add-product',    [PanelApiController::class, 'addProduct']);
         Route::post('ai-identify',   [PanelApiController::class, 'aiIdentify']);
+        Route::post('ai-describe',   [PanelApiController::class, 'aiDescribe']);
         // v4.29 — product research. Lookup is one live call per real scan; the queue
         // endpoints move a suggestion out of "pending" once a human has decided.
         Route::get('product-lookup',   [PanelApiController::class, 'productLookup']);
