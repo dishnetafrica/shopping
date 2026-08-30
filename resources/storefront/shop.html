@@ -4740,12 +4740,22 @@ function doShare(url,title){
   waShare(url,t);
 }
 function waShare(url,t){ try{ window.open('https://wa.me/?text='+encodeURIComponent((t?t+' — ':'')+url),'_blank','noopener'); }catch(e){ toast('Copy: '+url); } }
-/* Header Share: shares the active category (/shop?cat=<name>) when it's a real server category,
-   otherwise the whole shop (covers CAT==='all' and the synthetic "Other" bucket). */
+/* Header Share: shares whatever filtered view is showing as /shop?cat=<name>.
+   A plain category tile sets CAT; but "Browse Categories" / collection tiles set COLLVIEW
+   (a business-collection sets BIZVIEW) and leave CAT==='all' — so checking CAT alone shared the
+   bare shop from those views, which is the bug the owner hit on the Boxer view. Derive the category
+   name from whichever view is active. No CATS-membership guard: /shop?cat= is matched by name in
+   applyQuickOrder() and never 404s (unlike /c/), it just shows the shop if nothing matches. */
 function shareCurrentView(){
-  var realCat = CAT && CAT!=='all' && (window.CATS||[]).some(function(c){return c && c.name===CAT;});
-  if(realCat) doShare(absShare((SHOP_BASE||'')+'/shop?cat='+encodeURIComponent(CAT)),(SHOP.name?SHOP.name+' — ':'')+CAT);
-  else doShare(absShare((SHOP_BASE||'')+'/shop'),(SHOP.name||'Shop'));
+  var catName='';
+  if(CAT && CAT!=='all') catName=CAT;
+  else if(typeof COLLVIEW!=='undefined' && COLLVIEW) catName=(COLLVIEW.cat||COLLVIEW.label||'');
+  catName=String(catName||'').trim();
+  if(catName && catName.toLowerCase()!=='all' && catName.toLowerCase()!=='other'){
+    doShare(absShare((SHOP_BASE||'')+'/shop?cat='+encodeURIComponent(catName)),(SHOP.name?SHOP.name+' — ':'')+catName);
+  } else {
+    doShare(absShare((SHOP_BASE||'')+'/shop'),(SHOP.name||'Shop'));
+  }
 }
 /* Detail-overlay Share: shares the open product (/p/slug-id). */
 function shareProduct(){
