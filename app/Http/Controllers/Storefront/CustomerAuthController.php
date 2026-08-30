@@ -128,13 +128,21 @@ class CustomerAuthController extends Controller
             return response()->json(['ok' => false, 'error' => 'unauthorized'], 401);
         }
 
-        $orders = Order::where('customer_phone', $phone)
-            ->orderByDesc('id')->limit(15)->get()
+        $orderRows = Order::where('customer_phone', $phone)
+            ->orderByDesc('id')->limit(15)->get();
+        // Which of these orders already have an issued (non-void) invoice → those, and only those,
+        // get a "Download invoice" button. One query, keyed by order_id.
+        $invoiceByOrder = \App\Models\Invoice::where('tenant_id', $tenant->id)
+            ->whereIn('order_id', $orderRows->pluck('id')->all())
+            ->where('status', '!=', 'void')
+            ->pluck('invoice_no', 'order_id');
+        $orders = $orderRows
             ->map(fn (Order $o) => [
                 'order_no' => (string) $o->order_no,
                 'date'     => optional($o->created_at)->toIso8601String(),
                 'status'   => (string) $o->status,
                 'total'    => (float) $o->total,
+                'invoice_no' => $invoiceByOrder[$o->id] ?? null,
                 'items'    => is_array($o->items_json)
                     ? array_values(array_map(fn ($l) => [
                         'name'  => (string) ($l['name'] ?? ''),
@@ -179,6 +187,47 @@ class CustomerAuthController extends Controller
         if ($r->filled('address')) $c->address = trim((string) $r->input('address'));
         $c->save();
         return response()->json(['ok' => true, 'profile' => $this->profileFor($tenant, $phone)]);
+    }
+
+    /**
+     * GET /{shop}/account/invoice?order=<order_no>&token=<token>
+     * Streams the tax-invoice PDF for ONE of the logged-in customer's own orders.
+     *
+     * Read-only by design: it serves an already-issued invoice (or re-renders it from the saved
+     * record) — it NEVER calls issue()/issueForOrder(), so a customer's click can never create a
+     * financial document. The order is matched on customer_phone from the token, so no one can pull
+     * another buyer's invoice by guessing an order number.
+     */
+    public function orderInvoice(Request $r, ?string $shop = null)
+    {
+        $tenant = $this->resolveTenant($shop);
+        $phone  = $this->phoneFromToken($tenant->id, (string) $r->input('token', ''));
+        if ($phone === null) abort(401);
+        $orderNo = trim((string) $r->input('order', ''));
+        if ($orderNo === '') abort(404);
+
+        $order = \App\Models\Order::where('tenant_id', $tenant->id)
+            ->where('order_no', $orderNo)->where('customer_phone', $phone)->first();
+        if (! $order) abort(404);
+
+        $inv = \App\Models\Invoice::where('tenant_id', $tenant->id)
+            ->where('order_id', $order->id)->where('status', '!=', 'void')
+            ->orderByDesc('id')->first();
+        if (! $inv) abort(404, 'Invoice not ready yet — it is issued once your order is confirmed.');
+
+        $file = 'Invoice-' . preg_replace('/[^A-Za-z0-9._-]/', '', (string) $inv->invoice_no) . '.pdf';
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        if ($inv->pdf_path && $disk->exists($inv->pdf_path)) {
+            return $disk->response($inv->pdf_path, $file, ['Content-Type' => 'application/pdf'], 'inline');
+        }
+        // pdf_path missing (e.g. cleared on a re-issue) — re-render from the saved invoice. Pure
+        // render via the shared renderer; no persistence, no ledger write.
+        $renderer = app(\App\Services\Invoicing\InvoiceRenderer::class);
+        $pdf = $renderer->pdf($tenant, $renderer->fromInvoice($tenant, $inv));
+        return response($pdf, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $file . '"',
+        ]);
     }
 
     // ---- helpers ----

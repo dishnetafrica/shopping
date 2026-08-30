@@ -891,6 +891,7 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::post('/auth/verify',    [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify']);
     Route::post('/account/orders', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'myOrders']);
     Route::post('/account/profile',[\App\Http\Controllers\Storefront\CustomerAuthController::class, 'saveProfile']);
+    Route::get('/account/invoice', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'orderInvoice'])->middleware('throttle:30,1');
 });
 
 Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
@@ -936,5 +937,6 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::post('/{shop}/auth/verify',  [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'verify'])->where('shop', $shopSlug);
     Route::post('/{shop}/account/orders',  [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'myOrders'])->where('shop', $shopSlug);
     Route::post('/{shop}/account/profile', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'saveProfile'])->where('shop', $shopSlug);
+    Route::get('/{shop}/account/invoice', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'orderInvoice'])->where('shop', $shopSlug)->middleware('throttle:30,1');
 });
 require __DIR__.'/winworld.php';
