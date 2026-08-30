@@ -872,9 +872,9 @@ Route::middleware('web')->group(function () use ($qToken) {
     // 'part'; POST routes differ by verb). Per-URL SEO (title/OG/Product JSON-LD/404) inside.
     Route::get('/{spa}', fn () => app(\App\Http\Controllers\Storefront\StorefrontController::class)->autoParts())
         ->where('spa', '(part|parts|system|model|search|cart|ai|diagrams|plate|diagram)(/.*)?');
-    Route::post('/order',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder']);
+    Route::post('/order',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->middleware('throttle:20,1');
     // Quotation-first flow (B2B): submit cart -> instant Quotation + public portal.
-    Route::post('/quote',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote']);
+    Route::post('/quote',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote'])->middleware('throttle:20,1');
     Route::get('/q/{token}',         [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'show'])->where('token', $qToken);
     Route::get('/q/{token}/data',    [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'data'])->where('token', $qToken);
     Route::get('/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('token', $qToken);
@@ -920,10 +920,10 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
         ->where('shop', $shopSlug)->where('slugId', '[A-Za-z0-9\-]*[0-9]+');
     Route::get('/{shop}/{spa}', fn (string $shop) => app(\App\Http\Controllers\Storefront\StorefrontController::class)->autoParts($shop))
         ->where('shop', $shopSlug)->where('spa', '(part|parts|system|model|search|cart|ai|diagrams|plate|diagram)(/.*)?');   // v4.11 real URLs
-    Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug);
+    Route::post('/{shop}/order',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'placeOrder'])->where('shop', $shopSlug)->middleware('throttle:20,1');
     Route::post('/{shop}/chat',     [\App\Http\Controllers\Storefront\ChatController::class, 'message'])->where('shop', $shopSlug)->middleware('throttle:12,1');   // v4.78
     // Quotation-first flow (platform slug variants).
-    Route::post('/{shop}/quote',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote'])->where('shop', $shopSlug);
+    Route::post('/{shop}/quote',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'requestQuote'])->where('shop', $shopSlug)->middleware('throttle:20,1');
     Route::get('/{shop}/q/{token}',         [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'show'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::get('/{shop}/q/{token}/data',    [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'data'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::get('/{shop}/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('shop', $shopSlug)->where('token', $qToken);

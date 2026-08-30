@@ -164,6 +164,18 @@ class StorefrontController extends Controller
         return trim($name, '-') . '-' . (int) $product->id;
     }
 
+    /**
+     * A customer-supplied map link is stored in the order/quote location and later rendered as a
+     * clickable <a href> in the seller panel. Accept ONLY http(s) or geo: URLs — a javascript:
+     * or data: scheme would become a click-trap for staff (the panel escapes HTML but not the URL
+     * scheme). Returns '' when the value is missing or not a safe map link.
+     */
+    private static function safeMapUrl(string $raw): string
+    {
+        $raw = trim($raw);
+        return preg_match('~^(https?://|geo:)~i', $raw) === 1 ? $raw : '';
+    }
+
     /** Render the shop HTML for a resolved tenant. $base is '' on a custom domain, '/{slug}' on the platform. */
     private function renderShop(Tenant $tenant, string $base, ?string $seoCat = null, $seoProduct = null, int $wantedId = 0, array $chat = [])
     {
@@ -890,7 +902,7 @@ class StorefrontController extends Controller
 
     // ── v4.9.1 Dealer Programme 4b: WhatsApp-code sign-in + the dealer overlay feed ──────────────
 
-    /** POST /{shop}/dealer-otp {phone} — sends a 4-digit code on WhatsApp when the number is an enrolled dealer. */
+    /** POST /{shop}/dealer-otp {phone} — sends a 6-digit code on WhatsApp when the number is an enrolled dealer. */
     public function dealerOtp(\Illuminate\Http\Request $request, ?string $shop = null)
     {
         [$tenant] = $this->resolveShop($shop);
@@ -907,7 +919,7 @@ class StorefrontController extends Controller
         if (! $profile) return response()->json($neutral);                        // not a dealer — same reply
 
         try {
-            $code = (string) random_int(1000, 9999);
+            $code = (string) random_int(100000, 999999);   // 6 digits, parity with the customer OTP
             \Illuminate\Support\Facades\Cache::put("dlrotp:{$tenant->id}:{$phone}", ['code' => $code, 'tries' => 0], 300);
             \Illuminate\Support\Facades\Cache::put($cntKey, $sent + 1, 3600);
             app(\App\Services\WhatsApp\WhatsAppManager::class)->driver('evolution')->sendText(
@@ -1429,7 +1441,7 @@ class StorefrontController extends Controller
         }
         // Address + optional map pin go into one human-readable location string for the rider.
         $location = trim((string) $r->input('location', ''));
-        if ($maps = trim((string) $r->input('maps_url', ''))) {
+        if ($maps = self::safeMapUrl((string) $r->input('maps_url', ''))) {
             $location = $location !== '' ? ($location . ' — ' . $maps) : $maps;
         }
 
@@ -1628,7 +1640,7 @@ class StorefrontController extends Controller
         $q = \App\Models\Quotation::find($res['id']);
         if ($q) {
             $location = trim((string) $r->input('location', ''));
-            if ($maps = trim((string) $r->input('maps_url', ''))) {
+            if ($maps = self::safeMapUrl((string) $r->input('maps_url', ''))) {
                 $location = $location !== '' ? ($location . ' — ' . $maps) : $maps;
             }
             $note  = mb_substr(trim((string) $r->input('note', '')), 0, 300);
