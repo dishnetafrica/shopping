@@ -623,6 +623,7 @@ class StorefrontController extends Controller
             'looseMarkupPct' => (float) $tenant->setting('loose_markup_pct', 20),
             'shopUrl'     => $base . '/shop',
             'catalogueUrl'=> $base . '/catalogue',
+            'quoteUrl'    => $base . '/quote',   // customer-built quotation (server-priced, PDF, WhatsApp)
             'panelUrl'    => url('/panel'),
             'systems'     => $tenant->setting('epc_systems', $defaultSystems),
             'models'      => $tenant->setting('epc_models', $defaultModels),
@@ -1619,6 +1620,9 @@ class StorefrontController extends Controller
             if ($pname === '') {
                 continue;
             }
+            // A loose line is priced per piece; label it so the quotation doesn't read as N cartons.
+            // Keep $pname clean for the dealer lookup below; only the printed name gets the suffix.
+            $isLoose = (string) ($it['unit'] ?? '') === 'piece';
             $price = (isset($it['price']) && $it['price'] !== '' && $it['price'] !== null) ? (float) $it['price'] : null;
             if ($dealerProfile && $productsByName) {
                 $p = $productsByName->get(mb_strtolower($pname));
@@ -1633,7 +1637,7 @@ class StorefrontController extends Controller
                 }
             }
             $lines[] = [
-                'name'  => $pname,
+                'name'  => $pname . ($isLoose ? ' (per piece)' : ''),
                 'qty'   => max(1, (int) ($it['qty'] ?? 1)),
                 'price' => $price,
             ];

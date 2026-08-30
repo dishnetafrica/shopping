@@ -1280,6 +1280,49 @@ window.addEventListener('error', function(e){
 window.addEventListener('unhandledrejection', function(e){
   var r=e.reason; reportError({message:'unhandledrejection: '+((r&&r.message)||r||'?'), stack:(r&&r.stack)||'', url:location.href});
 });
+/* ---------- customer-built quotation ----------
+   Posts the cart to /quote so the customer gets a real, numbered Quotation (server-priced — the
+   loose flag makes repriceCart charge per piece), a PDF + an online portal to review/approve, and
+   it lands on their WhatsApp. That is the SAME record the shop approves into a sales order, so the
+   back office never re-keys it. */
+var QUOTE_DONE=null;
+function quoteUrl(){ return CFG.quoteUrl || (CFG.catalogueUrl? CFG.catalogueUrl.replace(/\/catalogue(\?.*)?$/,'/quote') : '/quote'); }
+function custGet(){ try{return JSON.parse(localStorage.getItem('ea_cust')||'{}')||{};}catch(e){return {};} }
+function custSave(o){ try{localStorage.setItem('ea_cust',JSON.stringify(o));}catch(e){} }
+/* The server reprices from the product name + loose flag, so send the REAL name (strip the
+   '(per piece)' label) and let the server decide the price — the client price never rules. */
+function quoteItems(){ return cartGet().map(function(i){
+  var nm = i.loose ? String(i.name).replace(/ \(per piece\)$/,'') : i.name;
+  return {name:nm, qty:i.qty, loose:i.loose?1:0}; }); }
+function reqQuote(){
+  var nm=((document.getElementById('qName')||{}).value||'').trim();
+  var ph=((document.getElementById('qPhone')||{}).value||'').replace(/[^0-9]/g,'');
+  if(!nm){ toast('Please enter your name'); return; }
+  if(ph.length<7){ toast('Please enter your WhatsApp number'); return; }
+  if(!cartGet().length){ toast('Your cart is empty'); return; }
+  custSave({name:nm,phone:ph});
+  var btn=document.getElementById('qBtn'); if(btn){ btn.disabled=true; btn.textContent='Preparing your quotation…'; }
+  var b=getBike();
+  var body={ name:nm, phone:ph, items:quoteItems(), note:(b?('Motorcycle: '+b.name):''), website:'' };
+  try{ var s=dlrState(); if(s&&s.token) body.dealer_token=s.token; }catch(e){}
+  fetch(quoteUrl(),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'same-origin',body:JSON.stringify(body)})
+   .then(function(r){return r.json();}).then(function(d){
+     if(d&&d.ok){ try{track('checkout',{quote:d.quote_no});}catch(e){} QUOTE_DONE=d; cartSave([]); go('cart'); }
+     else { toast((d&&(d.message||d.error))||'Could not create the quotation.'); if(btn){ btn.disabled=false; btn.textContent='Get a PDF quotation'; } }
+   }).catch(function(){ toast('Network error — please try again.'); if(btn){ btn.disabled=false; btn.textContent='Get a PDF quotation'; } });
+}
+function quoteDonePanel(d){
+  var cur=d.currency||''; var tot=(d.total!=null&&d.total!=='')?(String(cur)+' '+Number(d.total).toLocaleString('en-US')):'';
+  var valid=''; if(d.valid_until){ try{ valid='Valid until '+new Date(d.valid_until+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+'. '; }catch(e){} }
+  return '<section class="page wrap"><div class="emptycart"><div class="ec" style="color:#16a34a"><i class="fa fa-check-circle"></i></div>'
+   +'<h2>Your quotation is ready</h2>'
+   +(d.quote_no?'<p class="mono" style="font-size:18px;margin:2px 0"><b>'+esc(d.quote_no)+'</b></p>':'')
+   +(tot?'<p style="font-size:22px;font-weight:800;margin:4px 0">'+esc(tot)+'</p>':'')
+   +'<p style="color:var(--muted);max-width:440px;margin:0 auto 14px">'+esc(valid)+(d.sent?'We’ve sent it to your WhatsApp too. ':'')+'Open it online to review, share or approve — our team sees the same quotation, so there is nothing to re-type.</p>'
+   +(d.portal_url?'<a class="btn btn-p" href="'+esc(d.portal_url)+'" target="_blank" rel="noopener">View my quotation ›</a> ':'')
+   +(d.pdf_url?'<a class="btn btn-o" href="'+esc(d.pdf_url)+'" target="_blank" rel="noopener"><i class="fa fa-download"></i> PDF</a>':'')
+   +'<div style="height:12px"></div><a class="link" onclick="go(\'\')">Continue shopping</a></div></section>';
+}
 function waCartOrder(){ var c=cartGet(); if(!c.length)return waLink(); var b=getBike();
   var lines=c.map(function(i){return '• '+i.qty+'x '+i.name+(i.pn?(' ('+i.pn+')'):'')+(i.price>0?(' — '+money(i.price*i.qty)):'');}).join('%0a');
   var t='Hello '+(CFG.name||'')+', I want to order these genuine parts:'+(STATE.dealer?' (DEALER ORDER — my trade prices below)':'')+'%0a'+lines+'%0a%0aTotal: '+money(cartTotal())+(b?('%0aMy motorcycle: '+b.name):'')+'%0a%0aPlease confirm stock, delivery time and payment.';
@@ -1865,6 +1908,7 @@ function dx(id, userText){
 }
 
 function vCart(){
+  if(QUOTE_DONE){ var qd=QUOTE_DONE; QUOTE_DONE=null; return nav()+quoteDonePanel(qd)+foot(); }
   var c=cartGet();
   if(!c.length) return nav()+'<section class="page wrap"><div class="emptycart"><div class="ec"><i class="fa fa-shopping-cart"></i></div><h2>Your cart is empty</h2><p>Add the parts you need, then send the whole order on WhatsApp in one message.</p><a class="btn btn-p" onclick="go(\'\')">Find parts for my bike</a></div></section>'+foot();
   var b=getBike();
@@ -1879,6 +1923,13 @@ function vCart(){
    +'<div class="csum"><div class="csr"><span>Items</span><b>'+cartCount()+'</b></div><div class="csr total"><span>Total</span><b>'+money(cartTotal())+'</b></div>'
    +'<div class="cnote"><i class="fa fa-truck"></i> '+esc(CFG.deliveryEta||'Fast delivery')+'<br><i class="fa fa-credit-card"></i> '+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'<br><i class="fa fa-check-circle"></i> '+esc(CFG.genuineLine||'100% genuine or money back')+'</div>'
    +'<a class="btn btn-w big" href="'+esc(waCartOrder())+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:cartGet().map(function(i){return i.id;})})"><i class="fa fa-whatsapp"></i> Place order on WhatsApp</a>'
+   +'<div style="margin-top:14px;padding:12px;border:1px solid #dbe4f7;border-radius:12px;background:#f7f9ff">'
+     +'<div style="font-weight:800;margin-bottom:2px">Prefer a written quotation?</div>'
+     +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:9px">Get a PDF quotation with your prices — sent to your WhatsApp, ready to review or approve. Our team sees the same one, so nothing is re-typed.</div>'
+     +'<input id="qName" placeholder="Your name" value="'+esc(custGet().name||'')+'" style="width:100%;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:9px 11px;margin-bottom:7px;font-size:14px">'
+     +'<input id="qPhone" type="tel" inputmode="numeric" placeholder="WhatsApp number" value="'+esc(custGet().phone||'')+'" style="width:100%;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:9px 11px;margin-bottom:9px;font-size:14px">'
+     +'<button id="qBtn" class="btn btn-p" style="width:100%" onclick="reqQuote()"><i class="fa fa-file-text-o"></i> Get a PDF quotation</button>'
+   +'</div>'
    +'<div class="cfine">You’ll confirm stock, delivery and payment with our team on WhatsApp. No payment is taken online.</div>'
    +'<a class="link" onclick="go(\'\')" style="display:block;text-align:center;margin-top:10px"><i class="fa fa-plus"></i> Add more parts</a></div></div></section>'+foot();
 }
