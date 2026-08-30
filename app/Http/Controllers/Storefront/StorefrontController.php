@@ -346,6 +346,53 @@ class StorefrontController extends Controller
             $html = str_replace('</title>',
                 '</title>'."\n".'<meta name="description" content="'.$safeCat.' at wholesale and retail prices from '.$tName.'. Order on WhatsApp, delivery in Juba &amp; Kampala.">'
                 ."\n".'<link rel="canonical" href="'.e(url()->current()).'">', $html);
+            // ---- ItemList + BreadcrumbList JSON-LD so AI search (ChatGPT/Perplexity/Google AI) and
+            //      rich results can read the WHOLE aisle from the raw HTML — the visible grid is drawn
+            //      in JS, so this is what a non-JS crawler sees. Best-effort: never break the page. ----
+            try {
+                $cur      = $this->currency($tenant);
+                $host     = request()->getSchemeAndHttpHost();
+                $showStock = (bool) $tenant->setting('storefront_show_stock', false);
+                $catProducts = \App\Models\Product::withoutGlobalScopes()
+                    ->where('tenant_id', $tenant->id)->where('active', true)
+                    ->where('category', $seoCat)
+                    ->orderByDesc('id')->limit(200)->get();
+                $items = [];
+                foreach ($catProducts as $p) {
+                    if ($p->hidden ?? false) continue;
+                    $purl   = $host.$base.'/p/'.self::productSlug($p);
+                    $pprice = (float) ($p->price ?? 0);
+                    $pimg   = (string) ($p->image_url ?? '') !== '' ? $this->imageUrl((string) $p->image_url) : '';
+                    $prod = array_filter([
+                        '@type' => 'Product',
+                        'name'  => (string) $p->name,
+                        'url'   => $purl,
+                        'image' => $pimg ?: null,
+                        'sku'   => (string) ($p->sku ?? '') !== '' ? (string) $p->sku : null,
+                        'brand' => (string) ($p->brand ?? '') !== '' ? ['@type' => 'Brand', 'name' => (string) $p->brand] : null,
+                        'offers' => $pprice > 0 ? [
+                            '@type' => 'Offer', 'price' => (string) $pprice, 'priceCurrency' => $cur,
+                            'availability' => 'https://schema.org/'
+                                . (($showStock === false || $p->stock === null || (int) $p->stock > 0) ? 'InStock' : 'OutOfStock'),
+                            'url' => $purl,
+                            'seller' => ['@type' => 'Organization', 'name' => (string) $tenant->name],
+                        ] : null,
+                    ]);
+                    $items[] = ['@type' => 'ListItem', 'position' => count($items) + 1, 'item' => $prod];
+                }
+                if ($items) {
+                    $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+                    $itemList = ['@context' => 'https://schema.org', '@type' => 'ItemList',
+                        'name' => $seoCat, 'numberOfItems' => count($items), 'itemListElement' => $items];
+                    $crumbs = ['@context' => 'https://schema.org', '@type' => 'BreadcrumbList', 'itemListElement' => [
+                        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => $host.($base ?: '/')],
+                        ['@type' => 'ListItem', 'position' => 2, 'name' => $seoCat, 'item' => url()->current()],
+                    ]];
+                    $html = str_replace('</body>',
+                        '<script type="application/ld+json">'.json_encode($itemList, $jf).'</script>'
+                        ."\n".'<script type="application/ld+json">'.json_encode($crumbs, $jf).'</script>'."\n".'</body>', $html);
+                }
+            } catch (\Throwable $e) { /* SEO enrichment is best-effort; a query hiccup must not 500 the aisle */ }
             $html = str_replace('</body>',
                 '<script>if(!location.search){location.replace("'.($base ?: '').'/?cat='.rawurlencode($seoCat).'");}</script></body>', $html);
         }
