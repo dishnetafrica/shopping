@@ -2972,6 +2972,71 @@ class PanelApiController extends Controller
         }
     }
 
+    /**
+     * AI description writer. Given a product PHOTO plus the fields we already know (name, brand,
+     * category, pack), asks the vision model to draft a fuller, HONEST description + keywords for
+     * staff to review before saving. Grounded on the known identity so it ENRICHES an existing
+     * product rather than re-identifying it, and the prompt forbids inventing specs / model numbers /
+     * claims not visible. Read-only: it returns a draft, it never writes the product.
+     */
+    public function aiDescribe(Request $r)
+    {
+        if (! $r->user()->canMenu('products')) return response()->json(['ok' => false, 'error' => 'forbidden'], 403);
+
+        $src = trim((string) $r->input('image', '')) ?: (string) $r->input('data', '');
+        if ($src === '') return response()->json(['ok' => false, 'error' => 'no_image'], 422);
+
+        $key = (string) (config('openai.api_key') ?: env('OPENAI_API_KEY'));
+        if ($key === '') return response()->json(['ok' => false, 'error' => 'ai_unavailable'], 503);
+        $model = (string) env('OPENAI_VISION_MODEL', env('OPENAI_MODEL', 'gpt-4o-mini'));
+
+        $name  = trim((string) $r->input('name', ''));
+        $brand = trim((string) $r->input('brand', ''));
+        $cat   = trim((string) $r->input('category', ''));
+        $pack  = trim((string) $r->input('pack', ''));
+        $known = trim($name
+            . ($brand !== '' ? " (brand: {$brand})" : '')
+            . ($cat !== '' ? ", category: {$cat}" : '')
+            . ($pack !== '' ? ", pack: {$pack}" : ''));
+
+        $prompt = 'You are writing the shop catalogue description for this product'
+            . ($known !== '' ? ": {$known}." : '.')
+            . ' Look at the photo and write a helpful, HONEST description of 2-3 short sentences: what it is, its notable visible features, and what a shopper typically uses it for.'
+            . ' Ground it in the known identity above and what is clearly visible. Do NOT invent brand, model numbers, exact specifications, measurements, materials, certifications, or claims that are not evident — when unsure, describe generally. Do not hype ("best", "finest"); describe, do not sell.'
+            . ' Return ONLY a JSON object, no markdown, with keys: description (the 2-3 sentence text), keywords (6-12 comma-separated search terms a shopper might type).';
+
+        try {
+            $resp = \Illuminate\Support\Facades\Http::withToken($key)->timeout(30)->post('https://api.openai.com/v1/chat/completions', [
+                'model'       => $model,
+                'temperature' => 0.3,
+                'max_tokens'  => 400,
+                'messages'    => [[
+                    'role'    => 'user',
+                    'content' => [
+                        ['type' => 'text', 'text' => $prompt],
+                        ['type' => 'image_url', 'image_url' => ['url' => $src]],
+                    ],
+                ]],
+            ]);
+            if (! $resp->successful()) return response()->json(['ok' => false, 'error' => 'ai_failed'], 502);
+
+            $out = trim((string) $resp->json('choices.0.message.content'));
+            $out = trim(preg_replace('/```json|```/', '', $out));
+            $obj = json_decode($out, true);
+            if (! is_array($obj)) return response()->json(['ok' => false, 'error' => 'parse_failed'], 502);
+
+            $kw = $obj['keywords'] ?? '';
+            return response()->json([
+                'ok'          => true,
+                'description' => (string) ($obj['description'] ?? ''),
+                'keywords'    => is_array($kw) ? implode(', ', $kw) : (string) $kw,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('aiDescribe failed: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'error' => 'ai_error'], 500);
+        }
+    }
+
     /* ================================================================================
      | v4.29 — product research. Four endpoints:
      |   product-lookup    one product, live, from the Add/Edit form (a real scan)
