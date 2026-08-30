@@ -358,6 +358,7 @@ class StorefrontController extends Controller
                     ->where('category', $seoCat)
                     ->orderByDesc('id')->limit(200)->get();
                 $items = [];
+                $nos   = [];   // visible-to-crawlers <noscript> list, built from the same loop
                 foreach ($catProducts as $p) {
                     if ($p->hidden ?? false) continue;
                     $purl   = $host.$base.'/p/'.self::productSlug($p);
@@ -379,6 +380,8 @@ class StorefrontController extends Controller
                         ] : null,
                     ]);
                     $items[] = ['@type' => 'ListItem', 'position' => count($items) + 1, 'item' => $prod];
+                    $nos[]   = '<li><a href="'.e($purl).'">'.e((string) $p->name).'</a>'
+                        .($pprice > 0 ? ' — '.e($cur.' '.number_format($pprice, $pprice == floor($pprice) ? 0 : 2)) : '').'</li>';
                 }
                 if ($items) {
                     $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
@@ -391,6 +394,12 @@ class StorefrontController extends Controller
                     $html = str_replace('</body>',
                         '<script type="application/ld+json">'.json_encode($itemList, $jf).'</script>'
                         ."\n".'<script type="application/ld+json">'.json_encode($crumbs, $jf).'</script>'."\n".'</body>', $html);
+                    // Visible-to-crawlers fallback for bots that don't run JS or parse JSON-LD: the SPA
+                    // paints the grid in JS, so without this a text-only crawler reads an empty aisle.
+                    // <noscript> is inert for real shoppers (the SPA requires JS), so zero visual impact.
+                    $html = str_replace('</body>',
+                        '<noscript><section aria-label="'.$safeCat.'"><h1>'.$safeCat.'</h1><ul>'.implode('', $nos).'</ul>'
+                        .'<p>Order on WhatsApp from '.e((string) $tenant->name).'.</p></section></noscript>'."\n".'</body>', $html);
                 }
             } catch (\Throwable $e) { /* SEO enrichment is best-effort; a query hiccup must not 500 the aisle */ }
             $html = str_replace('</body>',
