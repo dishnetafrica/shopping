@@ -63,6 +63,10 @@ final class SettingsWriteService
         'order_confirm_terms',
         // v4.45 — the letters before a sequential quotation number (QUO → QUO-2026-0001).
         'quote_prefix',
+        // The term paragraphs printed on every PDF quotation (blank = default). Owner-editable so a
+        // shop isn't stuck on the generic "Ex-stock Kampala / 100% before dispatch" defaults.
+        'quote_delivery', 'quote_terms_payment', 'quote_pricing', 'quote_cancellation',
+        'quote_payment_terms', 'quote_prepared_by',
         // v4.46 — the company stamp printed on customer documents (an image field holds its URL).
         'stamp_image',
         // Storefront trust & delivery promises (shown on product pages / homepage).

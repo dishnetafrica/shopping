@@ -111,6 +111,17 @@ final class SettingsSchema
                     ['key' => 'quote_number_reset', 'type' => 'enum', 'label' => 'Start again each year', 'options' => ['year', 'plain'], 'default' => 'year',
                      'help' => 'year = QUO-2026-0001 and the count restarts every January. plain = QUO-0001 running forever, never resetting.'],
                 ]],
+                // The paragraphs printed at the foot of every PDF quotation. Without these set, the
+                // quote falls back to generic defaults ("Ex-stock Kampala", "100% payment before
+                // dispatch") — wrong for most shops. Blank hides that paragraph.
+                ['label' => 'Quotation terms', 'help' => 'The terms printed on every PDF quotation. Set them to YOUR real delivery, payment and pricing terms — otherwise a generic default is used. Leave a field blank to hide that line.', 'fields' => [
+                    ['key' => 'quote_delivery',      'type' => 'textarea', 'label' => 'Delivery terms', 'help' => 'e.g. Ex-stock Juba. 24–48h upcountry.'],
+                    ['key' => 'quote_terms_payment', 'type' => 'textarea', 'label' => 'Payment terms', 'help' => 'e.g. 50% advance with the order, balance on delivery.'],
+                    ['key' => 'quote_pricing',       'type' => 'textarea', 'label' => 'Pricing terms', 'help' => 'e.g. Prices in USD, valid 14 days, subject to change without notice.'],
+                    ['key' => 'quote_cancellation',  'type' => 'textarea', 'label' => 'Cancellation terms'],
+                    ['key' => 'quote_payment_terms', 'type' => 'text',     'label' => 'Short payment line (in the summary box)', 'help' => 'A short version, e.g. "50% advance · balance on delivery".'],
+                    ['key' => 'quote_prepared_by',   'type' => 'text',     'label' => 'Prepared by (name on the quote)'],
+                ]],
                 // v4.46 — customers were asking for stamped invoices and receipts, and staff were
                 // stamping printouts by hand. Three of these documents already reserved a box for it.
                 ['label' => 'Company stamp', 'help' => 'Upload your stamp once and it prints on the documents your customers receive, in the box each one already reserves for it. Use a PNG with a TRANSPARENT background — a stamp saved on a white square prints as a white box over the page. Leave the image empty and nothing is stamped, whatever the switches below say.', 'fields' => [
