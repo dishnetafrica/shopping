@@ -56,6 +56,9 @@ final class OrderItemSync
         $n = 0;
         foreach ($lines as $l) {
             $name = trim((string) $l['name']);
+            // Normalise the loose signal to a single value on the row: a line is loose when the bot
+            // pricer flagged it (loose=true) or the storefront stamped unit='piece'. COGS keys off this.
+            $loose = ! empty($l['loose']) || strtolower(trim((string) ($l['unit'] ?? ''))) === 'piece';
             OrderItem::create([
                 'tenant_id'  => $t->id,
                 'order_id'   => $o->id,
@@ -63,6 +66,7 @@ final class OrderItemSync
                 'name'       => $name,
                 'qty'        => (float) ($l['qty'] ?? 1),
                 'price'      => (float) ($l['price'] ?? $l['unit_price'] ?? 0),
+                'unit'       => $loose ? 'piece' : ((trim((string) ($l['unit'] ?? '')) !== '') ? trim((string) $l['unit']) : null),
             ]);
             $n++;
         }

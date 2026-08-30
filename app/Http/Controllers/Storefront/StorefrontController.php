@@ -186,6 +186,11 @@ class StorefrontController extends Controller
             'base'         => $base,
             'initials'     => $this->initials((string) $tenant->name),
             'currency'     => $this->currency($tenant),
+            // Loose / per-piece retail selling. When on, the storefront's Single-unit view lets a
+            // shopper order carton-packed items by the piece at carton-price ÷ pack × (1 + markup);
+            // the server (repriceCart) is the price authority. Off for every shop that hasn't enabled it.
+            'looseEnabled'   => (bool) $tenant->setting('loose_enabled', false),
+            'looseMarkupPct' => (float) $tenant->setting('loose_markup_pct', 20),
             'logo'         => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
             'waNumber'     => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
             'city'         => (string) $tenant->setting('city', ''),
@@ -1304,13 +1309,18 @@ class StorefrontController extends Controller
             $rows = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)
                 ->where('active', true)->whereNull('archived_at')
-                ->get(['id', 'name', 'price', 'base_price', 'moq']);
+                ->get(['id', 'name', 'price', 'base_price', 'moq', 'pack_size']);
             foreach ($rows as $p) {
                 $k = $this->cartKey((string) $p->name);
                 if ($k === '' || isset($byName[$k])) continue;      // first wins; duplicates are a data fault
                 $byName[$k] = $p;
             }
         }
+
+        // Loose / per-piece retail: a carton product the customer chose to buy as single pieces.
+        // Off unless the tenant turned it on. Markup default 20%.
+        $looseOn  = (bool) $tenant->setting('loose_enabled', false);
+        $loosePct = (float) $tenant->setting('loose_markup_pct', 20);
 
         $clean = []; $textParts = []; $total = 0.0; $unpriced = [];
         foreach ($items as $it) {
@@ -1326,8 +1336,18 @@ class StorefrontController extends Controller
 
             $price = (float) ($p->price ?? $p->base_price ?? 0);
             $qty   = max(1, (int) ($it['qty'] ?? 1));
-            $moq   = (int) ($p->moq ?? 0);
-            if ($moq > 1 && $qty < $moq) $qty = $moq;
+
+            // A loose line prices per PIECE: carton price ÷ pack × (1 + markup). Derived here so the
+            // client can never dictate it; the carton MOQ does not apply (loose minimum is 1). Only
+            // honoured when the tenant enabled loose selling and the product is genuinely carton-packed.
+            $pack  = (int) ($p->pack_size ?? 0);
+            $loose = $looseOn && ! empty($it['loose']) && $pack > 1 && $price > 0;
+            if ($loose) {
+                $price = round(($price / $pack) * (1 + $loosePct / 100), 2);
+            } else {
+                $moq = (int) ($p->moq ?? 0);
+                if ($moq > 1 && $qty < $moq) $qty = $moq;
+            }
 
             $mods = [];
             if (! empty($it['modifiers']) && is_array($it['modifiers'])) {
@@ -1342,8 +1362,8 @@ class StorefrontController extends Controller
             }
 
             $display = (string) $p->name . ($mods ? ' + ' . implode(', ', array_map(fn ($m) => $m['name'], $mods)) : '');
-            $clean[]     = ['name' => $display, 'qty' => $qty, 'price' => $price, 'modifiers' => $mods, 'product_id' => (int) $p->id];
-            $textParts[] = $qty . 'x ' . $display;
+            $clean[]     = ['name' => $display, 'qty' => $qty, 'price' => $price, 'modifiers' => $mods, 'product_id' => (int) $p->id, 'unit' => $loose ? 'piece' : ''];
+            $textParts[] = $qty . 'x ' . $display . ($loose ? ' (per piece)' : '');
             $total      += $qty * $price;
         }
 
@@ -1504,6 +1524,8 @@ class StorefrontController extends Controller
                     'name'       => $cl['name'],
                     'price'      => $cl['price'],
                     'qty'        => $cl['qty'],
+                    // 'piece' marks a loose (per-piece) line so COGS costs it per piece, not per carton.
+                    'unit'       => (! empty($cl['unit']) ? (string) $cl['unit'] : null),
                     'notes'      => null,
                     'modifiers'  => ! empty($cl['modifiers']) ? $cl['modifiers'] : null,
                 ]);

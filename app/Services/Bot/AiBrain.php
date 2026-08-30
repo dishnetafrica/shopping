@@ -1485,6 +1485,7 @@ class AiBrain
                     }
                     $row = ['query' => $name, 'qty' => $n['qty']];
                     if (! empty($n['weight_grams'])) $row['weight_grams'] = $n['weight_grams'];
+                    if (! empty($n['loose'])) $row['loose'] = true;   // customer asked for pieces, not a carton
                     $out[] = $row;
                 }
                 if ($out) return $out;
@@ -1507,6 +1508,7 @@ class AiBrain
                 }
                 $row = ['query' => $name, 'qty' => $n['qty']];
                 if (! empty($n['weight_grams'])) $row['weight_grams'] = $n['weight_grams'];
+                if (! empty($n['loose'])) $row['loose'] = true;   // customer asked for pieces, not a carton
                 $out[] = $row;
             }
         }
@@ -2032,6 +2034,9 @@ class AiBrain
         // physical property is not a use-note. This is that rule.
         $p .= "- NEVER STATE A PRODUCT PROPERTY THAT IS NOT IN PRODUCTS. Material, heat or cold tolerance, microwave/oven/freezer/dishwasher suitability, food-grade or BPA status, waterproofing, shelf life, certification, compliance, or fitness for any specific purpose may be stated ONLY if it appears in that product's own line in PRODUCTS. If a customer asks whether an item can be heated, frozen, microwaved, used with food, or used for anything particular, and PRODUCTS does not say so, DO NOT ANSWER FROM GENERAL KNOWLEDGE — say plainly that you will confirm the exact specification with the team, and offer to come back to them. A wrong answer here can hurt someone or ruin their kitchen. Saying \"I'll check\" is always the right answer when the data is silent.\n";
         $p .= "- MINIMUM ORDER (WHOLESALE): this is a wholesale business — most items are sold by the CARTON, minimum 1 carton. If a customer asks the minimum order without naming an item, tell them that plainly and ask which item so you can confirm its exact carton size, minimum and price. If a specific product shows an MOQ, use that number. If they want less than a carton, tell them loose/part-carton may be possible at the per-piece rate and you'll confirm with the team.\n";
+        if ((bool) $tenant->setting('loose_enabled', false)) {
+            $p .= "- PIECES ARE SOLD DIRECTLY (no \"confirm with the team\"): this shop sells carton items by the single piece too. When a customer wants a few pieces rather than a full carton, you CAN confirm it right away. Quote the per-piece figure shown as \"≈ X per piece\" on the PRODUCT line — that figure ALREADY includes our retail markup and is exactly what we charge — and on the ORDER/QUOTE line put the item with unit \"pcs\" and the number of pieces (e.g. quantity {\"value\":5,\"unit\":\"pcs\"}). The system prices each piece at that same rate automatically. So never quote only the full-carton total to someone buying a few pieces, and never say the team will confirm the piece price — it is set. A full carton is of course still available at the carton price for bulk buyers.\n";
+        }
         $p .= "- QUOTE PER PIECE FIRST for carton-packed items. When a PRODUCT line shows a per-piece rate (\"≈ X per piece\"), and the customer asks a price, or wants one, a few, or \"a pair\", LEAD with the per-piece price so the number makes sense, then add the carton price for bulk — e.g. \"Rear shocks are about 32 each (64 a pair); a carton of 10 is 321.62.\" NEVER quote only the big carton total to someone who wants one piece: \"321 per carton of 10\" reads as absurd when it is really ~32 each. For parts normally used in pairs (shock absorbers, mirrors, footrests), also give the per-pair price = 2× the per-piece. Do NOT claim we are cheaper than anyone or invent a comparison — just state OUR real per-piece and carton price clearly.\n";
         $p .= "- BEST VALUE FIRST when listing options. Whenever you show the customer more than one option for the same item — different sizes, brands, grades or pack sizes — order them by BEST VALUE, meaning the LOWEST PRICE PER PIECE: use the \"≈ X per piece\" rate shown on the PRODUCT line (for a loose/per-unit item, its own unit price), and put the cheapest-per-piece option at the TOP, numbered in that order. This is value, not just a small sticker price: a bigger carton that works out cheaper PER PIECE ranks ABOVE a small pack with a lower total. Show the per-piece figure so the customer sees why it is the better deal, and note when an option is simply a larger size. Never lead with the worst value (the highest price per piece).\n";
         $p .= "- PHOTOS: if the customer sends a PHOTO of a product, look carefully and READ any visible model / part number / rating printed on it (e.g. \"A9F74101\", \"LC1D32P7\", \"63A\", \"3P\") and match that to the catalogue — this is the reliable way to identify the exact item, so a customer can photograph a failed/old part and get the same one. If no number or label is legible, identify the product TYPE from the image and ask a short question for the rating/size/spec you need. NEVER guess an exact model, rating or price from shape or colour alone — read it or ask. Once identified, confirm the catalogue match and offer to quote; if it isn't stocked, offer a special order.\n";
@@ -2259,7 +2264,12 @@ class AiBrain
                     }
                 }
             } catch (\Throwable $e) { $specTxt = []; }
-            return $products->map(function ($p) use ($inv, $specTxt) {
+            // Loose / per-piece retail: when the shop sells by the piece, the per-piece rate shown to
+            // the model must be the RETAIL rate the pricer actually charges (carton unit + markup), so
+            // the model quotes the same number the order is priced at. Off = the plain carton unit rate.
+            $looseOn  = (bool) $tenant->setting('loose_enabled', false);
+            $loosePct = (float) $tenant->setting('loose_markup_pct', 20);
+            return $products->map(function ($p) use ($inv, $specTxt, $looseOn, $loosePct) {
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
                 $pack = $p->pack_size ? ' (' . (int) $p->pack_size . ' per ' . ($p->unit_label ?: 'unit') . ')' : '';
                 $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
@@ -2274,7 +2284,9 @@ class AiBrain
                 $packN = (int) $p->pack_size;
                 if ($packN > 1 && (float) $p->price > 0
                     && in_array(strtolower(trim((string) $p->unit_label)), ['carton', 'box', 'case', 'ctn'], true)) {
-                    $pp = (float) $p->price / $packN;
+                    // Retail per-piece rate when loose selling is on (matches OrderCalculator), else the
+                    // plain carton unit rate for information only.
+                    $pp = ((float) $p->price / $packN) * ($looseOn ? (1 + $loosePct / 100) : 1);
                     $perPiece = ' ≈ ' . rtrim(rtrim(number_format($pp, 2, '.', ''), '0'), '.') . ' per piece';
                 }
                 // v4.28 — brand and origin were absent, so "do you have Pearl River Bridge?"
