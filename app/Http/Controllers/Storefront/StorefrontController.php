@@ -295,7 +295,7 @@ class StorefrontController extends Controller
                 ] : null,
             ]);
 
-            $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+            $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG;  // HEX_TAG: encode </script> so a product field can't break out of the ld+json script (stored XSS)
             $seoHead = implode("\n", array_filter([
                 '<title>' . e($pTitle) . '</title>',
                 '<meta name="description" content="' . e($pDesc) . '">',
@@ -384,7 +384,7 @@ class StorefrontController extends Controller
                         .($pprice > 0 ? ' — '.e($cur.' '.number_format($pprice, $pprice == floor($pprice) ? 0 : 2)) : '').'</li>';
                 }
                 if ($items) {
-                    $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+                    $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG;  // HEX_TAG: encode </script> so a product field can't break out of the ld+json script (stored XSS)
                     $itemList = ['@context' => 'https://schema.org', '@type' => 'ItemList',
                         'name' => $seoCat, 'numberOfItems' => count($items), 'itemListElement' => $items];
                     $crumbs = ['@context' => 'https://schema.org', '@type' => 'BreadcrumbList', 'itemListElement' => [
@@ -537,7 +537,7 @@ class StorefrontController extends Controller
             ], (array) $cfg['faq']),
         ];
 
-        $jflags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+        $jflags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG;  // HEX_TAG: encode </script> so a tenant/product field can't break out of the ld+json script (stored XSS)
         $meta = implode("\n", array_filter([
             '<meta name="description" content="' . e($desc) . '">',
             '<meta name="robots" content="index,follow">',
@@ -734,7 +734,7 @@ class StorefrontController extends Controller
             $robots = 'noindex,follow';   // internal search/cart/tools should not be indexed
         }
         $logo  = $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '';
-        $jflags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+        $jflags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG;  // HEX_TAG: encode </script> so a tenant/product field can't break out of the ld+json script (stored XSS)
         $orgLd = array_filter([
             '@context' => 'https://schema.org', '@type' => 'AutoPartsStore',
             'name' => $tenant->name, 'url' => $canon, 'logo' => $logo ?: null,
