@@ -2238,7 +2238,10 @@ function applyQuickOrder(){
       var m=CATS.filter(function(c){return c.name.toLowerCase()===String(cat).toLowerCase();})[0];
       setCat(m?m.name:cat);
     }
-    if((add||cat)&&window.history&&history.replaceState)history.replaceState(null,'',location.pathname);
+    // Strip ?add so a refresh doesn't re-add to the cart; KEEP ?cat — setCat() above already
+    // normalised the bar to /shop?cat=<name> via reflectUrl(), so a directly-opened category link
+    // stays copyable and survives a refresh (it just re-filters).
+    if(add&&window.history&&history.replaceState)history.replaceState(null,'',location.pathname);
   }catch(e){}
 }
 function goHome(){CAT='all';Q='';BIZVIEW='';COLLVIEW=null;CATLIST=false;if($('q'))$('q').value='';closeSheet();render();window.scrollTo(0,0);setNav('navHome');reflectUrl();}
@@ -2253,7 +2256,7 @@ function navGo(tab){
   if(tab==='cart'){ openCart(); return; }                // sheet overlay
   if(tab==='account'){ openLogin(); return; }            // sheet overlay
 }
-function showCategories(){ CAT='all'; Q=''; BIZVIEW=''; COLLVIEW=null; CATLIST=true; if($('q'))$('q').value=''; closeSheet(); render(); window.scrollTo(0,0); }
+function showCategories(){ CAT='all'; Q=''; BIZVIEW=''; COLLVIEW=null; CATLIST=true; if($('q'))$('q').value=''; closeSheet(); render(); window.scrollTo(0,0); reflectUrl(); }
 function focusSearch(){ searchOpen(); }
 
 /* ================= Storefront V2 — premium search overlay (Increment 3) ================= */
@@ -2262,7 +2265,7 @@ function loadRSearch(){try{RSEARCH=JSON.parse(localStorage.getItem(RSRCH_KEY)||'
 function pushRSearch(v){ v=(v||'').trim(); if(!v)return; RSEARCH=RSEARCH.filter(function(x){return x.toLowerCase()!==v.toLowerCase();}); RSEARCH.unshift(v); RSEARCH=RSEARCH.slice(0,8); try{localStorage.setItem(RSRCH_KEY,JSON.stringify(RSEARCH));}catch(e){} }
 function searchOpen(){ var o=$('searchOverlay'); if(!o)return; closeSheet(); o.classList.add('show'); document.body.style.overflow='hidden'; var sq=$('sq'); if(sq)sq.value=Q||''; searchRender(Q||''); setTimeout(function(){ if(sq)sq.focus(); },60); }
 function searchClose(){ var o=$('searchOverlay'); if(o)o.classList.remove('show'); document.body.style.overflow=''; try{stopVoice();}catch(e){} cancelAutorun(); }
-function searchSubmit(v,src){ if(_voiceTimer){clearTimeout(_voiceTimer);_voiceTimer=null;} v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); WHPAGE=''; if($('q'))$('q').value=v; Q=v; _catShown=24; if(v){ pushRSearch(v); sTrack(src==='voice'?'voice_submit':'search',{q:v}); } render(); window.scrollTo(0,0); }   /* v4.83 — WHPAGE='' : searching from a wh page (About/Contact/Saved) must LEAVE that page — the router checks WHPAGE before Q, so a stale page swallowed every search. No-op for classic shops (WHPAGE is always ''). */
+function searchSubmit(v,src){ if(_voiceTimer){clearTimeout(_voiceTimer);_voiceTimer=null;} v=(v==null?(($('sq')&&$('sq').value)||''):v).trim(); searchClose(); WHPAGE=''; if($('q'))$('q').value=v; Q=v; _catShown=24; if(v){ pushRSearch(v); sTrack(src==='voice'?'voice_submit':'search',{q:v}); } render(); window.scrollTo(0,0); reflectUrl(); }   /* v4.83 — WHPAGE='' : searching from a wh page (About/Contact/Saved) must LEAVE that page — the router checks WHPAGE before Q, so a stale page swallowed every search. No-op for classic shops (WHPAGE is always ''). */
 function searchPickCat(c){ searchClose(); WHPAGE=''; if($('q'))$('q').value=''; Q=''; setCat(c); }   /* v4.83 — same escape for category picks */
 function searchOpenProduct(id,name){ var qv=($('sq')&&$('sq').value)||Q||''; sTrack('search_click',{q:qv.trim(),id:id||0,name:name}); searchClose(); if(id){ goDetail(id); } else { searchSubmit(name); } }
 function toast(msg,type){ try{ var t=$('cbToast'); if(!t){ t=document.createElement('div'); t.id='cbToast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); document.body.appendChild(t); } t.className='cbtoast'+(type?(' '+type):''); t.textContent=msg; void t.offsetWidth; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); }, 2400); }catch(e){} }
@@ -4752,6 +4755,7 @@ function waShare(url,t){ try{ window.open('https://wa.me/?text='+encodeURICompon
    applyQuickOrder()->setCat()+render() filter on. Empty for home, search, keyword-only collections
    and business (BIZVIEW) views: those have no category and no ?param to restore them. */
 function currentViewCat(){
+  if(typeof Q!=='undefined' && Q && String(Q).trim()) return '';  // a search is showing, not a category
   var catName='';
   if(CAT && CAT!=='all') catName=CAT;
   else if(typeof COLLVIEW!=='undefined' && COLLVIEW) catName=(COLLVIEW.cat||'');
@@ -4776,7 +4780,9 @@ function reflectUrl(){
   try{
     if(typeof idFromPath==='function' && idFromPath()) return;
     var cat=currentViewCat();
-    var url=cat ? ((SHOP_BASE||'')+'/shop?cat='+encodeURIComponent(cat)) : ((SHOP_BASE||'')+'/');
+    // Always target /shop (served for every tenant by show()); the bare base "/" is the brand/EPC
+    // landing on slug-hosted tenants, so clearing a category to "/" would leave the shop view.
+    var url=(SHOP_BASE||'')+'/shop'+(cat?('?cat='+encodeURIComponent(cat)):'');
     if((location.pathname+location.search)!==url) history.replaceState(history.state,'',url);
   }catch(e){}
 }
