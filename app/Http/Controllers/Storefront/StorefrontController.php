@@ -617,6 +617,10 @@ class StorefrontController extends Controller
             'website'     => (string) $tenant->setting('website', ''),
             'waNumber'    => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
             'currency'    => $this->currency($tenant),
+            // Per-piece (loose) selling — the auto-parts store computes the piece price client-side
+            // (carton / pack * (1 + markup)) since its checkout is WhatsApp, not a server-priced cart.
+            'looseEnabled'   => (bool) $tenant->setting('loose_enabled', false),
+            'looseMarkupPct' => (float) $tenant->setting('loose_markup_pct', 20),
             'shopUrl'     => $base . '/shop',
             'catalogueUrl'=> $base . '/catalogue',
             'panelUrl'    => url('/panel'),

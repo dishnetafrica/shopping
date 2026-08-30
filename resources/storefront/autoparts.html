@@ -664,6 +664,27 @@ function money(n){ n=Number(n)||0;
   var d=zero.indexOf(cur)>=0?0:2;
   var s=n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
   return cur==='USD' ? ('$'+s) : (cur+' '+s); }
+/* ---------- per-piece (loose) selling ----------
+   The auto-parts checkout is WhatsApp (no server-priced cart), so the piece price is derived
+   here: carton price / pack * (1 + markup) — the SAME formula the server (repriceCart) and the
+   WhatsApp bot use. Off unless the shop enabled it; dealers always buy by the carton. */
+var LOOSE_SEL = {};   // part id -> true when the shopper picked "Per piece" on that part's page
+function packOf(p){ var k=p&&Number(p.pack); return (k&&k>1)?k:0; }
+function looseOk(p){ return !!CFG.looseEnabled && packOf(p)>0 && !!(p&&p.price>0) && !STATE.dealer && dlrPrice(p)==null; }
+function loosePc(p){ var k=packOf(p); return k>0 ? Math.round((p.price/k)*(1+(Number(CFG.looseMarkupPct)||20)/100)*100)/100 : (p?p.price:0); }
+function looseSel(p){ return looseOk(p) && !!LOOSE_SEL[String(p.id)]; }   // piece mode active for this part
+function pdUnit(id,loose){ LOOSE_SEL[String(id)]=!!loose; try{render();}catch(e){} }
+function priceBlock(p){
+  var dp=dlrPrice(p);
+  if(dp!=null) return '<div class="price"><span class="dstrike" style="font-size:15px">'+money(p.price)+'</span> <span class="dyour">'+money(dp)+'</span><span style="display:block;font-size:10px;font-weight:800;letter-spacing:1px;color:#166534">YOUR DEALER PRICE</span></div>';
+  if(!(p.price>0)) return '<div class="price"><span class="askp">Ask for price</span></div>';
+  if(!looseOk(p)) return '<div class="price">'+money(p.price)+'</div>';
+  var loose=!!LOOSE_SEL[String(p.id)], pc=loosePc(p);
+  var opt=function(on,label,price,to){ return '<button type="button" onclick="pdUnit(\''+sid(p.id)+'\','+to+')" aria-pressed="'+(on?'true':'false')+'" style="flex:1;border:1px solid '+(on?'#0C2C6B':'#cfd8ea')+';background:'+(on?'#0C2C6B':'#fff')+';color:'+(on?'#fff':'#12245c')+';border-radius:9px;padding:7px 10px;cursor:pointer;font-weight:700;font-size:13px;line-height:1.15;text-align:center">'+label+'<span style="display:block;font-weight:600;font-size:11px;opacity:.9">'+price+'</span></button>'; };
+  return '<div class="price">'+money(loose?pc:p.price)+(loose?' <span style="font-size:14px;color:var(--muted);font-weight:600">/ piece</span>':'')+'</div>'
+       +'<div role="group" aria-label="Buy by carton or by the piece" style="display:flex;gap:6px;max-width:320px;margin:6px 0 4px">'+opt(!loose,'Carton',money(p.price),'false')+opt(loose,'Per piece',money(pc)+'/pc','true')+'</div>'
+       +'<div style="font-size:12px;color:var(--muted);margin-bottom:6px">'+(loose?('Sold by the piece · full carton = '+packOf(p)+' pcs'):('Carton of '+packOf(p)+' pieces'))+'</div>';
+}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 // Safe identifier: ids/plate keys are identifiers, never markup. Whitelist so a hostile
 // catalogue value can't break out of the single-quoted JS string inside an onclick handler.
@@ -1036,7 +1057,9 @@ function normalize(json){
       brand: p.Brand||p.brand||'',
       created: p.Created||0,
       popularity: p.Popularity||0,
-      desc: p.Description||p.description||''
+      desc: p.Description||p.description||'',
+      pack: (p.PackSize!=null?p.PackSize:(p.pack_size!=null?p.pack_size:(p.pack!=null?p.pack:null))),
+      unit: (p.Unit||p.unit||p.unit_label||'')
     };
   }).filter(function(p){return p.name;});
 }
@@ -1166,10 +1189,11 @@ function fitGuide(p){
 // NOTE: these src/ files share one runtime scope; build_storefront.py concatenates them
 // in filename order into a single inline bundle. Keep 12-a11y-boot.js last (it boots the app).
 /* ---------- order on WhatsApp (owns the checkout) ---------- */
-function waOrder(p){
+function waOrder(p,loose){
   var b=getBike(); var pn=pnOf(p);
-  var t='Hello '+(CFG.name||'')+', I want to order this genuine part:%0a• '+p.name+(pn?(' (Part No '+pn+')'):'')
-    +'%0a• Price: '+money(p.price)+'%0a• Qty: 1'+(b?('%0a• My motorcycle: '+b.name):'')
+  var pc = loose && looseOk(p);                                  // ordering a single piece, not a carton
+  var t='Hello '+(CFG.name||'')+', I want to order this genuine part:%0a• '+p.name+(pc?' (per piece)':'')+(pn?(' (Part No '+pn+')'):'')
+    +'%0a• Price: '+money(pc?loosePc(p):p.price)+(pc?'/pc':'')+'%0a• Qty: 1'+(b?('%0a• My motorcycle: '+b.name):'')
     +'%0a%0aIs it in stock and how soon can I get it?';
   return CFG.waNumber?('https://wa.me/'+CFG.waNumber+'?text='+t):'#';
 }
@@ -1183,10 +1207,14 @@ function cartGet(){ try{return JSON.parse(localStorage.getItem('ea_cart')||'[]')
 function cartSave(c){ try{localStorage.setItem('ea_cart',JSON.stringify(c));}catch(e){} updateCartBadge(); }
 function cartCount(){ return cartGet().reduce(function(n,i){return n+i.qty;},0); }
 function cartTotal(){ return cartGet().reduce(function(s,i){return s+(i.price||0)*i.qty;},0); }
-function cartAdd(id){ var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0]; if(!p)return;
-  var c=cartGet(); var e=c.filter(function(i){return String(i.id)===String(p.id);})[0];
-  if(e)e.qty++; else c.push({id:p.id,name:p.name,pn:pnOf(p),price:(function(){var dp=dlrPrice(p);return dp!=null?dp:(p.price||0);})(),qty:1});
-  cartSave(c); track('add',{product_id:p.id}); toast('“'+p.name+'” added to cart'); }
+function cartAdd(id,loose){ var p=STATE.products.filter(function(x){return String(x.id)===String(id);})[0]; if(!p)return;
+  loose = loose && looseOk(p);                                   // never loose unless the part is eligible
+  var key = loose ? (String(p.id)+':pc') : String(p.id);         // a piece line is distinct from a carton line
+  var c=cartGet(); var e=c.filter(function(i){return String(i.id)===key;})[0];
+  if(e)e.qty++; else c.push(loose
+    ? {id:key, name:p.name+' (per piece)', pn:pnOf(p), price:loosePc(p), qty:1, loose:1}
+    : {id:String(p.id), name:p.name, pn:pnOf(p), price:(function(){var dp=dlrPrice(p);return dp!=null?dp:(p.price||0);})(), qty:1});
+  cartSave(c); track('add',{product_id:p.id}); toast('“'+p.name+'”'+(loose?' (per piece)':'')+' added to cart'); }
 function cartSet(id,d){ var c=cartGet(); for(var i=0;i<c.length;i++){ if(String(c[i].id)===String(id)){ c[i].qty=Math.max(0,c[i].qty+d); if(!c[i].qty)c.splice(i,1); break; } } cartSave(c); render(); }
 function updateCartBadge(){ var n=(function(){try{return cartCount();}catch(e){return 0;}})(); Array.prototype.forEach.call(document.querySelectorAll('.cartn'),function(el){ el.textContent=n; el.style.display=n?'inline-flex':'none'; }); }
 function toast(msg){ var t=document.getElementById('toast'); if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');t.setAttribute('aria-live','polite');document.body.appendChild(t);} t.textContent=msg; t.classList.add('on'); clearTimeout(window._tt); window._tt=setTimeout(function(){t.classList.remove('on');},1900); }
@@ -1515,7 +1543,7 @@ function vPart(id){
       }).join('')+'</div>'; })()
    +'</div>'
    +'<div>'+(p.brand?'<span class="chip g">'+((CFG.genuineLine)?'🟢 Genuine ':'')+esc(p.brand)+'</span> ':'')+'<h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="oembig"><span class="lb">OEM</span><b>'+esc(pn)+'</b>'+(p.sku?'<span class="skusml">SKU '+esc(p.sku)+'</span>':'')+'</div>':(p.sku?'<div class="mono" style="margin-top:4px">SKU: '+esc(p.sku)+'</div>':''))
-   +'<div class="price">'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike" style="font-size:15px">'+money(p.price)+'</span> <span class="dyour">'+money(dp)+'</span><span style="display:block;font-size:10px;font-weight:800;letter-spacing:1px;color:#166534">YOUR DEALER PRICE</span>'; return priced?money(p.price):'<span class="askp">Ask for price</span>'; })()+'</div><div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')+' — ready to dispatch'):'Available to order')+'</div>'
+   +priceBlock(p)+'<div class="stock '+(inS?'y':'n')+'" style="margin-bottom:12px">'+(inS?('✓ In stock'+(p.stock!=null&&p.stock>0?(' ('+p.stock+')'):'')+' — ready to dispatch'):'Available to order')+'</div>'
    +fitLine
    +cmH
    +(p.desc?'<p style="color:var(--muted);margin:14px 0 16px">'+esc(p.desc)+'</p>':'<div style="height:6px"></div>')
@@ -1527,7 +1555,7 @@ function vPart(id){
    +(function(){ var alts=altBrand(p); if(!alts.length) return '';
       var a=alts[0];
       return '<div class="altrow" onclick="go(\'part/'+sid(a.id)+'\')">Also available for <span class="altb">'+esc(a.brand||'the other brand')+'</span>: <b>'+esc(a.name)+'</b>'+(a.price>0?' — '+money(a.price):'')+' ›</div>'; })()
-   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">Order now</a>'+diagBtn+'</div>'
+   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\','+(looseSel(p)?'1':'0')+')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p,looseSel(p)))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">Order now</a>'+diagBtn+'</div>'
    +'<div class="qa-grid">'
      +'<div class="qa-b"><h4><i class="fa fa-check-circle"></i> Genuine guarantee</h4><p>'+esc(CFG.genuineLine||'100% genuine — or your money back.')+'</p></div>'
      +'<div class="qa-b"><h4><i class="fa fa-truck"></i> Delivery &amp; payment</h4><p>'+esc(CFG.deliveryEta||'Fast delivery')+'<br><b>'+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'</b></p></div>'
@@ -1538,7 +1566,7 @@ function vPart(id){
    +(function(){ var gw=goesWith(p,4).map(prodCard).join(''); return gw?'<div class="blk"><div class="hd"><div><h2>Frequently bought together</h2><div class="sub">Mechanics usually replace these together.</div></div></div><div class="g4">'+gw+'</div></div>':''; })()
    +(also?'<div class="blk"><div class="hd"><div><h2>More in this system</h2></div></div><div class="g4">'+also+'</div></div>':'')
    +'</section>'
-   +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);return priced?money(p.price):'Ask price';})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w bbwa" href="'+esc(waOrder(p))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">'+li('message-circle',15)+' WhatsApp</a></div>'
+   +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);if(!priced)return 'Ask price';return looseSel(p)?(money(loosePc(p))+'/pc'):money(p.price);})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\','+(looseSel(p)?'1':'0')+')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w bbwa" href="'+esc(waOrder(p,looseSel(p)))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">'+li('message-circle',15)+' WhatsApp</a></div>'
    +foot();
 }
 function galleryFor(id){ var og=(CFG.modelGalleries||{})[id]; if(og&&og.length) return og.slice(0,8); var g=((GAL&&GAL[id])||[]).slice(); var ov=(CFG.modelImages||{})[id]; if(ov){ if(!g.length) g=[ov]; else if(g.indexOf(ov)<0) g.unshift(ov); } if(!g.length){ var mi=modelImg(id); if(mi)g=[mi]; } return g; }
