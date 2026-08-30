@@ -74,3 +74,14 @@ jobs:
           name: full-suite-log
           path: /tmp/fullsuite.txt
           if-no-files-found: ignore
+
+  v3-assets:
+    name: V3 assets in sync
+    runs-on: ubuntu-latest
+    # No PHP/DB — a pure byte-comparison of the V3 source of truth (resources/v3) against its
+    # served copy (public/assets/v3). Fails the PR if someone edited resources/v3 without running
+    # scripts/v3-assets-sync.sh. See docs/v3-migration/V3-MAINTAINABILITY-STANDARD.md.
+    steps:
+      - uses: actions/checkout@v4
+      - name: resources/v3 == public/assets/v3
+        run: bash scripts/v3-assets-sync-check.sh

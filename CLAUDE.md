@@ -95,9 +95,18 @@ Built into the real job/webhook/order/campaign paths — the chosen trade-off is
 
 **This requires `QUEUE_CONNECTION=redis` in production** — `WithoutOverlapping` and `Cache::lock` need an atomic store; `sync`/`database` won't serialise. (CI runs `sync`, so these paths aren't exercised there.)
 
+## The two seller panels — V3 is the platform (read this before touching any panel UI)
+
+There are two seller panels. **V3 is the sole strategic frontend; V2 is frozen legacy.** (See `docs/v3-migration/V3-MAINTAINABILITY-STANDARD.md` for the full standard, and `V3-DEFAULT-MIGRATION-PLAN.md` / `docs/v3-migration/` for status.)
+
+- **V3 (`/v3`)** — the Capability shell: `resources/views/shell.blade.php` + `resources/v3/shell.{js,css}`, backed by `app/Capability/**` (Object → Process → Command → Registry → CommandBus → `api/v1/workspace`). Default panel for owner/manager/sales. **All new UI work goes here.**
+- **V2 (`/panel/*`)** — legacy: `resources/panel/*.html` (`seller.html` the main SPA) via `SellerPanelController` + the shared `/papi/*` API. **Frozen: no new features. Do not modify V2 unless the user explicitly asks** (a fix required for the remaining classic-role users).
+- **V3 assets: `resources/v3` is the single source of truth; `public/assets/v3` is a generated, served copy.** They are hand-authored (no build system). After editing anything under `resources/v3`, run **`scripts/v3-assets-sync.sh`** and commit the updated `public/assets/v3` files. CI (`v3-assets` job) fails the PR if the two differ; `scripts/v3-assets-sync-check.sh` checks locally.
+- **Never rewrite, refactor, split, or regenerate `shell.js` as a broad change.** Modularize only incrementally — extract a component *when you are already touching that part*, keeping existing behaviour intact.
+
 ## Conventions & gotchas
 
-- The seller panel is largely **one big `resources/panel/seller.html`** driven by Panel controllers' JSON APIs — edit both sides together.
+- (Legacy, V2 only) The classic seller panel is one big `resources/panel/seller.html` driven by Panel controllers' JSON APIs — but it is **frozen**; prefer V3 for anything new (see above).
 - `OrderObserver` centralises `order_no` (per-tenant Redis sequence), `track_token`, and `delivered_at` stamping — don't duplicate that logic in controllers.
 - Check callers before changing `NotificationService` / notification signatures.
 - Webhook auth here is normal Laravel middleware — the DishNet UCRM "reject only non-empty wrong keys" convention does **not** apply.
