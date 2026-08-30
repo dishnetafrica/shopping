@@ -1837,6 +1837,12 @@ function applyTheme(){
 }
 applyTheme();
 var CUR  = SHOP.currency || 'UGX';
+/* Loose / per-piece retail. When on, the "Single-unit view" toggle lets a shopper order a
+   carton-packed item by the piece at carton-price / pack * (1 + markup). The server
+   (repriceCart) is the price authority — the client price below is display only. Off unless
+   the tenant enabled it (bike parts / East Africa Auto Parts). */
+var LOOSE_ON  = !!SHOP.looseEnabled;
+var LOOSE_PCT = Number(SHOP.looseMarkupPct || 20);
 var CATALOGUE_URL = SHOP.catalogueUrl || (location.pathname.replace(/\/+$/,'') + '/catalogue');
 var SUBMIT_URL    = SHOP.orderUrl     || (location.pathname.replace(/\/+$/,'') + '/order');
 var QUOTE_URL     = SHOP.quoteUrl     || (location.pathname.replace(/\/+$/,'') + '/quote');
@@ -1888,8 +1894,20 @@ function loadWMode(){try{var v=localStorage.getItem(WMODE_KEY);if(v==='1'){WMODE
 function isWholesaleBuyer(){return BUYER.mode==='wholesale'||BUYER.mode==='institutional';}
 function applyBuyer(b){ if(!b||typeof b!=='object')return; BUYER={mode:b.mode||'retail',segment:b.segment||null,credit:b.credit||null}; if(!WMODE_SET&&isWholesaleBuyer())WMODE=true; }
 function setWMode(on){WMODE=!!on;WMODE_SET=true;try{localStorage.setItem(WMODE_KEY,WMODE?'1':'0');}catch(e){}render();try{bar();}catch(e){}}
+/* Loose (per-piece) helpers. packOf reads either field: the catalogue feed exposes packSize,
+   the product-detail endpoint exposes pack_size. A product is bought loose only when the shop
+   enabled it, the shopper is in Single-unit view, and the item is genuinely carton-packed. */
+function packOf(p){ return (p&&(Number(p.packSize)||Number(p.pack_size)))|0; }
+function looseActive(p){ return LOOSE_ON && !WMODE && packOf(p)>1; }
+function loosePrice(p){ var ps=packOf(p); return ps>1 ? Math.round((p.price/ps)*(1+LOOSE_PCT/100)*100)/100 : (p.price||0); }
+/* One place that turns a product into a fresh cart line, honouring loose mode. The server
+   reprices from the loose flag; price here is for the cart display only. A loose line carries
+   a distinct display label and starts at 1 piece (the carton MOQ does not apply). */
+function freshLine(p){ return looseActive(p)
+  ? {name:p.name, display:p.name+' (per piece)', price:loosePrice(p), qty:1, loose:true}
+  : {name:p.name, price:p.price, qty:minq(p)}; }
 function wsBar(){
-  if(!(isWholesaleBuyer()||WMODE))return '';
+  if(!(isWholesaleBuyer()||WMODE||LOOSE_ON))return '';
   var cr=BUYER.credit,credit='';
   if(cr&&cr.limit){credit=' &middot; Credit '+esc(cr.currency||'')+' '+(Number(cr.available||0)).toLocaleString('en-US')+'/'+(Number(cr.limit||0)).toLocaleString('en-US')+(cr.canSell===false?' <b style="color:#ffd2cc">(over limit)</b>':'');}
   return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:'+(WMODE?'#0C2C6B':'#eef2fb')+';color:'+(WMODE?'#fff':'#103A8C')+';border-radius:12px;padding:9px 12px;margin:4px 0 10px;font-size:13px">'+
@@ -1898,8 +1916,8 @@ function wsBar(){
        mode, so unticking the box changed the words and not a single number. The toggle does change
        the VIEW (carton phrasing, per-piece maths, pack lines), so it stays — described as what it
        is. The real tier engine is PriceResolver, reachable only with a dealer token. */
-    '<div><b>'+(WMODE?'Carton view':'Single-unit view')+'</b>'+(BUYER.segment?(' &middot; '+esc(BUYER.segment)):'')+credit+'</div>'+
-    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600"><input type="checkbox"'+(WMODE?' checked':'')+' onchange="setWMode(this.checked)" style="width:16px;height:16px"> Wholesale</label>'+
+    '<div><b>'+(LOOSE_ON?(WMODE?'Buying by carton':'Buying by the piece'):(WMODE?'Carton view':'Single-unit view'))+'</b>'+(LOOSE_ON&&!WMODE?(' &middot; +'+(LOOSE_PCT)+'% vs carton'):'')+(BUYER.segment?(' &middot; '+esc(BUYER.segment)):'')+credit+'</div>'+
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600"><input type="checkbox"'+(WMODE?' checked':'')+' onchange="setWMode(this.checked)" style="width:16px;height:16px"> '+(LOOSE_ON?'Buy by carton':'Wholesale')+'</label>'+
     '</div>';
 }
 function creditOptionHtml(){ return (isWholesaleBuyer()&&BUYER.credit&&BUYER.credit.limit)?'<option>Credit (account)</option>':''; }
@@ -2869,7 +2887,7 @@ function vpStep(name,key,d){if(d>0)cartAdd(name);else cartSub(name);openVariantP
    started below the shop's minimum. Those lines then hit bump() and vanished. One rule now: a line
    opens at the minimum, wherever the Add was pressed. A price-on-request product is refused here
    too — it has no price to put in the cart. */
-function cartAdd(name){var p=prod(name);if(!p||oosOf(p)||p.poa)return;flyToCart();if(!CART[name]){CART[name]={name:p.name,price:p.price,qty:minq(p)};track('add',p.id);}else{CART[name].qty++;}saveCart();render();bar();}
+function cartAdd(name){var p=prod(name);if(!p||oosOf(p)||p.poa)return;flyToCart();if(!CART[name]){CART[name]=freshLine(p);track('add',p.id);}else{CART[name].qty++;}saveCart();render();bar();}
 function cartSub(name){if(!CART[name])return;CART[name].qty--;if(CART[name].qty<=0)delete CART[name];saveCart();render();bar();}
 function vpick(key,i){VSEL[key]=i;render();}
 function gridG(list){
@@ -2910,7 +2928,7 @@ function opadSetQty(key,val){
   if(val>0 && oosOf(p)){ toast(p.name+' is out of stock','err'); val=0; }
   var mq=minq(p);
   if(val>0 && val<mq){ val=mq; toast('Minimum order for '+p.name+' is '+mq,'err'); }
-  if(val<=0){ delete CART[key]; } else { if(!CART[key])CART[key]={name:p.name,price:p.price,qty:0}; CART[key].qty=val; }
+  if(val<=0){ delete CART[key]; } else { if(!CART[key])CART[key]=freshLine(p); CART[key].qty=val; }
   saveCart(); bar(); opadRefreshRow(key);
 }
 function opadStep(key,dir){
@@ -3009,7 +3027,7 @@ function quickOrderPreview(){
 }
 function quickOrderApply(){
   var n=0; _QOR.forEach(function(r){ if(r.match&&r.match.p){ var p=r.match.p; if(oosOf(p))return; var mq=minq(p), q=r.qty||mq; if(q<mq)q=mq;
-    if(!CART[p.name])CART[p.name]={name:p.name,price:p.price,qty:0}; CART[p.name].qty=q; n++; } });
+    if(!CART[p.name])CART[p.name]=freshLine(p); CART[p.name].qty=q; n++; } });
   saveCart(); render(); bar(); closeSheet();
   toast('Added '+n+' item'+(n===1?'':'s')+' to your order','ok');
   if(_desktop())openCart();
@@ -3137,7 +3155,10 @@ function prodCard(p){
   if(SEARCH_ACTIVE && SMATCH[p.name] && SMATCH[p.name].length){
     matchHtml='<div class="pcmatch">'+SMATCH[p.name].slice(0,2).map(function(r){return '<span class="mchip">'+esc(r)+'</span>';}).join('')+'</div>';
   }
-  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+matchHtml+brandHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+'<div class="prrow"><span class="pr">'+ugx(p.price)+'</span>'+was+'</div>'+perPiece(p)+lowStockLine(p)+moqLine(p)+ctrl+'</div></div>';
+  var prBlock=looseActive(p)
+    ? '<div class="prrow"><span class="pr">'+ugx(loosePrice(p))+'</span> <span class="unit">/ pc</span></div>'
+    : '<div class="prrow"><span class="pr">'+ugx(p.price)+'</span>'+was+'</div>'+perPiece(p);
+  return '<div class="pc">'+img+'<div class="bd">'+chipsHtml+matchHtml+brandHtml+'<div class="nm"'+dopen+'>'+esc(p.name)+'</div>'+(p.desc?'<div class="dsc">'+esc(p.desc)+'</div>':'')+packLine(p)+prBlock+lowStockLine(p)+moqLine(p)+ctrl+'</div></div>';
 }
 /* derive up to 3 spec chips from the product name + keywords (paper/tissue vernacular) */
 function specChipsFor(p){
@@ -3161,7 +3182,7 @@ function perPiece(p){ if(!p.packSize||p.packSize<2) return ''; var v=p.price/p.p
 function moqLine(p){ var m=minq(p); if(m<=1) return ''; return '<div class="moqlbl">Min order: '+m+' '+esc(p.unit?(m>1?plur(p.unit):p.unit):'units')+'</div>'; }
 function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
 function plur(s){return /s$/i.test(s)?s:s+'s';}
-function minq(p){return Math.max(1, (p&&p.moq)?p.moq:1);}
+function minq(p){ if(looseActive(p)) return 1; return Math.max(1, (p&&p.moq)?p.moq:1);}
 function gridHtml(items){return '<div class="grid">'+items.map(prodCard).join('')+'</div>';}
 
 function thaliProduct(){return PRODUCTS.find(function(p){return /thali/i.test(p.name)||/thali/i.test(p.category);});}
@@ -4854,11 +4875,11 @@ function detailStepper(p){
   if(p&&p.sell_mode==='quote') return '<a class="dadd" href="'+esc(quoteHref(p))+'" style="display:block;text-align:center;text-decoration:none">Request a quote</a>';
   if(oosDetail(p)) return '<button class="dadd" disabled>Out of stock</button>';
   var c=CART[p.name];
-  if(c&&c.qty>0) return '<div class="dstp"><button onclick="detailDec('+jk(p.name)+')">\u2212</button><span>'+c.qty+'</span><button onclick="detailInc('+jk(p.name)+','+p.price+','+(p.moq||1)+')">+</button></div>';
-  return '<button class="dadd" onclick="detailInc('+jk(p.name)+','+p.price+','+(p.moq||1)+')">Add to cart</button>';
+  if(c&&c.qty>0) return '<div class="dstp"><button onclick="detailDec('+jk(p.name)+')">\u2212</button><span>'+c.qty+'</span><button onclick="detailInc('+jk(p.name)+')">+</button></div>';
+  return '<button class="dadd" onclick="detailInc('+jk(p.name)+')">Add to cart</button>';
 }
 function refreshDetailStepper(){ if(CUR_DETAIL&&$('dstepwrap')) $('dstepwrap').innerHTML=detailStepper(CUR_DETAIL); }
-function detailInc(name,price,moq){ if(!CART[name])CART[name]={name:name,price:price,qty:0}; CART[name].qty += (CART[name].qty===0?Math.max(1,moq||1):1); saveCart(); bar(); refreshDetailStepper(); render(); }
+function detailInc(name){ var p=prod(name); if(!p||oosOf(p))return; if(!CART[name]){CART[name]=freshLine(p);track('add',p.id);}else{CART[name].qty++;} saveCart(); bar(); refreshDetailStepper(); render(); }
 /* v5.05 — floored at 0 instead of at the MOQ, so the product page walked a line down to 1 under a
    label still reading "Min order: 12". Same rule as dec() now. */
 function detailDec(name){ if(!CART[name])return; var m=minq(prod(name)); CART[name].qty--; if(CART[name].qty<m)delete CART[name]; saveCart(); bar(); refreshDetailStepper(); render(); }
@@ -4878,8 +4899,13 @@ function renderDetail(d){
   var imgs=(p.images&&p.images.length)?p.images:(p.image?[p.image]:[]);
   var main=imgs.length?'<img alt="" src="'+esc(imgs[0])+'" id="dmain" onerror="this.style.display=\'none\'">':'<div class="dnoimg">'+catIcon(p.category)+'</div>';
   var thumbs=imgs.length>1?'<div class="dthumbs">'+imgs.map(function(u,i){return '<div class="dth'+(i===0?' on':'')+'" onclick="dswap('+jk(u)+',this)"><img alt="" src="'+esc(u)+'" onerror="this.style.display=\'none\'"></div>';}).join('')+'</div>':'';
-  var mrp=(p.mrp&&p.mrp>p.price)?'<span class="dmrp">'+ugx(p.mrp)+'</span>':'';
-  var off=(p.mrp&&p.mrp>p.price)?'<span class="doff">'+Math.round((1-p.price/p.mrp)*100)+'% OFF</span>':'';
+  /* Loose (per-piece) on the detail page: in Single-unit view an eligible carton item shows and
+     charges the per-piece price; the carton MRP/discount and MOQ do not apply. */
+  var dLoose=looseActive(p);
+  var mrp=(!dLoose&&p.mrp&&p.mrp>p.price)?'<span class="dmrp">'+ugx(p.mrp)+'</span>':'';
+  var off=(!dLoose&&p.mrp&&p.mrp>p.price)?'<span class="doff">'+Math.round((1-p.price/p.mrp)*100)+'% OFF</span>':'';
+  var dUnit=dLoose?' <span class="dmrp" style="text-decoration:none;color:#666;font-size:14px">/ pc</span>':'';
+  var dPrice=dLoose?ugx(loosePrice(p)):ugx(p.price);
   /* v4.28 \u2014 the pack line now states what one piece IS, when we know it:
      "Box \u00b7 24 \u00d7 500ml" instead of the ambiguous "Box \u00b7 24 pcs". Falls back to
      the old wording exactly when unit_size is empty. */
@@ -4898,7 +4924,7 @@ function renderDetail(d){
   if(p.origin)infoRows.push(specRow('Country of origin',p.origin));
   if(p.sku)infoRows.push(specRow('Item code',p.sku));
   var infoHtml=infoRows.length?'<div class="dsec"><div class="dsech">Product information</div>'+infoRows.join('')+'</div>':'';
-  var moq=(p.moq&&p.moq>1)?'<div class="dmoq">Min order: '+p.moq+'</div>':'';
+  var moq=(!dLoose&&p.moq&&p.moq>1)?'<div class="dmoq">Min order: '+p.moq+'</div>':'';
   var desc=p.description?'<div class="dsec"><div class="dsech">Product details</div><div class="dtext">'+esc(p.description).replace(/\n/g,'<br>')+'</div></div>':'';
   var why=(d.why_shop&&d.why_shop.length)?'<div class="dsec"><div class="dsech">Why shop here?</div>'+d.why_shop.map(function(w){return '<div class="dwrow"><div class="dwico">'+whyIcon(w.title)+'</div><div class="dwtx"><b>'+esc(w.title)+'</b><span>'+esc(w.text||'')+'</span></div></div>';}).join('')+'</div>':'';
   // Solar / equipment: specifications, warranty and kit contents (all degrade to nothing when absent).
@@ -4911,17 +4937,17 @@ function renderDetail(d){
     +detailHeader()
     +'<div class="dtop"><div class="dgal">'+main+thumbs+'</div>'
       +'<div class="dinfo"><div class="dcat">'+esc(p.category||'')+'</div>'+brandChip+'<div class="dname">'+esc(p.name)+'</div>'
-      +pack+moq+'<div class="dprice">'+ugx(p.price)+' '+mrp+' '+off+'</div></div></div>'
+      +pack+moq+'<div class="dprice">'+dPrice+dUnit+' '+mrp+' '+off+'</div></div></div>'
     +desc+infoHtml+specsHtml+warrHtml+kitHtml+why
     +recoRail('Similar products', d.similar)
     +recoRail('Top in '+(p.category||'this category'), d.top_in_category)
     +recoRail('People also bought', d.also_bought)
     +'</div>'
-    +'<div class="dbuybar"><div class="dbprice"><div class="dbp">'+ugx(p.price)+'</div>'+(bits.length?('<div class="dbsub">'+bits.join(' · ')+'</div>'):'')+'</div><div id="dstepwrap" class="dstepwrap">'+detailStepper(p)+'</div></div>';
+    +'<div class="dbuybar"><div class="dbprice"><div class="dbp">'+dPrice+(dLoose?' <span style="font-size:13px;color:#666">/ pc</span>':'')+'</div>'+(dLoose?'<div class="dbsub">Per piece · carton of '+packOf(p)+'</div>':(bits.length?('<div class="dbsub">'+bits.join(' · ')+'</div>'):''))+'</div><div id="dstepwrap" class="dstepwrap">'+detailStepper(p)+'</div></div>';
   $('detail').scrollTop=0;
 }
 
-function inc(key){var p=prod(key);if(!p||oosOf(p))return;flyToCart();if(!CART[key]){CART[key]={name:p.name,price:p.price,qty:minq(p)};track('add',p.id);}else{CART[key].qty++;}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
+function inc(key){var p=prod(key);if(!p||oosOf(p))return;flyToCart();if(!CART[key]){CART[key]=freshLine(p);track('add',p.id);}else{CART[key].qty++;}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
 function dec(key){if(!CART[key])return;var p=prod(key);CART[key].qty--;if(CART[key].qty<minq(p)){delete CART[key];}saveCart();render();bar();if($('sheet').classList.contains('show'))openCart();}
 function cartItems(){return Object.keys(CART).map(function(k){return CART[k];});}
 function cartCount(){return cartItems().reduce(function(s,i){return s+i.qty;},0);}
@@ -5078,7 +5104,7 @@ async function placeOrder(){
   if(!IS_PICKUP && !addr && !GEO){toast('Add your delivery address or share your location','err');return;}
   var onCredit=/credit/i.test(pay);
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal(),channel:'web'};
+  var payload={name:name,phone:phone,location:addr,payment:pay,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),when:when,on_credit:onCredit?1:0,marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[],loose:i.loose?1:0};}),total:cartTotal(),channel:'web'};
   if(GEO){payload.geo=GEO.lat+','+GEO.lng;payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');btn.disabled=true;btn.textContent='Placing…';
   try{
@@ -5110,7 +5136,7 @@ async function requestQuotation(){
   if(!name){toast('Please enter your name','err');return;}
   if(phone.length<7){toast('Please enter your WhatsApp number','err');return;}
   var dNote=deliveryNote(); var noteOut=note?(note+' | '+dNote):dNote;
-  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[]};}),total:cartTotal()};
+  var payload={name:name,phone:phone,location:addr,note:noteOut,delivery_note:dNote,delivery_free:freeQualified(cartTotal())?1:0,delivery_city:currentCity(),marketing_opt_in:(($('coOptIn')||{}).checked?1:0),website:(($('coHP')||{}).value||''),items:cartItems().map(function(i){return {name:i.name,price:i.price,qty:i.qty,modifiers:i.modifiers||[],loose:i.loose?1:0};}),total:cartTotal()};
   if(GEO){payload.maps_url=mapsUrl(GEO);}
   var btn=$('placeBtn');if(btn){btn.disabled=true;btn.textContent='Preparing your quotation…';}
   try{
