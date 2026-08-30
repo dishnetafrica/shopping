@@ -2611,6 +2611,35 @@ function formModal(a){
       (a.autoNote.watch||[]).forEach(k=>{ const el=document.getElementById('f_'+k); if(el){ ['change','input'].forEach(ev=>el.addEventListener(ev,()=>{ if(!touched) nf.value=render(); })); } });
     }
   }
+  // "Improve description with AI": when a form has a product photo GALLERY and a description
+  // textarea (i.e. the product editor), offer a one-tap AI draft written from the first photo.
+  // Reuses /papi/ai-describe; the draft lands in the field for the seller to review before Save,
+  // and name/brand/category are sent as grounding when those fields exist. Gallery-only (not the
+  // mediapick used by campaigns) so it never appears on a non-product form.
+  (function(){
+    try{
+      let imgKey=null, descKey=null;
+      Object.entries(a.schema||{}).forEach(([k,t])=>{ if(t==='gallery'&&!imgKey)imgKey=k; if(t==='textarea'&&!descKey)descKey=k; });
+      if(!imgKey||!descKey) return;
+      const ta=document.getElementById('f_'+descKey); if(!ta) return;
+      const btn=document.createElement('button');
+      btn.type='button'; btn.className='btn sm'; btn.style.marginTop='6px'; btn.textContent='✨ Improve description with AI';
+      btn.onclick=async()=>{
+        const g=window.GAL&&window.GAL[imgKey]; const img=(g&&g.length)?g[0]:'';
+        if(!img){ toast('Add a product photo first',true); return; }
+        const fv=k=>{ const el=document.getElementById('f_'+k); return el?(el.value||'').trim():''; };
+        const t0=btn.textContent; btn.disabled=true; btn.textContent='Writing…';
+        try{
+          const r=await post('/papi/ai-describe',{ image:img, name:fv('name'), brand:fv('brand'), category:fv('category'), pack:fv('pack_size') });
+          if(r&&r.ok&&r.description){ ta.value=r.description; toast('✨ AI draft — review, then Save'); }
+          else if(r&&r.error==='ai_unavailable'){ toast('AI is not set up on the server yet',true); }
+          else{ toast('Could not generate a description',true); }
+        }catch(e){ toast('Could not generate a description',true); }
+        btn.disabled=false; btn.textContent=t0;
+      };
+      ta.parentNode.appendChild(btn);
+    }catch(e){}
+  })();
   // Live preview: show a computed result (e.g. amount × rate) that updates as the user types.
   if(a.preview && a.preview.left && a.preview.right){
     const pv=document.createElement('div'); pv.className='fpreview'; pv.id='fpv';
