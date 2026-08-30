@@ -4749,9 +4749,17 @@ function waShare(url,t){ try{ window.open('https://wa.me/?text='+encodeURICompon
 function shareCurrentView(){
   var catName='';
   if(CAT && CAT!=='all') catName=CAT;
-  else if(typeof COLLVIEW!=='undefined' && COLLVIEW) catName=(COLLVIEW.cat||COLLVIEW.label||'');
+  else if(typeof COLLVIEW!=='undefined' && COLLVIEW) catName=(COLLVIEW.cat||'');  // .cat is a real product category; .label is display text, never a ?cat value
   catName=String(catName||'').trim();
-  if(catName && catName.toLowerCase()!=='all' && catName.toLowerCase()!=='other'){
+  // A ?cat= link is reproduced on open by applyQuickOrder()->setCat()+render(), which filter the
+  // grid by EXACT product.category equality. So it only reproduces the view when some product
+  // actually carries this category. Keyword-only collections and business (BIZVIEW) views have no
+  // such category and no ?param to restore them, so they degrade to the shop link rather than a
+  // link that opens an empty filter.
+  var prods=(typeof PRODUCTS!=='undefined'&&PRODUCTS)?PRODUCTS:[];
+  var reproducible = catName && catName.toLowerCase()!=='other'
+    && prods.some(function(p){return p && String(p.category)===catName;});
+  if(reproducible){
     doShare(absShare((SHOP_BASE||'')+'/shop?cat='+encodeURIComponent(catName)),(SHOP.name?SHOP.name+' — ':'')+catName);
   } else {
     doShare(absShare((SHOP_BASE||'')+'/shop'),(SHOP.name||'Shop'));
