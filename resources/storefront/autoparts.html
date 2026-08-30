@@ -1289,6 +1289,33 @@ var QUOTE_DONE=null;
 function quoteUrl(){ return CFG.quoteUrl || (CFG.catalogueUrl? CFG.catalogueUrl.replace(/\/catalogue(\?.*)?$/,'/quote') : '/quote'); }
 function custGet(){ try{return JSON.parse(localStorage.getItem('ea_cust')||'{}')||{};}catch(e){return {};} }
 function custSave(o){ try{localStorage.setItem('ea_cust',JSON.stringify(o));}catch(e){} }
+/* WhatsApp country-code picker (ported from the shop storefront). The customer picks their country
+   and types local digits; ccCompose builds the full international number, and already-international
+   input (a +/00 prefix, or a long 3-digit corridor code) is left as typed — never double-prefixed. */
+var WH_CC=[
+ ['SS','🇸🇸','211','South Sudan'],['UG','🇺🇬','256','Uganda'],['KE','🇰🇪','254','Kenya'],
+ ['TZ','🇹🇿','255','Tanzania'],['RW','🇷🇼','250','Rwanda'],['CD','🇨🇩','243','DR Congo'],
+ ['SD','🇸🇩','249','Sudan'],['ET','🇪🇹','251','Ethiopia'],['ER','🇪🇷','291','Eritrea'],
+ ['BI','🇧🇮','257','Burundi'],['SO','🇸🇴','252','Somalia'],['DJ','🇩🇯','253','Djibouti'],
+ ['EG','🇪🇬','20','Egypt'],['AE','🇦🇪','971','UAE'],['SA','🇸🇦','966','Saudi Arabia'],
+ ['IN','🇮🇳','91','India'],['PK','🇵🇰','92','Pakistan'],['CN','🇨🇳','86','China'],
+ ['GB','🇬🇧','44','UK'],['US','🇺🇸','1','USA']
+];
+function ccDefault(){
+  try{ var s=localStorage.getItem('ea_cc'); if(s){ for(var i=0;i<WH_CC.length;i++){ if(WH_CC[i][2]===s) return s; } } }catch(e){}
+  var wa=String((CFG&&CFG.waNumber)||''), best='';
+  for(var j=0;j<WH_CC.length;j++){ var c=WH_CC[j][2]; if(wa.indexOf(c)===0 && c.length>best.length) best=c; }
+  return best||'211';
+}
+function ccOptionsHtml(){ var def=ccDefault(); return WH_CC.map(function(c){ return '<option value="'+c[2]+'"'+(c[2]===def?' selected':'')+'>'+c[1]+' +'+c[2]+'</option>'; }).join(''); }
+function ccCompose(cc,raw){
+  var s=String(raw||''); var intl=/^\s*(\+|00)/.test(s); var d=s.replace(/\D+/g,'');
+  if(intl){ return d.replace(/^0{2}/,''); }
+  d=d.replace(/^0+/,''); if(!d) return '';
+  for(var i=0;i<WH_CC.length;i++){ var c=WH_CC[i][2];
+    if(c.length===3 && d.indexOf(c)===0 && d.length>=c.length+7 && d.length<=15) return d; }
+  return String(cc||'')+d;
+}
 /* The server reprices from the product name + loose flag, so send the REAL name (strip the
    '(per piece)' label) and let the server decide the price — the client price never rules. */
 function quoteItems(){ return cartGet().map(function(i){
@@ -1296,11 +1323,14 @@ function quoteItems(){ return cartGet().map(function(i){
   return {name:nm, qty:i.qty, loose:i.loose?1:0}; }); }
 function reqQuote(){
   var nm=((document.getElementById('qName')||{}).value||'').trim();
-  var ph=((document.getElementById('qPhone')||{}).value||'').replace(/[^0-9]/g,'');
+  var raw=((document.getElementById('qPhone')||{}).value||'');
+  var sel=document.getElementById('qCc');
+  if(sel){ try{localStorage.setItem('ea_cc',sel.value);}catch(e){} }
+  var ph = sel ? ccCompose(sel.value, raw) : raw.replace(/[^0-9]/g,'');
   if(!nm){ toast('Please enter your name'); return; }
   if(ph.length<7){ toast('Please enter your WhatsApp number'); return; }
   if(!cartGet().length){ toast('Your cart is empty'); return; }
-  custSave({name:nm,phone:ph});
+  custSave({name:nm,phone:raw.replace(/[^0-9]/g,'')});   // keep the LOCAL digits for prefill; cc is stored separately
   var btn=document.getElementById('qBtn'); if(btn){ btn.disabled=true; btn.textContent='Preparing your quotation…'; }
   var b=getBike();
   var body={ name:nm, phone:ph, items:quoteItems(), note:(b?('Motorcycle: '+b.name):''), website:'' };
@@ -1927,7 +1957,10 @@ function vCart(){
      +'<div style="font-weight:800;margin-bottom:2px">Prefer a written quotation?</div>'
      +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:9px">Get a PDF quotation with your prices — sent to your WhatsApp, ready to review or approve. Our team sees the same one, so nothing is re-typed.</div>'
      +'<input id="qName" placeholder="Your name" value="'+esc(custGet().name||'')+'" style="width:100%;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:9px 11px;margin-bottom:7px;font-size:14px">'
-     +'<input id="qPhone" type="tel" inputmode="numeric" placeholder="WhatsApp number" value="'+esc(custGet().phone||'')+'" style="width:100%;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:9px 11px;margin-bottom:9px;font-size:14px">'
+     +'<div style="display:flex;gap:7px;margin-bottom:9px">'
+       +'<select id="qCc" aria-label="Country code" style="border:1px solid #cfd8ea;border-radius:9px;padding:9px 8px;font-size:14px;background:#fff;max-width:132px">'+ccOptionsHtml()+'</select>'
+       +'<input id="qPhone" type="tel" inputmode="numeric" placeholder="WhatsApp number" value="'+esc(custGet().phone||'')+'" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:9px 11px;font-size:14px">'
+     +'</div>'
      +'<button id="qBtn" class="btn btn-p" style="width:100%" onclick="reqQuote()"><i class="fa fa-file-text-o"></i> Get a PDF quotation</button>'
    +'</div>'
    +'<div class="cfine">You’ll confirm stock, delivery and payment with our team on WhatsApp. No payment is taken online.</div>'
