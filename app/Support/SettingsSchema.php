@@ -295,6 +295,14 @@ final class SettingsSchema
                     ['key' => 'wholesale_pct',         'type' => 'number', 'label' => 'Wholesale tier discount', 'unit' => '%', 'default' => 15],
                     ['key' => 'dealer_min_margin_pct', 'type' => 'number', 'label' => 'Margin floor over cost', 'unit' => '%', 'default' => 5, 'help' => 'Prices clamp here instead of selling at a loss.'],
                 ]],
+                // Per-piece / loose selling — one carton item can be bought either by the carton
+                // (wholesale) or by the single piece (retail = carton unit price + markup). The pricer
+                // (storefront repriceCart + the WhatsApp bot's OrderCalculator) derives the piece price;
+                // these two settings only switch it on and set the markup.
+                ['label' => 'Per-piece (loose) selling', 'only' => ['grocery', 'manufacturer', 'auto_parts', 'solar'], 'help' => 'Let customers order a carton item by the single piece, priced at the carton unit price plus a retail markup. The carton price stays for bulk buyers. Works on the storefront and the WhatsApp bot.', 'fields' => [
+                    ['key' => 'loose_enabled',    'type' => 'bool',   'label' => 'Allow ordering by the piece', 'default' => false],
+                    ['key' => 'loose_markup_pct', 'type' => 'number', 'label' => 'Per-piece markup over carton price', 'unit' => '%', 'default' => 20, 'help' => 'e.g. 20 means a single piece costs 20% more than its share of the carton. A carton of 400 at $312.43 works out to about $0.94 per piece at 20%.'],
+                ]],
                 ['label' => 'Availability', 'only' => ['auto_parts'], 'help' => 'For a parts business — sell only what you actually have.', 'fields' => [
                     ['key' => 'sf_hide_oos', 'type' => 'bool', 'label' => 'Show only parts in stock (hide out-of-stock)', 'default' => false, 'help' => 'When ON, any part with 0 stock is hidden from listings, search and browse. Parts with no stock number set (untracked) still show as “to order”.'],
                     // v4.10.5 — parts-first suppliers (boraboda) have no exploded-diagram plates; hide the whole surface by default.

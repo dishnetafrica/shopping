@@ -113,6 +113,7 @@ final class SettingsWriteService
         'dealer_pct' => ['float', 0.0],
         'wholesale_pct' => ['float', 0.0],
         'dealer_min_margin_pct' => ['float', 0.0],
+        'loose_markup_pct' => ['float', 0.0],   // per-piece (loose) selling markup over the carton unit price
         // v4.22 TenderBot — margin added to a supplier cost to reach the bid price.
         'tender_margin_pct' => ['float', 0.0],
         'research_daily_cap' => ['int', 0],                  // v4.29 — per-shop ceiling on AI research calls
@@ -127,6 +128,7 @@ final class SettingsWriteService
     private const BOOL_KEYS = [
         'stock_ledger',  // write the real stock ledger (record receipts & sales)
         'stock_v2',      // read on-hand from the ledger on site/bot (needs the ledger seeded first)
+        'loose_enabled', // allow ordering carton items by the single piece (storefront + bot)
         'digest_enabled',   // send the daily digest
         'pay_on_delivery',  // offer pay-on-delivery
         'pay_unify',        // unify payment handling
