@@ -621,7 +621,7 @@ button,input,select,textarea{font-family:inherit}
   <a data-r="" onclick="go('')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span><em>Home</em></a>
   <a data-r="parts" onclick="go('parts')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span><em>Categories</em></a>
   <a data-r="search" onclick="openSearch()"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span><em>Search</em></a>
-  <a data-r="cart" onclick="go('cart')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><i class="cartn"></i></span><em>Cart</em></a>
+  <a data-r="cart" onclick="go('cart')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><i class="cartn"></i></span><em>Quote</em></a>
   <a data-r="ai" onclick="go('ai')"><span><svg class="li" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><em>Assistant</em></a>
 </nav>
 <div class="ssheet" id="ssheet"><div class="sswrap"><div class="ssbox"><input id="ssin" type="search" placeholder="Search OEM number, part name, SKU…" autocomplete="off" oninput="sugInput('ssin','sugbox3')"><button onclick="doSheetSearch()">Go</button><span class="ssx" onclick="closeSearch()">✕</span></div><div id="sugbox3" class="sugbox sug3" role="listbox" style="display:none"></div></div></div>
@@ -1237,7 +1237,7 @@ function cartAdd(id,loose){ var p=STATE.products.filter(function(x){return Strin
   if(e)e.qty++; else c.push(loose
     ? {id:key, name:p.name+' (per piece)', pn:pnOf(p), price:loosePc(p), qty:1, loose:1}
     : {id:String(p.id), name:p.name, pn:pnOf(p), price:(function(){var dp=dlrPrice(p);return dp!=null?dp:(p.price||0);})(), qty:1});
-  cartSave(c); track('add',{product_id:p.id}); toast('“'+p.name+'”'+(loose?' (per piece)':'')+' added to cart'); }
+  cartSave(c); track('add',{product_id:p.id}); toast('“'+p.name+'”'+(loose?' (per piece)':'')+' added to your quote'); }
 function cartSet(id,d){ var c=cartGet(); for(var i=0;i<c.length;i++){ if(String(c[i].id)===String(id)){ c[i].qty=Math.max(0,c[i].qty+d); if(!c[i].qty)c.splice(i,1); break; } } cartSave(c); render(); }
 function updateCartBadge(){ var n=(function(){try{return cartCount();}catch(e){return 0;}})(); Array.prototype.forEach.call(document.querySelectorAll('.cartn'),function(el){ el.textContent=n; el.style.display=n?'inline-flex':'none'; }); }
 function toast(msg){ var t=document.getElementById('toast'); if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');t.setAttribute('aria-live','polite');document.body.appendChild(t);} t.textContent=msg; t.classList.add('on'); clearTimeout(window._tt); window._tt=setTimeout(function(){t.classList.remove('on');},1900); }
@@ -1418,7 +1418,7 @@ function nav(o){
    +'<span class="lnk" onclick="go(\'ai\')">AI Assistant</span>'
    +'<a class="icobtn mybtn" role="button" aria-label="My motorcycle" onclick="openBikePicker()">'+li('bike',17)+'</a>'
    +'<a class="icobtn" href="'+esc(waLink())+'" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" onclick="track(\'whatsapp\',{source:\'nav\'})">'+li('message-circle',17)+'</a>'
-   +'<a class="cart" onclick="go(\'cart\')" aria-label="Cart">'+li('shopping-cart',17)+'<span class="cartn"></span></a>'
+   +'<a class="cart" onclick="go(\'cart\')" aria-label="Quotation">'+li('shopping-cart',17)+'<span class="cartn"></span></a>'
    +'</div><div id="sugbox2" class="sugbox sugbox2" role="listbox" style="display:none"></div></header>'
    +'<input type="file" id="pidf" accept="image/*" capture="environment" style="display:none" onchange="partIdGo(this)">'
    +(o.home?'':bikeBar())+dlrBar();
@@ -1585,7 +1585,7 @@ function prodCard(p){
     +'<div class="bd">'+(pn?'<span class="oemchip">OEM '+esc(pn)+'</span>':'')+'<h4><a href="'+esc(urlFor('part/'+sid(p.id)))+'" onclick="return goL(event,\'part/'+sid(p.id)+'\')">'+esc(p.name)+'</a></h4>'+fitBadge(p)
     +'<div class="fitsline">'+esc(cardFits(p))+(p.sku?' · <span class="mono">'+esc(p.sku)+'</span>':'')+'</div>'
     +'<div class="ft"><b>'+(function(){ var dp=dlrPrice(p); if(dp!=null) return '<span class="dstrike">'+money(p.price)+'</span><span class="dyour">'+money(dp)+'</span>'; return priced?money(p.price):'<span class="askp">Ask price</span>'; })()+'</b><span class="stock '+(inS?'y':'n')+'">'+stockTxt+'</span></div>'
-    +'<div class="cbtns"><button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-plus"></i> Add to cart</button><a class="wabuy" href="'+esc(waBuy(p))+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" aria-label="Buy on WhatsApp"><i class="fa fa-whatsapp"></i></a></div></div></div>';
+    +'<div class="cbtns"><button class="btn btn-p btn-sm add" onclick="event.stopPropagation();cartAdd(\''+sid(p.id)+'\')"><i class="fa fa-plus"></i> Add to quote</button><a class="wabuy" href="'+esc(waBuy(p))+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" aria-label="Buy on WhatsApp"><i class="fa fa-whatsapp"></i></a></div></div></div>';
 }
 function vParts(){
   var sys=systemsLive();
@@ -1651,7 +1651,7 @@ function vPart(id){
    +(function(){ var alts=altBrand(p); if(!alts.length) return '';
       var a=alts[0];
       return '<div class="altrow" onclick="go(\'part/'+sid(a.id)+'\')">Also available for <span class="altb">'+esc(a.brand||'the other brand')+'</span>: <b>'+esc(a.name)+'</b>'+(a.price>0?' — '+money(a.price):'')+' ›</div>'; })()
-   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\','+(looseSel(p)?'1':'0')+')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w" href="'+esc(waOrder(p,looseSel(p)))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">Order now</a>'+diagBtn+'</div>'
+   +'<div class="buyrow"><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\','+(looseSel(p)?'1':'0')+')"><i class="fa fa-shopping-cart"></i> Add to quote</button><a class="btn btn-w" href="'+esc(waOrder(p,looseSel(p)))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">Order now</a>'+diagBtn+'</div>'
    +'<div class="qa-grid">'
      +'<div class="qa-b"><h4><i class="fa fa-check-circle"></i> Genuine guarantee</h4><p>'+esc(CFG.genuineLine||'100% genuine — or your money back.')+'</p></div>'
      +'<div class="qa-b"><h4><i class="fa fa-truck"></i> Delivery &amp; payment</h4><p>'+esc(CFG.deliveryEta||'Fast delivery')+'<br><b>'+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'</b></p></div>'
@@ -1662,7 +1662,7 @@ function vPart(id){
    +(function(){ var gw=goesWith(p,4).map(prodCard).join(''); return gw?'<div class="blk"><div class="hd"><div><h2>Frequently bought together</h2><div class="sub">Mechanics usually replace these together.</div></div></div><div class="g4">'+gw+'</div></div>':''; })()
    +(also?'<div class="blk"><div class="hd"><div><h2>More in this system</h2></div></div><div class="g4">'+also+'</div></div>':'')
    +'</section>'
-   +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);if(!priced)return 'Ask price';return looseSel(p)?(money(loosePc(p))+'/pc'):money(p.price);})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\','+(looseSel(p)?'1':'0')+')"><i class="fa fa-shopping-cart"></i> Add to cart</button><a class="btn btn-w bbwa" href="'+esc(waOrder(p,looseSel(p)))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">'+li('message-circle',15)+' WhatsApp</a></div>'
+   +'<div class="buybar"><div class="bb-l"><b>'+(function(){var dp=dlrPrice(p);if(dp!=null)return money(dp);if(!priced)return 'Ask price';return looseSel(p)?(money(loosePc(p))+'/pc'):money(p.price);})()+'</b><span>'+esc(p.name)+'</span></div><button class="btn btn-p" onclick="cartAdd(\''+sid(p.id)+'\','+(looseSel(p)?'1':'0')+')"><i class="fa fa-shopping-cart"></i> Add to quote</button><a class="btn btn-w bbwa" href="'+esc(waOrder(p,looseSel(p)))+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:[\''+sid(p.id)+'\']})">'+li('message-circle',15)+' WhatsApp</a></div>'
    +foot();
 }
 function galleryFor(id){ var og=(CFG.modelGalleries||{})[id]; if(og&&og.length) return og.slice(0,8); var g=((GAL&&GAL[id])||[]).slice(); var ov=(CFG.modelImages||{})[id]; if(ov){ if(!g.length) g=[ov]; else if(g.indexOf(ov)<0) g.unshift(ov); } if(!g.length){ var mi=modelImg(id); if(mi)g=[mi]; } return g; }
@@ -1758,7 +1758,7 @@ function resultRow(p){
      +(pn?'<span class="loem">OEM <span class="mono">'+esc(pn)+'</span></span>':'')
      +'<span class="lfits">'+esc(cardFits(p))+'</span>'
      +'<span class="lpr">'+priceH+'<span class="stock '+(inS?'y':'n')+'">'+(p.stock>0?(p.stock+' in stock'):(p.stock===null?'In stock':'To order'))+'</span></span></div>'
-   +'<button class="ladd" aria-label="Add to cart" onclick="event.preventDefault();event.stopPropagation();cartAdd(\''+sid(p.id)+'\')">'+li('shopping-cart',16)+'</button></a>';
+   +'<button class="ladd" aria-label="Add to quote" onclick="event.preventDefault();event.stopPropagation();cartAdd(\''+sid(p.id)+'\')">'+li('shopping-cart',16)+'</button></a>';
 }
 function diagRow(pl){
   var img=plateImg(pl);
@@ -1857,7 +1857,7 @@ function vDiagram(plateNo){
     var open=pr?('onclick="go(\'part/'+sid(pr.id)+'\')"'):'';
     var thumb=img?'<img src="'+esc(img)+'" alt="" loading="lazy">':'<span class="pno-b">'+esc(x.no)+'</span>';
     var priceHtml=pr?('<b>'+money(pr.price)+'</b>'+(inS!=null?'<span class="stock '+(inS?'y':'n')+'">'+(inS?'In stock':'On order')+'</span>':'')):'<span class="tbd">Ask us</span>';
-    var add=pr?('<button class="miniadd" onclick="event.stopPropagation();cartAdd(\''+String(pr.id).replace(/\x27/g,"")+'\')" title="Add to cart"><i class="fa fa-plus"></i> Add</button>'):'';
+    var add=pr?('<button class="miniadd" onclick="event.stopPropagation();cartAdd(\''+String(pr.id).replace(/\x27/g,"")+'\')" title="Add to quote"><i class="fa fa-plus"></i> Add</button>'):'';
     return '<div class="prow" '+open+(pr?' role="button"':'')+'>'
       +'<span class="prn">'+esc(x.no)+'</span>'
       +'<span class="pthumb">'+thumb+'</span>'
@@ -1940,29 +1940,29 @@ function dx(id, userText){
 function vCart(){
   if(QUOTE_DONE){ var qd=QUOTE_DONE; QUOTE_DONE=null; return nav()+quoteDonePanel(qd)+foot(); }
   var c=cartGet();
-  if(!c.length) return nav()+'<section class="page wrap"><div class="emptycart"><div class="ec"><i class="fa fa-shopping-cart"></i></div><h2>Your cart is empty</h2><p>Add the parts you need, then send the whole order on WhatsApp in one message.</p><a class="btn btn-p" onclick="go(\'\')">Find parts for my bike</a></div></section>'+foot();
+  if(!c.length) return nav()+'<section class="page wrap"><div class="emptycart"><div class="ec"><i class="fa fa-file-text-o"></i></div><h2>Your quotation is empty</h2><p>Add the parts you need, then get a PDF quotation on your WhatsApp — or order directly.</p><a class="btn btn-p" onclick="go(\'\')">Find parts for my bike</a></div></section>'+foot();
   var b=getBike();
   var rows=c.map(function(i){ var id=String(i.id).replace(/'/g,'');
     return '<div class="crow"><div class="ci"><b>'+esc(i.name)+'</b>'+(i.pn?'<span class="mono">'+esc(i.pn)+'</span>':'')+'<span class="cp">'+(i.price>0?money(i.price):'Ask price')+' each</span></div>'
      +'<div class="cq"><button onclick="cartSet(\''+id+'\',-1)">−</button><span>'+i.qty+'</span><button onclick="cartSet(\''+id+'\',1)">+</button></div>'
      +'<div class="clt">'+(i.price>0?money(i.price*i.qty):'—')+'</div></div>'; }).join('');
-  return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Cart</div>'
-   +'<section class="page wrap"><h2 style="margin:0 0 4px">Your order</h2>'
+  return nav()+'<div class="wrap crumb"><a onclick="go(\'\')">Home</a> › Quotation</div>'
+   +'<section class="page wrap"><h2 style="margin:0 0 4px">Your quotation</h2>'
    +(b?'<div class="mybike" style="max-width:520px"><i class="fa fa-tachometer"></i> For your <b>'+esc(b.name)+'</b> — parts checked to fit.</div>':'')
    +'<div class="cartwrap"><div class="citems">'+rows+'</div>'
    +'<div class="csum"><div class="csr"><span>Items</span><b>'+cartCount()+'</b></div><div class="csr total"><span>Total</span><b>'+money(cartTotal())+'</b></div>'
    +'<div class="cnote"><i class="fa fa-truck"></i> '+esc(CFG.deliveryEta||'Fast delivery')+'<br><i class="fa fa-credit-card"></i> '+esc(CFG.payMethods||'Mobile Money · Pay on Delivery')+'<br><i class="fa fa-check-circle"></i> '+esc(CFG.genuineLine||'100% genuine or money back')+'</div>'
-   +'<a class="btn btn-w big" href="'+esc(waCartOrder())+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:cartGet().map(function(i){return i.id;})})"><i class="fa fa-whatsapp"></i> Place order on WhatsApp</a>'
-   +'<div style="margin-top:14px;padding:12px;border:1px solid #dbe4f7;border-radius:12px;background:#f7f9ff">'
-     +'<div style="font-weight:800;margin-bottom:2px">Prefer a written quotation?</div>'
-     +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:9px">Get a PDF quotation with your prices — sent to your WhatsApp, ready to review or approve. Our team sees the same one, so nothing is re-typed.</div>'
-     +'<input id="qName" placeholder="Your name" value="'+esc(custGet().name||'')+'" style="width:100%;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:9px 11px;margin-bottom:7px;font-size:14px">'
-     +'<div style="display:flex;gap:7px;margin-bottom:9px">'
-       +'<select id="qCc" aria-label="Country code" style="border:1px solid #cfd8ea;border-radius:9px;padding:9px 8px;font-size:14px;background:#fff;max-width:132px">'+ccOptionsHtml()+'</select>'
-       +'<input id="qPhone" type="tel" inputmode="numeric" placeholder="WhatsApp number" value="'+esc(custGet().phone||'')+'" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:9px 11px;font-size:14px">'
+   +'<div style="margin-top:6px;padding:14px;border:1.5px solid var(--accent,#0C2C6B);border-radius:12px;background:#f7f9ff">'
+     +'<div style="font-weight:800;font-size:15px;margin-bottom:2px">Get your quotation</div>'
+     +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">A professional PDF quotation with your prices — sent to your WhatsApp, ready to review, share or approve. Our team works from the same one, so nothing is re-typed.</div>'
+     +'<input id="qName" placeholder="Your name" value="'+esc(custGet().name||'')+'" style="width:100%;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:10px 11px;margin-bottom:7px;font-size:14px">'
+     +'<div style="display:flex;gap:7px;margin-bottom:10px">'
+       +'<select id="qCc" aria-label="Country code" style="border:1px solid #cfd8ea;border-radius:9px;padding:10px 8px;font-size:14px;background:#fff;max-width:132px">'+ccOptionsHtml()+'</select>'
+       +'<input id="qPhone" type="tel" inputmode="numeric" placeholder="WhatsApp number" value="'+esc(custGet().phone||'')+'" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid #cfd8ea;border-radius:9px;padding:10px 11px;font-size:14px">'
      +'</div>'
-     +'<button id="qBtn" class="btn btn-p" style="width:100%" onclick="reqQuote()"><i class="fa fa-file-text-o"></i> Get a PDF quotation</button>'
+     +'<button id="qBtn" class="btn btn-p big" style="width:100%" onclick="reqQuote()"><i class="fa fa-file-text-o"></i> Get my quotation (PDF)</button>'
    +'</div>'
+   +'<div style="text-align:center;margin-top:12px"><a class="link" href="'+esc(waCartOrder())+'" target="_blank" rel="noopener" onclick="track(\'checkout\',{product_ids:cartGet().map(function(i){return i.id;})})"><i class="fa fa-whatsapp"></i> or place the order directly on WhatsApp ›</a></div>'
    +'<div class="cfine">You’ll confirm stock, delivery and payment with our team on WhatsApp. No payment is taken online.</div>'
    +'<a class="link" onclick="go(\'\')" style="display:block;text-align:center;margin-top:10px"><i class="fa fa-plus"></i> Add more parts</a></div></div></section>'+foot();
 }
