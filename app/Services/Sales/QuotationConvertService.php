@@ -42,7 +42,18 @@ final class QuotationConvertService
                 continue;
             }
             $unit = $convert ? round(((float) $it->unit_price) * $rate) : (float) $it->unit_price;
-            $items[] = ['name' => (string) $it->name, 'qty' => (int) $it->qty, 'price' => $unit];
+            // A loose line is labelled "<product> (per piece)" on the quote. Strip that suffix for the
+            // ORDER line so the product resolves by name (COGS needs the product_id) and stamp the
+            // piece unit so OrderLedgerService costs it per piece, not per carton. The quote PDF and
+            // the text summary keep the customer-facing "(per piece)" label.
+            $nm = (string) $it->name; $loosePiece = false;
+            if (preg_match('/\s*\(per piece\)\s*$/i', $nm)) {
+                $loosePiece = true;
+                $nm = trim((string) preg_replace('/\s*\(per piece\)\s*$/i', '', $nm));
+            }
+            $line = ['name' => $nm, 'qty' => (int) $it->qty, 'price' => $unit];
+            if ($loosePiece) { $line['unit'] = 'piece'; }
+            $items[] = $line;
             $textParts[] = ((int) $it->qty) . 'x ' . $it->name;
         }
         if (! $items) {
