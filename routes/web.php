@@ -884,8 +884,8 @@ Route::middleware('web')->group(function () use ($qToken) {
     // this file with no throttle. 3 per hour per IP: enough for a customer forwarding their own
     // quotation, useless as a relay.
     Route::post('/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('token', $qToken)->middleware('throttle:3,60');
-    Route::post('/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('token', $qToken);
-    Route::post('/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('token', $qToken);
+    Route::post('/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('token', $qToken)->middleware('throttle:10,1');
+    Route::post('/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('token', $qToken)->middleware('throttle:10,1');   // revise sends WhatsApp per call — throttle
     Route::post('/event',          [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent']);
     Route::post('/clienterror',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'clientError']);
     Route::post('/auth/request',   [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request']);
@@ -930,8 +930,8 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/q/{token}/data',    [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'data'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::get('/{shop}/q/{token}/pdf',     [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'pdf'])->where('shop', $shopSlug)->where('token', $qToken);
     Route::post('/{shop}/q/{token}/share',  [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'share'])->where('shop', $shopSlug)->where('token', $qToken)->middleware('throttle:3,60');   // v5.05 audit P0-4
-    Route::post('/{shop}/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('shop', $shopSlug)->where('token', $qToken);
-    Route::post('/{shop}/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('shop', $shopSlug)->where('token', $qToken);
+    Route::post('/{shop}/q/{token}/approve',[\App\Http\Controllers\Storefront\QuotationPortalController::class, 'approve'])->where('shop', $shopSlug)->where('token', $qToken)->middleware('throttle:10,1');
+    Route::post('/{shop}/q/{token}/revise', [\App\Http\Controllers\Storefront\QuotationPortalController::class, 'revise'])->where('shop', $shopSlug)->where('token', $qToken)->middleware('throttle:10,1');   // revise sends WhatsApp per call — throttle
     Route::post('/{shop}/event',    [\App\Http\Controllers\Storefront\StorefrontController::class, 'recordEvent'])->where('shop', $shopSlug);
     Route::post('/{shop}/clienterror', [\App\Http\Controllers\Storefront\StorefrontController::class, 'clientError'])->where('shop', $shopSlug);
     Route::post('/{shop}/auth/request', [\App\Http\Controllers\Storefront\CustomerAuthController::class, 'request'])->where('shop', $shopSlug);

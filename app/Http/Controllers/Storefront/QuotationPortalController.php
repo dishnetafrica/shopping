@@ -321,8 +321,14 @@ class QuotationPortalController extends Controller
                 return response()->json(['ok' => true, 'channel' => 'email']);
             }
 
-            // WhatsApp: send the summary text + the PDF document to the chosen number (default the customer).
-            $phone = preg_replace('/[^0-9]/', '', $to) ?: (string) $q->customer_phone;
+            // WhatsApp: always send to the quotation's OWN customer, never a caller-supplied number —
+            // otherwise a token holder could push PDFs to arbitrary third parties from the shop's
+            // WhatsApp identity. The customer can forward it themselves. (Email share still accepts a
+            // typed address, which is throttled and uses the shop's mail, not its WhatsApp reputation.)
+            $phone = (string) $q->customer_phone;
+            if ($phone === '') {
+                return response()->json(['ok' => false, 'error' => 'No customer number on this quotation.'], 422);
+            }
             $gw    = app(WhatsAppManager::class)->forTenant($tenant);
             $gw->sendText($tenant->whatsapp_instance, $phone, $summary);
             if (method_exists($gw, 'sendDocument')) {
@@ -348,6 +354,17 @@ class QuotationPortalController extends Controller
     public function approve(Request $r)
     {
         [$tenant, $base, $q] = $this->resolveRequest($r);
+
+        // Do not approve a quotation whose validity date has passed — that would mint a live sales
+        // order at stale prices (status can still read 'sent'/'accepted' because nothing expires a
+        // quote by date). The whole valid_until day is allowed; already-converted quotes are exempt.
+        if (! $q->isConverted() && $q->valid_until && $q->valid_until->lt(today())) {
+            return response()->json([
+                'ok'     => false,
+                'status' => 'expired',
+                'error'  => 'This quotation has expired. Please ask us for an up-to-date quotation.',
+            ], 409);
+        }
 
         if (! $q->isOpen() && $q->status !== 'accepted') {
             // Already converted/declined/expired — return the existing order if any.
