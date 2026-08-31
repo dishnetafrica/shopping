@@ -127,7 +127,9 @@ class QuotationPortalController extends Controller
 
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=utf-8')
-            ->header('Cache-Control', 'no-store');
+            ->header('Cache-Control', 'no-store')
+            // The 40-char token IS the credential and lives in the URL — never leak it via Referer.
+            ->header('Referrer-Policy', 'no-referrer');
     }
 
     /** The live quotation data the portal renders — a projection of the current record. */

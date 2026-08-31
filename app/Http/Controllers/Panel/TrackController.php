@@ -370,6 +370,8 @@ class TrackController extends Controller
             . '@media(max-width:480px){body{padding:10px}.card{padding:18px;margin:10px auto;border-radius:14px}h1{font-size:19px}.callbtn{padding:11px 14px}}'
             . '</style></head><body>' . $body . '</body></html>';
 
-        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8')
+            // The track token lives in the URL — don't leak it via Referer to any asset/CDN.
+            ->header('Referrer-Policy', 'no-referrer');
     }
 }

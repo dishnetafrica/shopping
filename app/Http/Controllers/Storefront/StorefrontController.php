@@ -838,6 +838,19 @@ class StorefrontController extends Controller
             }
         }
 
+        // Per-tenant daily budget on paid vision calls — the per-IP route throttle alone lets IP
+        // rotation amplify the OpenAI bill. Counts attempts (that reach the model) per tenant per day.
+        $visionCap = (int) $tenant->setting('partid_daily_cap', 300);
+        if ($visionCap > 0) {
+            $capKey = "sf_partid_day:{$tenant->id}:" . now()->format('Ymd');
+            $usedToday = (int) \Illuminate\Support\Facades\Cache::get($capKey, 0);
+            if ($usedToday >= $visionCap) {
+                return response()->json(['ok' => false, 'error' => 'busy',
+                    'message' => 'Photo identification is busy right now — please try again later, or send us the photo on WhatsApp.'], 429);
+            }
+            \Illuminate\Support\Facades\Cache::put($capKey, $usedToday + 1, 90000);   // ~25h TTL rolls the day
+        }
+
         $res = app(\App\Services\Vision\PartIdentifier::class)->identify($tenant, base64_encode($bytes), $mime);
         if (! ($res['ok'] ?? false)) return response()->json(['ok' => false, 'error' => (string) ($res['error'] ?? 'failed')]);
 
