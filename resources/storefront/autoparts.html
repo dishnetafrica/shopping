@@ -686,6 +686,10 @@ function priceBlock(p){
        +'<div style="font-size:12px;color:var(--muted);margin-bottom:6px">'+(loose?('Sold by the piece · full carton = '+packOf(p)+' pcs'):('Carton of '+packOf(p)+' pieces'))+'</div>';
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+// Safe to drop inside a single-quoted JS string that itself sits in a double-quoted HTML attribute
+// (e.g. onclick="fn('...')"). Backslash-escape for the JS string FIRST, then HTML-escape, so an
+// apostrophe survives the attribute's HTML-decode still escaped for the JS parser.
+function jesc(s){return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));}
 // Safe identifier: ids/plate keys are identifiers, never markup. Whitelist so a hostile
 // catalogue value can't break out of the single-quoted JS string inside an onclick handler.
 function sid(x){return String(x==null?'':x).replace(/[^\w-]/g,'');}
@@ -1084,7 +1088,7 @@ function sysGuess(p, sysNames){
 }
 function loadCatalogue(){
   if(!CFG.catalogueUrl){ STATE.error=true; render(); return; }
-  fetch(CFG.catalogueUrl,{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){
+  fetch(CFG.catalogueUrl,{headers:{'Accept':'application/json'}}).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); }).then(function(j){
     var all=normalize(j); STATE.allProducts=all; STATE.byCat={}; STATE.byPn={}; STATE.bySys={};
     // "Sell only what we have": hide parts with an explicit 0 stock (untracked/null still shows).
     STATE.products = CFG.hideOOS ? all.filter(function(p){ return !(p.stock!=null && p.stock<=0); }) : all;
@@ -1338,8 +1342,8 @@ function reqQuote(){
   fetch(quoteUrl(),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},credentials:'same-origin',body:JSON.stringify(body)})
    .then(function(r){return r.json();}).then(function(d){
      if(d&&d.ok){ try{track('checkout',{quote:d.quote_no});}catch(e){} QUOTE_DONE=d; cartSave([]); go('cart'); }
-     else { toast((d&&(d.message||d.error))||'Could not create the quotation.'); if(btn){ btn.disabled=false; btn.textContent='Get a PDF quotation'; } }
-   }).catch(function(){ toast('Network error — please try again.'); if(btn){ btn.disabled=false; btn.textContent='Get a PDF quotation'; } });
+     else { toast((d&&(d.message||d.error))||'Could not create the quotation.'); if(btn){ btn.disabled=false; btn.textContent='Get my quotation (PDF)'; } }
+   }).catch(function(){ toast('Network error — please try again.'); if(btn){ btn.disabled=false; btn.textContent='Get my quotation (PDF)'; } });
 }
 function quoteDonePanel(d){
   var cur=d.currency||''; var tot=(d.total!=null&&d.total!=='')?(String(cur)+' '+Number(d.total).toLocaleString('en-US')):'';
@@ -1531,7 +1535,7 @@ function vHome(){
   var hCut=hT.indexOf('. ');
   var hH=hCut>0?esc(hT.slice(0,hCut+1))+' <span class="hl">'+esc(hT.slice(hCut+1))+'</span>':esc(hT);
   var bks=bikeCardsHtml();
-  var pops=popChips().map(function(f){return '<a onclick="qsearch(\''+f+'\')">'+esc(f)+'</a>';}).join('');
+  var pops=popChips().map(function(f){return '<a onclick="qsearch(\''+jesc(f)+'\')">'+esc(f)+'</a>';}).join('');
   var ccs=systemsLive().map(function(s){
     return '<a class="cc" href="'+esc(urlFor('system/'+encodeURIComponent(s.name)))+'" onclick="return goL(event,\'system/'+encodeURIComponent(s.name)+'\')"><div class="cci">'+(s.cover?'<img src="'+esc(s.cover)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':li('wrench',26))+'</div><b>'+esc(s.name)+'</b><span>'+s.count+' parts</span></a>';
   }).join('');
@@ -1635,7 +1639,7 @@ function vPart(id){
    +'<section class="page wrap"><div class="pd"><div class="pdmedia"><div class="big">'+(p.img?'<img id="ppMain" class="zoomable" title="Tap to zoom" onclick="zoom(this.src)" src="'+esc(p.img)+'" alt="'+esc(p.name)+'" loading="lazy">':'<div class="imph"><i class="fa fa-cog"></i></div>')+'</div>'
    +(function(){ var ph=[p.img].concat(p.gal||[]).filter(Boolean); if(ph.length<2) return '';
       return '<div class="pgal">'+ph.map(function(src,i){
-        return '<div class="pgt'+(i===0?' on':'')+'" title="View photo '+(i+1)+'" onclick="ppSwap(this,\''+esc(src)+'\')"><img src="'+esc(src)+'" alt="" loading="lazy">'+(i===1?'<span class="pglab">PACKAGING</span>':'')+'</div>';
+        return '<div class="pgt'+(i===0?' on':'')+'" title="View photo '+(i+1)+'" onclick="ppSwap(this)"><img src="'+esc(src)+'" alt="" loading="lazy">'+(i===1?'<span class="pglab">PACKAGING</span>':'')+'</div>';
       }).join('')+'</div>'; })()
    +'</div>'
    +'<div>'+(p.brand?'<span class="chip g">'+((CFG.genuineLine)?'🟢 Genuine ':'')+esc(p.brand)+'</span> ':'')+'<h1 style="margin-top:8px">'+esc(p.name)+'</h1>'+(pn?'<div class="oembig"><span class="lb">OEM</span><b>'+esc(pn)+'</b>'+(p.sku?'<span class="skusml">SKU '+esc(p.sku)+'</span>':'')+'</div>':(p.sku?'<div class="mono" style="margin-top:4px">SKU: '+esc(p.sku)+'</div>':''))
@@ -1673,7 +1677,11 @@ function findParts(words,n){
   });
   return out;
 }
-function ppSwap(el,src){ var m=document.getElementById('ppMain'); if(m)m.src=src; document.querySelectorAll('.pgt').forEach(function(t){t.classList.remove('on');}); el.classList.add('on'); }
+// Swap reads the clicked thumb's OWN <img> src — the URL is never interpolated into the inline
+// handler, so a quote in an image URL can't break out (esc() alone would not stop that).
+function ppSwap(el){ var m=document.getElementById('ppMain'); var img=el&&el.querySelector('img'); if(m&&img)m.src=img.src; document.querySelectorAll('.pgt').forEach(function(t){t.classList.remove('on');}); if(el)el.classList.add('on'); }
+function errBanner(){ return '<section class="page wrap"><div class="emptycart"><div class="ec"><i class="fa fa-exclamation-triangle"></i></div><h2>Couldn\'t load the parts catalogue</h2><p>Please check your connection and try again.</p><a class="btn btn-p" onclick="retryCatalogue()">Retry</a></div></section>'; }
+function retryCatalogue(){ STATE.error=false; STATE.loaded=false; render(); loadCatalogue(); }
 function ovMain(el){ var m=document.getElementById('ovMain'); if(m&&el.dataset.src)m.src=el.dataset.src; document.querySelectorAll('.ovthumb').forEach(function(t){t.classList.remove('on');}); el.classList.add('on'); }
 function zoom(src){ if(!src)return; var z=document.getElementById('zoomer'); if(!z){z=document.createElement('div');z.id='zoomer';z.onclick=function(){z.classList.remove('on');};document.body.appendChild(z);} z.innerHTML='<span class="zx">✕</span><img src="'+src+'" loading="lazy">'; z.classList.add('on'); }
 function vModel(id){
@@ -1925,7 +1933,7 @@ function dx(id, userText){
     var pr=aiPartLink(c.partName||c.name);
     var fitH=pr?fitBadge(pr):''; var priceH=pr&&pr.price>0?(' · '+money(pr.price)):'';
     var actH=pr?('<a class="btn btn-p btn-sm" onclick="go(\'part/'+sid(pr.id)+'\')">View part</a> <a class="btn btn-w btn-sm" href="'+esc(waOrder(pr))+'" target="_blank" rel="noopener">Order</a>')
-               :('<a class="btn btn-o btn-sm" onclick="qsearch(\''+esc((c.partName||c.name).split(" ")[0])+'\')">Find parts</a>');
+               :('<a class="btn btn-o btn-sm" onclick="qsearch(\''+jesc((c.partName||c.name).split(" ")[0])+'\')">Find parts</a>');
     return '<div class="dxcard"><div style="flex:1"><div style="display:flex;justify-content:space-between"><b>'+esc(c.name)+'</b><b style="color:var(--accent)">'+c.probability+'%</b></div><div class="bar"><i style="width:'+c.probability+'%"></i></div><div style="font-size:12px;color:var(--muted)">→ '+esc((pr&&pr.name)||c.partName||'')+priceH+' '+fitH+'</div><div style="margin-top:7px">'+actH+'</div></div></div>';
   }).join('');
   var steps=(p.steps||[]).map(function(s){return '<li>'+esc(s)+'</li>';}).join('');
@@ -2009,6 +2017,11 @@ function render(){
   var h=curRoute(); var parts=h.split('/');
   var v;
   if(!STATE.loaded && !STATE.error){ v=nav()+'<div class="spin"></div>'; document.getElementById('app').innerHTML=v; return; }
+  // Catalogue failed to load — show a retry on ANY view, not just the homepage, so a deep link
+  // to /parts or a search doesn't sit on a bare "0 parts".
+  if(STATE.error && (!STATE.products || !STATE.products.length)){
+    document.getElementById('app').innerHTML=nav()+errBanner()+foot(); window.scrollTo(0,0); try{updBotbar('');}catch(e){} return;
+  }
   if(parts[0]==='part') v=vPart(parts[1]);
   else if(parts[0]==='system') v=vSystem(decodeURIComponent(parts.slice(1).join('/')));
   else if(parts[0]==='model') v=vModel(parts[1]);
