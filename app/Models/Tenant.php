@@ -165,6 +165,26 @@ class Tenant extends Model
         return url($path);
     }
 
+    /**
+     * A link INTO this shop's storefront (a category, a product, the shop home). Unlike publicUrl —
+     * which is for host-agnostic global routes like /papi/track — a storefront path needs the shop's
+     * IDENTITY: the custom domain when it is live (the domain names the shop), otherwise the shop
+     * SLUG on the platform URL (e.g. mycloudbss.com/{slug}/c/battery). On the bare platform host a
+     * slug-less storefront path can't tell which shop it belongs to and 404s.
+     */
+    public function storefrontUrl(string $path): string
+    {
+        $path = '/' . ltrim($path, '/');
+        $dom  = strtolower(trim((string) ($this->custom_domain ?? '')));
+        $dom  = preg_replace('#^https?://#', '', $dom);
+        $dom  = preg_replace('#/.*$#', '', $dom);
+        if ($dom !== '' && (bool) $this->setting('custom_domain_live', false)) {
+            return 'https://' . $dom . $path;              // the domain identifies the shop
+        }
+        $slug = trim((string) $this->slug, '/');
+        return url(($slug !== '' ? '/' . $slug : '') . $path);   // platform: the slug identifies the shop
+    }
+
     /** Staff-login seat limit for the active plan. null = unlimited. */
     public function userCap(): ?int
     {
