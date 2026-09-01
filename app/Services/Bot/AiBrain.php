@@ -363,7 +363,10 @@ class AiBrain
         $pick = self::pickCategoryLink($counts, $text . ' ' . $reply);
         if ($pick === null) return;
 
-        $url = $tenant->publicUrl('/c/' . \Illuminate\Support\Str::slug($pick['category']));
+        // storefrontUrl (not publicUrl): a category page needs the shop's identity — its custom
+        // domain, or the shop slug on the platform host. publicUrl would emit a slug-less
+        // mycloudbss.com/c/battery that the platform host can't route to a shop (404).
+        $url = $tenant->storefrontUrl('/c/' . \Illuminate\Support\Str::slug($pick['category']));
         if (! Cache::add('catlink:' . $tenant->id . ':' . $from . ':' . md5($url), 1, 1800)) return;
 
         $msg = 'See all ' . $pick['count'] . ' ' . $pick['category'] . ' products 👉 ' . $url;
