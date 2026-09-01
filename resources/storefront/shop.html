@@ -2247,7 +2247,20 @@ async function load(){
        page's title/OG/JSON-LD for it), so open that first; else migrate a legacy #p link;
        else read the path. */
     var boot=Number(window.__OPEN_PRODUCT_ID__||0);
-    if(boot>0) openDetail(boot);
+    if(boot>0){
+      // Deep link straight to a product (shared link / bot). We arrived with a SINGLE history entry
+      // (the product URL), so Back — and the detail's ✕, which calls history.back() — would leave the
+      // site instead of showing the shop. Seed a shop-home entry BENEATH the product so Back/close
+      // pops to the grid. Only runs on a deep-link product open; normal loads are unaffected.
+      try{
+        if(window.history && history.pushState){
+          var _prodUrl=location.pathname+location.search;
+          history.replaceState(null,'',(SHOP_BASE||'')+'/shop');   // entry 1: the shop
+          history.pushState({p:String(boot)},'',_prodUrl);         // entry 2: this product (same URL)
+        }
+      }catch(e){}
+      openDetail(boot);
+    }
     else if(!hashMigrate()) handleRoute();
   }catch(e){
     $('content').innerHTML='<div class="empty">Couldn’t load the catalogue.<br>Please try again shortly.</div>';
