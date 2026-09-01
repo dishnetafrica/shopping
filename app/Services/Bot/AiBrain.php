@@ -753,7 +753,12 @@ class AiBrain
         // send JUST that section as its own compact catalogue. Its anti-spam key is per
         // category, so it works even minutes after the full list went out — but ONLY on a
         // strong, explicit document ask.
-        $catAsk = ($force || ! empty($strongAsk)) ? $this->detectCategoryAsk($tenant, $text) : null;
+        // Prefer a CATEGORY catalogue whenever the message clearly points at one — not only on an
+        // explicit "price list" ask. With a big, daily-growing catalogue, "how much is a 200Ah
+        // battery" or "solar prices" should get the Battery / Solar section, never the full list.
+        // detectCategoryAsk is conservative (a named category, or a clear product-word winner), so a
+        // generic "send your price list" still returns null here and falls through to the full list.
+        $catAsk = $this->detectCategoryAsk($tenant, $text);
         if ($catAsk !== null) {
             $ckey = "pricelist_sent:{$tenant->id}:{$from}:cat:" . md5(mb_strtolower($catAsk, 'UTF-8'));
             if ($force || ! Cache::get($ckey)) {
