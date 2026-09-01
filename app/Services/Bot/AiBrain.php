@@ -111,6 +111,9 @@ class AiBrain
             .\App\Services\Relationship\ProfileContext::block($tenant, $from)
             .$this->outstandingQuoteBlock($tenant, $from)
             .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')
+            // Retrieval: products matching THIS message, pulled from the whole catalogue so nothing is
+            // hidden by the static list's alphabetical cap. Goes right before the photo/context blocks.
+            .$this->relevantProductsBlock($tenant, $text)
             .$photoBlock]], $prior, [$current]);
 
         // 3. call OpenAI (per-tenant key override, else the global CloudBSS key). Images need a
@@ -2219,6 +2222,63 @@ class AiBrain
         }
 
         return 'use: ' . $d;
+    }
+
+    /**
+     * Products from the FULL catalogue that match the customer's CURRENT message — built fresh each
+     * turn and injected into the prompt. The static PRODUCTS block is capped and ordered by name, so
+     * on a large/mixed catalogue (grocery + parts + solar) items late in the alphabet fall off and the
+     * bot "can't find" them. This retrieval block guarantees the items relevant to THIS message are
+     * always in front of the model — e.g. a "5 kWh battery" ask surfaces every kWh battery by token,
+     * so the bot names the 5.25 kWh instead of deflecting. Deterministic, best-effort, never throws.
+     */
+    private function relevantProductsBlock(Tenant $tenant, string $text): string
+    {
+        try {
+            $t = mb_strtolower(trim($text));
+            if (mb_strlen($t) < 3) return '';
+            if (preg_match('/^(hi+|hello|hey+|ok(ay)?|yes|no|thanks?|thank you|menu|help|buy|start)\W*$/u', $t)) return '';
+            preg_match_all('/[a-z0-9][a-z0-9.\-]{2,}/u', $t, $m);
+            $stop = ['the','and','for','you','have','with','want','need','please','can','get','are','how','much','this','that','your','our','some','any','all','from','give','send','the','looking','about','one','buy','order','price','stock'];
+            $tokens = [];
+            foreach ($m[0] as $tok) { if (! in_array($tok, $stop, true)) $tokens[$tok] = true; }
+            $tokens = array_slice(array_keys($tokens), 0, 12);
+            if (! $tokens) return '';
+
+            $rows = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)->where('active', true)->whereNull('archived_at')
+                ->where(function ($w) use ($tokens) {
+                    foreach ($tokens as $tok) {
+                        $like = '%' . addcslashes($tok, '%_\\') . '%';
+                        $w->orWhereRaw('LOWER(name) LIKE ?', [$like])
+                          ->orWhereRaw('LOWER(COALESCE(keywords, \'\')) LIKE ?', [$like])
+                          ->orWhereRaw('LOWER(COALESCE(oem_number, \'\')) LIKE ?', [$like]);
+                    }
+                })
+                ->limit(60)->get(['name', 'price', 'base_price', 'stock', 'unit_label', 'oem_number', 'popularity']);
+            if ($rows->isEmpty()) return '';
+
+            $cur = (string) $tenant->setting('currency', 'UGX');
+            $dec = \App\Services\Pricing::decimalsForCurrency($cur);
+            $scored = $rows->map(function ($p) use ($tokens) {
+                $hay = mb_strtolower(((string) $p->name) . ' ' . ((string) ($p->keywords ?? '')) . ' ' . ((string) ($p->oem_number ?? '')));
+                $score = 0; foreach ($tokens as $tok) { if (mb_strpos($hay, $tok) !== false) $score++; }
+                return ['p' => $p, 'score' => $score];
+            })->sortByDesc(fn ($x) => $x['score'] * 1000 + (int) ($x['p']->popularity ?? 0))->take(15);
+
+            $lines = [];
+            foreach ($scored as $s) {
+                $p = $s['p']; $price = (float) ($p->price ?? $p->base_price ?? 0);
+                $tag = $price > 0 ? ($cur . ' ' . number_format($price, $dec)) : 'ask for price';
+                $stk = ($p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
+                $lines[] = '• ' . $p->name . ' — ' . $tag . $stk;
+            }
+            return "PRODUCTS MATCHING THIS REQUEST (searched across the WHOLE catalogue for this message — "
+                . "quote these EXACT names/prices; if one reasonably fits what they asked, NAME it and its price, "
+                . "do NOT say you'll check with the team):\n" . implode("\n", $lines) . "\n\n";
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     private function catalogueLines(Tenant $tenant): string
