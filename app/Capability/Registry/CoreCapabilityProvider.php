@@ -13,6 +13,7 @@ use App\Capability\Process\ProcurementDashboardCapability;
 use App\Capability\Object\InvoiceCapability;
 use App\Capability\Object\PaymentCapability;
 use App\Capability\Object\ProductCapability;
+use App\Capability\Object\LpoCapability;
 use App\Capability\Object\PurchaseOrderCapability;
 use App\Capability\Object\QuotationCapability;
 use App\Capability\Object\SalesOrderCapability;
@@ -48,6 +49,7 @@ use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
 use App\Capability\Process\QuotationListCapability;
 use App\Capability\Process\FinanceCapability;
+use App\Capability\Process\LpoListCapability;
 use App\Capability\Process\MorningBriefingCapability;
 use App\Capability\Process\PurchaseProcessCapability;
 use App\Capability\Process\SalesOrderListCapability;
@@ -106,6 +108,10 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new PurchaseOrderCapability(), new CapabilityManifest(key: 'purchaseOrder', type: 'object', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchaseOrder/{id}'));
         $r->register(new DemandPlanCapability(), new CapabilityManifest(key: 'demandPlan', type: 'object', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'submit', 'actor' => 'human'], ['key' => 'record_procurement', 'actor' => 'human']], api: '/api/v1/workspace/demandPlan/{id}'));
         $r->register(new QuotationCapability(), new CapabilityManifest(key: 'quotation', type: 'object', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/quotation/{id}'));
+        // Local Purchase Orders (LPO) — a per-supplier ordering document with ordered-vs-received
+        // tracking and a WhatsApp-to-supplier send. Distinct from demand.plans (the Kampala→Juba
+        // shipment worksheet): an LPO is one order to one supplier and fits any tenant.
+        $r->register(new LpoCapability(), new CapabilityManifest(key: 'lpo', type: 'object', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'add_line', 'actor' => 'human'], ['key' => 'receive_line', 'actor' => 'human'], ['key' => 'send_supplier', 'actor' => 'human']], api: '/api/v1/workspace/lpo/{id}'));
 
         // --- process capabilities ---
         $collections = new CollectionsCapability();
@@ -180,6 +186,7 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register(new DemandCapability(), new CapabilityManifest(key: 'demand', type: 'process', owner: 'warehouse', permission: 'menu:products', commands: [['key' => 'refresh', 'actor' => 'human']], api: '/api/v1/workspace/demand'));
         $r->register($purchase, new CapabilityManifest(key: 'purchase.process', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/purchase.process'));
         $r->register(new DemandPlanListCapability(), new CapabilityManifest(key: 'demand.plans', type: 'process', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'create_plan', 'actor' => 'human']], api: '/api/v1/workspace/demand.plans'));
+        $r->register(new LpoListCapability(), new CapabilityManifest(key: 'lpos', type: 'process', owner: 'purchasing', permission: 'menu:purchases', commands: [['key' => 'create', 'actor' => 'human']], api: '/api/v1/workspace/lpos'));
         $r->register(new ProcurementDashboardCapability(), new CapabilityManifest(key: 'procurement.hub', type: 'process', owner: 'purchasing', permission: 'menu:purchases', api: '/api/v1/workspace/procurement.hub'));
         $r->register(new JubaStockCapability(), new CapabilityManifest(key: 'juba.stock', type: 'process', owner: 'warehouse', permission: 'menu:products', api: '/api/v1/workspace/juba.stock'));
         $r->register(new StorefrontInsightsCapability(), new CapabilityManifest(key: 'storefront.insights', type: 'process', owner: 'management', permission: 'menu:products', api: '/api/v1/workspace/storefront.insights'));
