@@ -156,7 +156,7 @@ final class LpoListCapability implements ProcessCapability
         $po->po_no = 'LPO-' . $orderDate->format('Y') . '-' . str_pad((string) $po->id, 4, '0', STR_PAD_LEFT);
         $po->save();
 
-        return ['ok' => true, 'id' => $po->id, 'message' => 'Created ' . $po->po_no . ' for ' . $po->supplier_name . '. Add items to it.'];
+        return ['ok' => true, 'id' => $po->id, 'goto' => '/api/v1/workspace/lpo/' . $po->id, 'message' => 'Created ' . $po->po_no . ' for ' . $po->supplier_name . '. Add items to it.'];
     }
 
     /** Find a supplier by name, or create it inline (add a supplier straight from the New LPO form). */

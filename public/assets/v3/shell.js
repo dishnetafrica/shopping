@@ -2709,7 +2709,11 @@ function formModal(a){
     // onResult:'payment' — surface the customer's remaining balance right here instead of a generic "Saved".
     let msg=res.message;
     if(a.onResult==='payment' && res.ok){ msg = (res.state==='paid') ? ('✓ '+(res.order_no||'Order')+' paid in full') : ((res.order_no||'Order')+' — balance left: '+Number(res.balance||0).toLocaleString()); }
-    toast(res.ok?(msg||'Saved'):(msg||res.error||'Error'), !res.ok); refresh(); };
+    toast(res.ok?(msg||'Saved'):(msg||res.error||'Error'), !res.ok);
+    // goto: a create action can ask us to open the record it just made (e.g. a new LPO from the
+    // supplier screen). Backward-compatible — only fires when the server sends it.
+    if(res.ok && res.goto){ const h=apiToHash(res.goto); if(h){ route(h.key,h.id); return; } }
+    refresh(); };
 }
 function renderGal(k){
   const el=document.getElementById('gal_'+k); if(!el) return; const urls=window.GAL[k]||[];
