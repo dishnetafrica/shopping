@@ -122,6 +122,10 @@ final class SettingsSchema
                     ['key' => 'quote_payment_terms', 'type' => 'text',     'label' => 'Short payment line (in the summary box)', 'help' => 'A short version, e.g. "50% advance · balance on delivery".'],
                     ['key' => 'quote_prepared_by',   'type' => 'text',     'label' => 'Prepared by (name on the quote)'],
                 ]],
+                ['label' => 'Purchase orders (LPO)', 'help' => 'The Local Purchase Order you send suppliers. A product photo next to each line helps the supplier confirm the exact item (useful for parts); turn it off for plain black-and-white printing.', 'fields' => [
+                    ['key' => 'lpo_photos', 'type' => 'bool', 'label' => 'Show product photos on the LPO', 'default' => true],
+                    ['key' => 'lpo_terms',  'type' => 'textarea', 'label' => 'Default terms & conditions', 'help' => 'Printed on every LPO (blank = none). You can still override the terms on an individual LPO.'],
+                ]],
                 // v4.46 — customers were asking for stamped invoices and receipts, and staff were
                 // stamping printouts by hand. Three of these documents already reserved a box for it.
                 ['label' => 'Company stamp', 'help' => 'Upload your stamp once and it prints on the documents your customers receive, in the box each one already reserves for it. Use a PNG with a TRANSPARENT background — a stamp saved on a white square prints as a white box over the page. Leave the image empty and nothing is stamped, whatever the switches below say.', 'fields' => [

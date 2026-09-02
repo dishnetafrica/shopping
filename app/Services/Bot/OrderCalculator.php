@@ -139,7 +139,7 @@ class OrderCalculator
             $loose = $looseOn && ! empty($it['loose']) && $pack > 1 && $price > 0
                      && ! ($grams > 0 && ! empty($p['sold_by_weight'])) && ! $isDealerLine;
             if ($loose) {
-                $price = round(($price / $pack) * (1 + $loosePct / 100), $dec);
+                $price = \App\Services\Pricing::loosePrice($price, $pack, $loosePct, $dec);
             }
 
             // MOQ enforcement — bot/customer quotes only (the POS trusted-price branch above is exempt,

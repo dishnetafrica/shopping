@@ -107,15 +107,38 @@ class LpoPdfService
         $expDate   = $po->expected_date ? $po->expected_date->format('d M Y') : '';
         $deliverTo = trim((string) ($po->delivery_address ?: $address));
 
+        // Product photos: a thumbnail next to each line lets the supplier confirm the exact part
+        // (especially auto parts, where similar names differ). Automatic when a line's product carries
+        // a photo; the column only appears if at least one line resolves an image. Toggle: lpo_photos.
+        $showPhotos = (bool) $tenant->setting('lpo_photos', true);
+        $thumbByPid = [];
+        if ($showPhotos) {
+            $pids = $po->lines->pluck('product_id')->filter()->unique()->values()->all();
+            if ($pids) {
+                foreach (\App\Models\Product::where('tenant_id', $tenant->id)->whereIn('id', $pids)->get(['id', 'image_url', 'gallery_1', 'gallery_2', 'gallery_3']) as $p) {
+                    $thumbByPid[(int) $p->id] = $this->thumb($p->primaryImage());
+                }
+            }
+        }
+        $anyPhoto = false;
+        foreach ($thumbByPid as $u) { if ($u !== '') { $anyPhoto = true; break; } }
+        $withPhoto = $showPhotos && $anyPhoto;
+
         // Lines
         $rowsHtml = '';
-        $i = 0;
+        $i = 0; $anyPriced = false;
         foreach ($po->lines as $l) {
             $i++;
             $qty = (float) $l->ordered_qty;
             $unit = (float) $l->unit_cost;
+            if ($unit > 0) { $anyPriced = true; }
             $line = round($qty * $unit, 2);
+            $thumb = $l->product_id ? ($thumbByPid[(int) $l->product_id] ?? '') : '';
+            $photoCell = $withPhoto
+                ? '<td class="c">' . ($thumb !== '' ? '<img src="' . $thumb . '" style="width:34px;height:auto;border:1px solid #e5e7eb;border-radius:3px;">' : '') . '</td>'
+                : '';
             $rowsHtml .= '<tr>'
+                . $photoCell
                 . '<td class="c">' . $i . '</td>'
                 . '<td>' . e((string) $l->name) . (trim((string) $l->remarks) !== '' ? '<div class="rm">' . e((string) $l->remarks) . '</div>' : '') . '</td>'
                 . '<td class="r">' . $this->qty($qty) . '</td>'
@@ -124,8 +147,9 @@ class LpoPdfService
                 . '</tr>';
         }
         if ($rowsHtml === '') {
-            $rowsHtml = '<tr><td colspan="5" class="c" style="padding:16px;color:#6b7280;">No items on this order.</td></tr>';
+            $rowsHtml = '<tr><td colspan="' . ($withPhoto ? 6 : 5) . '" class="c" style="padding:16px;color:#6b7280;">No items on this order.</td></tr>';
         }
+        $photoTh = $withPhoto ? '<th style="width:46px;">Photo</th>' : '';
 
         $termsRaw = trim((string) ($po->terms ?: $tenant->setting('lpo_terms', '')));
         $termsHtml = $termsRaw !== '' ? nl2br(e($termsRaw)) : '';
@@ -136,7 +160,12 @@ class LpoPdfService
         $stamp = '';
         try { $stamp = \App\Services\Documents\DocumentStamp::img($tenant, 'quotation', 96); } catch (\Throwable $e) { $stamp = ''; }
 
-        $totalStr = $this->money($total, $cur);
+        // A price-less LPO ("please supply these quantities") is valid — the cost comes on the supplier's
+        // invoice. So don't print a misleading "CUR 0" total; say the prices are to be confirmed instead.
+        $totalLabel = $anyPriced ? ('Total (' . e($cur) . ')') : 'Total';
+        $totalCell  = $anyPriced
+            ? e($this->money($total, $cur))
+            : '<span style="font-size:11px;color:#6b7280;font-weight:600;">Prices to be confirmed</span>';
 
         return '<!doctype html><html><head><meta charset="utf-8"><style>
             * { font-family: DejaVu Sans, sans-serif; }
@@ -203,6 +232,7 @@ class LpoPdfService
 
             <table class="items">
                 <thead><tr>
+                    ' . $photoTh . '
                     <th style="width:28px;">#</th>
                     <th>Item</th>
                     <th class="r" style="width:80px;">Qty</th>
@@ -213,8 +243,8 @@ class LpoPdfService
             </table>
 
             <table class="tot"><tr>
-                <td class="tl">Total (' . e($cur) . ')</td>
-                <td class="tv">' . e($totalStr) . '</td>
+                <td class="tl">' . $totalLabel . '</td>
+                <td class="tv">' . $totalCell . '</td>
             </tr></table>
 
             ' . ($notesHtml !== '' ? '<div class="foot"><div class="lbl">Notes</div><div class="terms">' . $notesHtml . '</div></div>' : '') . '
@@ -240,5 +270,78 @@ class LpoPdfService
         $f = (float) $v;
 
         return rtrim(rtrim(number_format($f, 3, '.', ','), '0'), '.') ?: '0';
+    }
+
+    /**
+     * Resolve a product image reference to a small, embeddable data URI for Dompdf. Reads local
+     * /storage files off the public disk (or fetches a remote URL best-effort), then — when GD is
+     * available — shrinks to a thumbnail on a white ground and re-encodes as JPEG, which also
+     * transcodes webp/png so Dompdf can render it (Dompdf does not handle webp). Returns '' on any
+     * failure, so a missing/unsupported image prints no thumbnail rather than a broken box.
+     */
+    private function thumb(?string $ref): string
+    {
+        $ref = trim((string) $ref);
+        if ($ref === '') {
+            return '';
+        }
+        if (str_starts_with($ref, 'data:')) {
+            return $ref;
+        }
+
+        $raw = null;
+        try {
+            $rel = null;
+            if (preg_match('#/storage/(.+)$#', $ref, $m)) {
+                $rel = $m[1];
+            } elseif (! preg_match('#^https?://#i', $ref)) {
+                $rel = ltrim($ref, '/');
+            }
+            if ($rel !== null) {
+                if (Storage::disk('public')->exists($rel)) {
+                    $raw = Storage::disk('public')->get($rel);
+                }
+            } elseif (preg_match('#^https?://#i', $ref)) {
+                $raw = @file_get_contents($ref) ?: null;
+            }
+        } catch (\Throwable $e) {
+            $raw = null;
+        }
+        if (! $raw) {
+            return '';
+        }
+
+        if (extension_loaded('gd')) {
+            try {
+                $src = @imagecreatefromstring($raw);
+                if ($src) {
+                    $sw = imagesx($src); $sh = imagesy($src);
+                    $max = 140;
+                    $scale = min($max / max($sw, 1), $max / max($sh, 1), 1.0);
+                    $dw = max(1, (int) round($sw * $scale)); $dh = max(1, (int) round($sh * $scale));
+                    $dst = imagecreatetruecolor($dw, $dh);
+                    $white = imagecolorallocate($dst, 255, 255, 255);
+                    imagefilledrectangle($dst, 0, 0, $dw, $dh, $white);
+                    imagecopyresampled($dst, $src, 0, 0, 0, 0, $dw, $dh, $sw, $sh);
+                    ob_start(); imagejpeg($dst, null, 82); $out = ob_get_clean();
+                    imagedestroy($src); imagedestroy($dst);
+                    if ($out) {
+                        return 'data:image/jpeg;base64,' . base64_encode($out);
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        // No GD: embed jpg/png/gif bytes directly; skip webp (Dompdf cannot render it).
+        $path = parse_url($ref, PHP_URL_PATH) ?: $ref;
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif'], true)) {
+            $mime = $ext === 'png' ? 'image/png' : ($ext === 'gif' ? 'image/gif' : 'image/jpeg');
+
+            return 'data:' . $mime . ';base64,' . base64_encode($raw);
+        }
+
+        return '';
     }
 }
