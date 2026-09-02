@@ -109,11 +109,12 @@ class LpoPdfService
 
         // Lines
         $rowsHtml = '';
-        $i = 0;
+        $i = 0; $anyPriced = false;
         foreach ($po->lines as $l) {
             $i++;
             $qty = (float) $l->ordered_qty;
             $unit = (float) $l->unit_cost;
+            if ($unit > 0) { $anyPriced = true; }
             $line = round($qty * $unit, 2);
             $rowsHtml .= '<tr>'
                 . '<td class="c">' . $i . '</td>'
@@ -136,7 +137,12 @@ class LpoPdfService
         $stamp = '';
         try { $stamp = \App\Services\Documents\DocumentStamp::img($tenant, 'quotation', 96); } catch (\Throwable $e) { $stamp = ''; }
 
-        $totalStr = $this->money($total, $cur);
+        // A price-less LPO ("please supply these quantities") is valid — the cost comes on the supplier's
+        // invoice. So don't print a misleading "CUR 0" total; say the prices are to be confirmed instead.
+        $totalLabel = $anyPriced ? ('Total (' . e($cur) . ')') : 'Total';
+        $totalCell  = $anyPriced
+            ? e($this->money($total, $cur))
+            : '<span style="font-size:11px;color:#6b7280;font-weight:600;">Prices to be confirmed</span>';
 
         return '<!doctype html><html><head><meta charset="utf-8"><style>
             * { font-family: DejaVu Sans, sans-serif; }
@@ -213,8 +219,8 @@ class LpoPdfService
             </table>
 
             <table class="tot"><tr>
-                <td class="tl">Total (' . e($cur) . ')</td>
-                <td class="tv">' . e($totalStr) . '</td>
+                <td class="tl">' . $totalLabel . '</td>
+                <td class="tv">' . $totalCell . '</td>
             </tr></table>
 
             ' . ($notesHtml !== '' ? '<div class="foot"><div class="lbl">Notes</div><div class="terms">' . $notesHtml . '</div></div>' : '') . '
