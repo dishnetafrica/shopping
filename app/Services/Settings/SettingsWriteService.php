@@ -67,6 +67,8 @@ final class SettingsWriteService
         // shop isn't stuck on the generic "Ex-stock Kampala / 100% before dispatch" defaults.
         'quote_delivery', 'quote_terms_payment', 'quote_pricing', 'quote_cancellation',
         'quote_payment_terms', 'quote_prepared_by',
+        // Default terms & conditions printed on every Local Purchase Order (LPO) PDF (blank = none).
+        'lpo_terms',
         // v4.46 — the company stamp printed on customer documents (an image field holds its URL).
         'stamp_image',
         // Storefront trust & delivery promises (shown on product pages / homepage).
@@ -134,6 +136,7 @@ final class SettingsWriteService
         'stock_ledger',  // write the real stock ledger (record receipts & sales)
         'stock_v2',      // read on-hand from the ledger on site/bot (needs the ledger seeded first)
         'loose_enabled', // allow ordering carton items by the single piece (storefront + bot)
+        'lpo_photos',    // print a product thumbnail next to each line on the LPO PDF
         'digest_enabled',   // send the daily digest
         'pay_on_delivery',  // offer pay-on-delivery
         'pay_unify',        // unify payment handling
