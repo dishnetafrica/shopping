@@ -267,6 +267,7 @@ final class CatalogRenderer
                     'unit' => (string) ($p->unit_label ?: ''),
                     'moq' => $p->moq ? (int) $p->moq : null,
                     'price' => (float) $p->price,
+                    'pack' => (int) ($p->pack_size ?? 0),          // per-piece (loose) pricing on the card
                     'sku' => (string) ($p->sku ?: ''),
                     'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7 — manufacturer part no. (mechanics order by this)
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7 — powers the per-card "Fits" line
@@ -339,6 +340,7 @@ final class CatalogRenderer
                     'unit' => (string) ($p->unit_label ?: ''),
                     'moq' => $p->moq ? (int) $p->moq : null,
                     'price' => (float) $p->price,
+                    'pack' => (int) ($p->pack_size ?? 0),          // per-piece (loose) pricing on the card
                     'sku' => (string) ($p->sku ?: ''),
                     'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7
@@ -1171,7 +1173,13 @@ final class CatalogRenderer
             arsort($pops);
             $popIds = array_slice(array_keys($pops), 0, min(8, (int) ceil($totalItems * 0.1)), true);
         }
-        $ctx = ['fits' => $fits, 'qr' => $qrMap, 'pop' => array_flip($popIds)];
+        $ctx = ['fits' => $fits, 'qr' => $qrMap, 'pop' => array_flip($popIds),
+            // Per-piece (loose) pricing on the card: same gate/formula as the bot quote & storefront.
+            // For a parts shop the piece price leads (most buyers want one piece); other verticals keep
+            // the carton price as the headline with a per-piece hint underneath.
+            'loose' => (bool) $tenant->setting('loose_enabled', false),
+            'loosePct' => (float) $tenant->setting('loose_markup_pct', 20),
+            'parts' => $isParts];
 
         // --- pagination plan: cover(1) [index(2)] categories… [cross-ref] guide, contact ---
         $showIndex = count($groups) >= 2;
@@ -2033,8 +2041,28 @@ HTML;
                 [$big, $small] = $this->moneyParts((float) $it['price'], $currency);
                 $unitSuffix = ($unit !== '' && ! in_array(mb_strtolower($unit, 'UTF-8'), ['piece', 'pc', 'pcs', 'unit'], true))
                     ? ' <span class="prc">/ ' . e($this->clipLine($unit, 10)) . '</span>' : '';
-                $priceCell = '<div class="pfrom">FROM</div><div class="pr">' . $big
-                    . ($small !== '' ? ' <span class="prc">' . e($small) . '</span>' : '') . $unitSuffix . '</div>';
+                $cartonInner = $big . ($small !== '' ? ' <span class="prc">' . e($small) . '</span>' : '') . $unitSuffix;
+
+                // Per-piece (loose) price — same gate & formula as the bot quote / storefront.
+                $pack = (int) ($it['pack'] ?? 0);
+                $isLoose = ! empty($ctx['loose']) && $pack > 1 && (float) $it['price'] > 0;
+                if ($isLoose) {
+                    $pp = \App\Services\Pricing::loosePrice((float) $it['price'], $pack, (float) ($ctx['loosePct'] ?? 20), \App\Services\Pricing::decimalsForCurrency($currency));
+                    [$pbig, $psmall] = $this->moneyParts($pp, $currency);
+                    $pcMain = $pbig . ($psmall !== '' ? ' <span class="prc">' . e($psmall) . '</span>' : '') . ' <span class="prc">/pc</span>';
+                }
+
+                if ($isLoose && ! empty($ctx['parts'])) {
+                    // Parts shop: the piece price leads, carton shown small underneath.
+                    $priceCell = '<div class="pfrom">PER PIECE</div><div class="pr">' . $pcMain . '</div>'
+                        . '<div class="prc" style="color:' . self::C_GREY . '">Carton ' . $cartonInner . '</div>';
+                } elseif ($isLoose) {
+                    // Other verticals: carton leads, per-piece hint underneath.
+                    $priceCell = '<div class="pfrom">FROM</div><div class="pr">' . $cartonInner . '</div>'
+                        . '<div class="prc" style="color:' . self::C_GREY . '">or ' . $pcMain . '</div>';
+                } else {
+                    $priceCell = '<div class="pfrom">FROM</div><div class="pr">' . $cartonInner . '</div>';
+                }
             } else {
                 $priceCell = '<div class="pr" style="color:' . self::C_FAINT . ';font-size:10px">Ask for price</div>';
             }

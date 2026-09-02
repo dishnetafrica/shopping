@@ -35,4 +35,18 @@ class Pricing
         $cur = (string) $tenant->setting('currency', 'UGX');
         return $cur . ' ' . number_format($amount, self::decimalsForCurrency($cur));
     }
+
+    /**
+     * The per-piece ("loose") selling price for one unit out of a carton: the carton price divided
+     * by the pack size, plus the loose markup, rounded to the currency's precision. The single source
+     * of truth for the loose formula (bot quote, storefront and the catalogues all agree). Returns 0
+     * when the product isn't sold loose (pack size ≤ 1, or no carton price).
+     */
+    public static function loosePrice(float $cartonPrice, int $packSize, float $markupPct, int $dec): float
+    {
+        if ($packSize <= 1 || $cartonPrice <= 0) {
+            return 0.0;
+        }
+        return round(($cartonPrice / $packSize) * (1 + $markupPct / 100), $dec);
+    }
 }

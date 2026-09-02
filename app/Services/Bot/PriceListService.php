@@ -75,6 +75,10 @@ class PriceListService
         $accent  = (string) ($tenant->setting('theme_accent', '') ?: '#103A8C');
         $cur     = (string) ($tenant->setting('currency', 'UGX') ?: 'UGX');
         $company = e((string) $tenant->name);
+        // Per-piece (loose) pricing — same gate & formula as the bot quote / storefront / catalogue.
+        $looseOn  = (bool) $tenant->setting('loose_enabled', false);
+        $loosePct = (float) $tenant->setting('loose_markup_pct', 20);
+        $dec      = \App\Services\Pricing::decimalsForCurrency($cur);
         $addr    = e((string) $tenant->setting('address', ''));
         $email   = e((string) $tenant->setting('public_email', $tenant->setting('email', '')));
         $cphone  = e((string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number));
@@ -97,8 +101,14 @@ class PriceListService
                 $pack = '—';
             }
             $price = ((float) $p->price > 0)
-                ? $cur . ' ' . number_format((float) $p->price, \App\Services\Pricing::decimalsForCurrency($cur))
+                ? $cur . ' ' . number_format((float) $p->price, $dec)
                 : '<i style="color:#888">On request</i>';
+            // When sold loose, show the per-piece price beneath the carton price so a customer
+            // ordering one piece sees what it costs (the carton price stays as the reference).
+            if ($looseOn && (int) $p->pack_size > 1 && (float) $p->price > 0) {
+                $pp = \App\Services\Pricing::loosePrice((float) $p->price, (int) $p->pack_size, $loosePct, $dec);
+                $price .= '<br><span style="color:#666;font-size:10px">' . $cur . ' ' . number_format($pp, $dec) . ' / piece</span>';
+            }
             $moq = ((int) $p->moq > 0) ? (int) $p->moq . ' ' . e((string) ($p->unit_label ?: '')) : '—';
 
             $rows .= '<tr><td>' . $i . '</td><td>' . e((string) $p->name) . '</td><td>' . $pack
