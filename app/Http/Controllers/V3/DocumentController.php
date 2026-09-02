@@ -418,6 +418,22 @@ final class DocumentController extends Controller
         ]);
     }
 
+    /** GET /api/v1/doc/lpo/{id} — branded Local Purchase Order (LPO). */
+    public function lpo(Request $r, int $id)
+    {
+        $t = $r->user()->tenant;
+        $po = \App\Models\PurchaseOrder::where('tenant_id', $t->id)->find($id);
+        if (! $po) {
+            abort(404);
+        }
+        $doc = app(\App\Services\Purchasing\LpoPdfService::class)->generate($t, $po);
+        if (! $doc) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return $this->stream($doc, ($doc['fileName'] ?? ('LPO-' . $po->id . '.pdf')));
+    }
+
     private function stream(array $doc, string $filename)
     {
         $disk = Storage::disk('public');

@@ -1,9 +1,9 @@
 const CFG = { base:'/api/v1/workspace', csrf: document.querySelector('meta[name=csrf-token]').content, user: {"name":""} };
 const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Advisor', setup:'Get started', chats:'Chats', chat:'Chat', communication:'Email Center', guide:'Help & Training', consignments:'Consignments', consignment:'Consignment', scheduled:'Scheduled', briefing:'Today', worklist:'My Work', tasks:'Tasks', followups:'AI Follow-ups', diagnostics:'Bot Diagnostics', customers:'Customers', leads:'Leads', growth:'Growth', demand:'Asked for', discovery:'Businesses found', visits:'Visits', collections:'Collections',
   salesOrders:'Sales Orders', quotations:'Quotations', invoices:'Invoices', payments:'Payments', finance:'Finance', pnl:'Profit & Loss', books:'Books', partners:'Partners',
-  products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
+  products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', lpos:'Purchase Orders', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
-  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
+  salesOrder:'Sales Order', purchaseOrder:'Purchase Order', lpo:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
   jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping',
   tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence', engagement:'Customer Engagement', 'vision.review':'Stock & Loss' };
@@ -14,7 +14,7 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
 const GROUPS = [ ['Home',['briefing','worklist','setup','guide']],
   ['Sell',['pos','salesOrders','quotations','invoices','payments','collections','advisor']],
   ['Customers',['customers','leads','followups','growth','discovery','visits','demand','tenders','evidence']],
-  ['Buy',['purchase.process','suppliers','procurement.hub','demand.plans','juba.stock']],
+  ['Buy',['purchase.process','suppliers','lpos','procurement.hub','demand.plans','juba.stock']],
   ['Stock',['products','categories','suggestions','warehouse','consignments','vision.review']],
   ['Money',['finance','cashbook','partners']],
   ['Communication',['chats','communication','campaigns','engagement','ai.campaign','ads','diagnostics']],
@@ -67,6 +67,8 @@ const P = {
   'purchase.process':'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
   'demand.plans':'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 14l2 2 4-4',
   'procurement.hub':'M3 3v18h18M8 17V9M13 17V5M18 17v-6',
+  lpos:'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 12h6M9 16h4',
+  lpo:'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 12h6M9 16h4',
   'juba.stock':'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.27 6.96 12 12.01l8.73-5.05M12 22.08V12',
   warehouse:'M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 21V9h6v12',
   dispatch:'M1 3h15v13H1zM16 8h4l3 3v5h-7M5.5 18.5a2 2 0 1 0 0 .01M18.5 18.5a2 2 0 1 0 0 .01',
@@ -477,7 +479,7 @@ const WS = {
   today:      { label:'Today',      route:'bos.today', members:['bos.today','briefing'] },
   customers:  { label:'Customers',  route:'customers', members:['customers','leads','followups'] },
   operations: { label:'Operations', hub:true, sub:'Stock, orders & fulfilment',
-                members:['salesOrders','products','categories','purchase.process','suppliers','warehouse','dispatch','consignments','procurement.hub','demand.plans','juba.stock','scheduled'] },
+                members:['salesOrders','products','categories','purchase.process','suppliers','lpos','warehouse','dispatch','consignments','procurement.hub','demand.plans','juba.stock','scheduled'] },
   finance:    { label:'Finance',    hub:true, sub:'Money in & money out',
                 members:['collections','invoices','payments','quotations','cashbook','finance','pnl','books','partners'] },
   me:         { label:'Me',         hub:true, sub:'', members:[] }
@@ -489,7 +491,7 @@ const HUBCARD = {
   payments:{t:'Receipts',c:'money received'}, quotations:{t:'Quotes Waiting',c:'to confirm'},
   cashbook:{t:'Cash Book',c:'cash in & out'}, finance:{t:'Finance',c:'overview'}, pnl:{t:'Profit & Loss',c:''}, books:{t:'Books',c:'full report'}, partners:{t:'Partners',c:'capital & drawings'},
   salesOrders:{t:'Open Orders',c:'to fulfil'}, products:{t:'Products',c:'catalogue'}, categories:{t:'Categories',c:''},
-  'purchase.process':{t:'Items to Receive',c:'purchasing'}, suppliers:{t:'Suppliers',c:''},
+  'purchase.process':{t:'Items to Receive',c:'purchasing'}, suppliers:{t:'Suppliers',c:''}, lpos:{t:'Purchase Orders',c:'LPOs'},
   warehouse:{t:'Low Stock',c:'reorder'}, dispatch:{t:'To Deliver',c:'dispatch'}, consignments:{t:'Consignments',c:''},
   'procurement.hub':{t:'Procurement',c:''}, 'demand.plans':{t:'Demand Plans',c:''}, 'juba.stock':{t:'Juba Stock',c:''},
   scheduled:{t:'Scheduled',c:'deliveries'}
@@ -498,7 +500,7 @@ const HUBCARD = {
 const WS_ADD = {
   today:      [['task.new','New Task'],['quotations','New Quote'],['invoices','New Invoice'],['payments','Receive Payment'],['cashbook','Expense'],['customers','New Customer']],
   customers:  [['customers','New Customer'],['quotations','New Quote'],['payments','Receive Payment'],['task.new','New Task']],
-  operations: [['task.new','New Task'],['purchase.process','New Purchase'],['products','New Product'],['salesOrders','New Order']],
+  operations: [['task.new','New Task'],['lpos','New LPO'],['purchase.process','New Purchase'],['products','New Product'],['salesOrders','New Order']],
   finance:    [['cashbook','Expense'],['payments','Receive Payment'],['invoices','New Invoice']],
   me:         []
 };
@@ -2707,7 +2709,11 @@ function formModal(a){
     // onResult:'payment' — surface the customer's remaining balance right here instead of a generic "Saved".
     let msg=res.message;
     if(a.onResult==='payment' && res.ok){ msg = (res.state==='paid') ? ('✓ '+(res.order_no||'Order')+' paid in full') : ((res.order_no||'Order')+' — balance left: '+Number(res.balance||0).toLocaleString()); }
-    toast(res.ok?(msg||'Saved'):(msg||res.error||'Error'), !res.ok); refresh(); };
+    toast(res.ok?(msg||'Saved'):(msg||res.error||'Error'), !res.ok);
+    // goto: a create action can ask us to open the record it just made (e.g. a new LPO from the
+    // supplier screen). Backward-compatible — only fires when the server sends it.
+    if(res.ok && res.goto){ const h=apiToHash(res.goto); if(h){ route(h.key,h.id); return; } }
+    refresh(); };
 }
 function renderGal(k){
   const el=document.getElementById('gal_'+k); if(!el) return; const urls=window.GAL[k]||[];

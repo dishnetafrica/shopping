@@ -174,6 +174,23 @@ final class SupplierCapability implements ObjectCapability
             'columns' => [['label' => 'Date'], ['label' => 'Amount', 'align' => 'right'], ['label' => 'Paid by'], ['label' => 'Note']],
             'rows' => $payRows, 'empty' => 'No payments recorded yet', 'pageSize' => 25, 'dateFilter' => true];
 
+        // --- purchase orders (LPOs) for this supplier ---
+        $poLabel = fn ($x) => ['draft' => 'Draft', 'sent' => 'Sent', 'partial' => 'Part-received', 'received' => 'Received', 'closed' => 'Closed', 'cancelled' => 'Cancelled'][$x] ?? ucfirst((string) ($x ?: 'draft'));
+        $poBadge = fn ($x) => in_array($x, ['received', 'closed'], true) ? 'ok' : (in_array($x, ['sent', 'partial'], true) ? 'warn' : ($x === 'cancelled' ? 'danger' : 'default'));
+        $pos = \App\Models\PurchaseOrder::where('tenant_id', $t)->where('supplier_id', $s->id)->orderByDesc('id')->limit(100)->get();
+        $orderRows = [];
+        foreach ($pos as $po) {
+            $when = $po->order_date ? Carbon::parse($po->order_date) : ($po->created_at ? Carbon::parse($po->created_at) : null);
+            $orderRows[] = ['cells' => [
+                $when ? $when->format('d M Y') : '—',
+                (string) ($po->po_no ?: ('LPO-' . $po->id)),
+                ['value' => $poLabel((string) $po->status), 'badge' => $poBadge((string) $po->status)],
+            ], 'ts' => $when ? $when->timestamp : 0, 'link' => '/api/v1/workspace/lpo/' . $po->id];
+        }
+        $ordersCard = ['kind' => 'table', 'title' => 'Purchase orders (LPO)', 'sub' => count($orderRows) . ' order(s)', 'searchable' => true,
+            'columns' => [['label' => 'Date'], ['label' => 'LPO'], ['label' => 'Status']],
+            'rows' => $orderRows, 'empty' => 'No purchase orders yet — use “New LPO”.', 'pageSize' => 25];
+
         // --- contact card ---
         $contactCard = ['kind' => 'dl', 'title' => 'Contact & terms', 'rows' => array_values(array_filter([
             ['Contact person', (string) ($s->contact_name ?: '—')],
@@ -256,12 +273,19 @@ final class SupplierCapability implements ObjectCapability
                 $nba = null;
             }
         }
+        // Raise a Local Purchase Order for THIS supplier (fixed via body). Posts to the LPO list
+        // capability, which returns `goto` so the new draft opens straight away for adding items.
+        $newLpo = ['key' => 'new_lpo', 'label' => 'New LPO', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/lpos/_/create', 'actor' => 'human', 'tone' => 'primary',
+            'schema' => ['order_date' => 'date', 'expected_date' => 'date', 'currency' => 'enum:UGX,USD,SSP', 'delivery_address' => 'text', 'notes' => 'text'],
+            'labels' => ['order_date' => 'Order date (YYYY-MM-DD)', 'expected_date' => 'Expected delivery (optional)', 'currency' => 'Currency', 'delivery_address' => 'Deliver to (optional)', 'notes' => 'Notes (optional)'],
+            'prefill' => ['order_date' => now()->format('Y-m-d'), 'currency' => $baseCur],
+            'body' => ['supplier' => (string) $s->name]];
         $sendStatement = ['key' => 'send_statement', 'label' => 'Send statement (WhatsApp)', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/supplier/' . $s->id . '/send_statement', 'actor' => 'human', 'tone' => 'default',
             'confirm' => 'Send ' . $s->name . '\'s statement as a WhatsApp document to ' . ($s->phone ? $s->phone : 'the owner number') . '?'];
         $deleteSup = ['key' => 'delete_supplier', 'label' => 'Delete supplier', 'tone' => 'danger', 'post' => '/papi/suppliers/' . $s->id . '/delete', 'confirm' => 'Delete supplier ' . $s->name . '? (kept & deactivated if it has history)'];
 
-        $header = $canEdit ? [$buyProduct, $recordBill, $paySupplier] : [];
-        $quick = $canEdit ? array_values(array_filter([$buyProduct, $recordBill, $paySupplier, $statement, $statementDl, $editSupplier])) : array_values(array_filter([$statement, $statementDl]));
+        $header = $canEdit ? [$newLpo, $buyProduct, $recordBill, $paySupplier] : [];
+        $quick = $canEdit ? array_values(array_filter([$newLpo, $buyProduct, $recordBill, $paySupplier, $statement, $statementDl, $editSupplier])) : array_values(array_filter([$statement, $statementDl]));
         $more = $canEdit ? array_values(array_filter([$statement, $statementDl, $sendStatement, $editSupplier, $deleteSup])) : array_values(array_filter([$statement, $statementDl]));
 
         $payload = (new WorkspacePayload)
@@ -285,9 +309,10 @@ final class SupplierCapability implements ObjectCapability
                 ['key' => 'last', 'label' => 'Last order', 'value' => $lastOrder],
             ])
             ->quickActions($quick)
-            ->tabSections(['overview' => [$contactCard], 'purchases' => [$boughtCard, $billsCard], 'payments' => [$paysCard]])
+            ->tabSections(['overview' => [$contactCard], 'orders' => [$ordersCard], 'purchases' => [$boughtCard, $billsCard], 'payments' => [$paysCard]])
             ->tabs([
                 ['key' => 'overview', 'label' => 'Overview'],
+                ['key' => 'orders', 'label' => 'Purchase orders', 'count' => count($orderRows)],
                 ['key' => 'purchases', 'label' => 'Purchases', 'count' => count($billRows)],
                 ['key' => 'payments', 'label' => 'Payments', 'count' => count($payRows)],
             ])
