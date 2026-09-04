@@ -49,4 +49,19 @@ class Pricing
         }
         return round(($cartonPrice / $packSize) * (1 + $markupPct / 100), $dec);
     }
+
+    /**
+     * The retail price of ONE piece, honouring an explicit per-product override. When the product has a
+     * positive `piece_price` set, that IS the piece price (rounded to the currency's precision) — the
+     * owner's box price and piece price are then two independent numbers. Otherwise it falls back to the
+     * derived loose formula, so a product with no override behaves exactly as before. Returns 0 when the
+     * product isn't sold loose (pack size ≤ 1 or no carton price) and no override is set.
+     */
+    public static function piecePrice(?float $override, float $cartonPrice, int $packSize, float $markupPct, int $dec): float
+    {
+        if ($override !== null && $override > 0) {
+            return round($override, $dec);
+        }
+        return self::loosePrice($cartonPrice, $packSize, $markupPct, $dec);
+    }
 }

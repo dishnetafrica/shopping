@@ -1120,7 +1120,7 @@ class StorefrontController extends Controller
                 ->orderByDesc('display_order')->orderBy('name')
                 ->toBase()
                 ->get(array_merge(
-                    ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at', 'sku',
+                    ['id', 'name', 'description', 'category', 'brand', 'keywords', 'base_price', 'price', 'piece_price', 'stock', 'image_url', 'display_order', 'moq', 'pack_size', 'unit_label', 'popularity', 'created_at', 'sku',
                      'gallery_1', 'gallery_2', 'gallery_3'],
                     // v4.7.7 column — guarded so the feed keeps serving if the migration hasn't run yet.
                     \Illuminate\Support\Facades\Schema::hasColumn('products', 'oem_number') ? ['oem_number'] : []
@@ -1136,6 +1136,8 @@ class StorefrontController extends Controller
                         'OEM'          => (string) ($p->oem_number ?? ''),   // v4.7.7 — real part-number chip + diagram cross-links
                         'SKU'          => (string) ($p->sku ?? ''),          // v4.8 — searchable + shown on cards
                         'Price_UGX'    => (float) ($p->price ?? $p->base_price ?? 0),   // price = selling truth (price-drift fix 2026-07-18)
+                        // Explicit per-piece retail override (loose selling). Null = derive from carton÷pack×markup.
+                        'PiecePrice'   => $p->piece_price === null ? null : (float) $p->piece_price,
                         // v5.05 (launch audit P0-2) — `products.stock` is a TYPED column that no sale
                         // decrements. Nothing on the order path writes it; new products are seeded at
                         // 100. The shop's own Juba Stock screen derives real stock from purchase and
@@ -1327,7 +1329,7 @@ class StorefrontController extends Controller
             $rows = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)
                 ->where('active', true)->whereNull('archived_at')
-                ->get(['id', 'name', 'price', 'base_price', 'moq', 'pack_size']);
+                ->get(['id', 'name', 'price', 'piece_price', 'base_price', 'moq', 'pack_size']);
             foreach ($rows as $p) {
                 $k = $this->cartKey((string) $p->name);
                 if ($k === '' || isset($byName[$k])) continue;      // first wins; duplicates are a data fault
@@ -1361,7 +1363,9 @@ class StorefrontController extends Controller
             $pack  = (int) ($p->pack_size ?? 0);
             $loose = $looseOn && ! empty($it['loose']) && $pack > 1 && $price > 0;
             if ($loose) {
-                $price = round(($price / $pack) * (1 + $loosePct / 100), 2);
+                // Explicit per-product piece price wins; otherwise carton price ÷ pack × (1 + markup).
+                $override = isset($p->piece_price) && $p->piece_price !== null ? (float) $p->piece_price : null;
+                $price = \App\Services\Pricing::piecePrice($override, $price, $pack, $loosePct, 2);
             } else {
                 $moq = (int) ($p->moq ?? 0);
                 if ($moq > 1 && $qty < $moq) $qty = $moq;

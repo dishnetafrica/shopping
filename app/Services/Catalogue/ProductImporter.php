@@ -45,6 +45,7 @@ class ProductImporter
         'active'     => ['active', 'enabled', 'status'],
         'moq'        => ['moq', 'min order', 'minimum order', 'min qty', 'minimum qty', 'min order qty'],
         'pack_size'  => ['pack size', 'packsize', 'pack', 'units per pack', 'pcs per carton', 'pcs in ctn', 'pcs in carton', 'pieces per pack'],
+        'piece_price'=> ['piece price', 'pieceprice', 'price per piece', 'per piece', 'per piece price', 'per pc', 'per pc price', 'pc price', 'retail piece', 'unit price'],
         'unit_label' => ['unit', 'selling unit', 'uom', 'pack unit', 'sold as'],
         // v4.28 — brand was missing entirely, so a supplier sheet with a Brand column lost it.
         'brand'      => ['brand', 'make', 'manufacturer'],
@@ -108,6 +109,7 @@ class ProductImporter
                 'active'     => $get('active') === '' ? true : $this->bool($get('active')),
                 'moq'        => $get('moq') !== '' ? max(1, (int) $this->num($get('moq'))) : null,
                 'pack_size'  => $get('pack_size') !== '' ? max(1, (int) $this->num($get('pack_size'))) : null,
+                'piece_price'=> ($get('piece_price') !== '' && $this->num($get('piece_price')) > 0) ? $this->num($get('piece_price')) : null,
                 'unit_label' => $get('unit_label') ?: null,
                 'brand'      => $get('brand') ?: null,
             ];
@@ -117,6 +119,9 @@ class ProductImporter
             // the table does not have — it would hard-fail the whole import, not skip one field.
             if (! \Illuminate\Support\Facades\Schema::hasColumn('products', 'cost_price')) {
                 unset($row['cost_price']);
+            }
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('products', 'piece_price')) {
+                unset($row['piece_price']);
             }
             // v5.06 — TRUNCATE, like name (255) and description (1000) above.
             //
@@ -157,6 +162,7 @@ class ProductImporter
                     if ($get('active') !== '')    $upd['active']    = $row['active'];
                     if ($get('moq') !== '')       $upd['moq']       = $row['moq'];
                     if ($get('pack_size') !== '') $upd['pack_size'] = $row['pack_size'];
+                    if ($get('piece_price') !== '' && array_key_exists('piece_price', $row)) $upd['piece_price'] = $row['piece_price'];
                     $existing->update($upd);
                     $updated++;
                 } else { Product::create($row); $created++; }

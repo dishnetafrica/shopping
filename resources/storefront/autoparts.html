@@ -671,7 +671,7 @@ function money(n){ n=Number(n)||0;
 var LOOSE_SEL = {};   // part id -> true when the shopper picked "Per piece" on that part's page
 function packOf(p){ var k=p&&Number(p.pack); return (k&&k>1)?k:0; }
 function looseOk(p){ return !!CFG.looseEnabled && packOf(p)>0 && !!(p&&p.price>0) && !STATE.dealer && dlrPrice(p)==null; }
-function loosePc(p){ var k=packOf(p); return k>0 ? Math.round((p.price/k)*(1+(Number(CFG.looseMarkupPct)||20)/100)*100)/100 : (p?p.price:0); }
+function loosePc(p){ if(p&&p.piece!=null&&Number(p.piece)>0){ return Math.round(Number(p.piece)*100)/100; } var k=packOf(p); return k>0 ? Math.round((p.price/k)*(1+(Number(CFG.looseMarkupPct)||20)/100)*100)/100 : (p?p.price:0); }
 // Per-piece is the DEFAULT for an eligible part (retail-first): undefined = piece, an explicit
 // false = the shopper chose carton. Carton stays one tap away.
 function pieceMode(p){ if(!looseOk(p)) return false; var v=LOOSE_SEL[String(p.id)]; return v===undefined ? true : !!v; }
@@ -1067,6 +1067,7 @@ function normalize(json){
       popularity: p.Popularity||0,
       desc: p.Description||p.description||'',
       pack: (p.PackSize!=null?p.PackSize:(p.pack_size!=null?p.pack_size:(p.pack!=null?p.pack:null))),
+      piece: (p.PiecePrice!=null?p.PiecePrice:(p.piece_price!=null?p.piece_price:null)),
       unit: (p.Unit||p.unit||p.unit_label||'')
     };
   }).filter(function(p){return p.name;});

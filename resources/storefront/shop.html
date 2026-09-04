@@ -1899,7 +1899,7 @@ function setWMode(on){WMODE=!!on;WMODE_SET=true;try{localStorage.setItem(WMODE_K
    enabled it, the shopper is in Single-unit view, and the item is genuinely carton-packed. */
 function packOf(p){ return (p&&(Number(p.packSize)||Number(p.pack_size)))|0; }
 function looseActive(p){ return LOOSE_ON && !WMODE && packOf(p)>1; }
-function loosePrice(p){ var ps=packOf(p); return ps>1 ? Math.round((p.price/ps)*(1+LOOSE_PCT/100)*100)/100 : (p.price||0); }
+function loosePrice(p){ if(p&&p.piecePrice!=null&&Number(p.piecePrice)>0){ return Math.round(Number(p.piecePrice)*100)/100; } var ps=packOf(p); return ps>1 ? Math.round((p.price/ps)*(1+LOOSE_PCT/100)*100)/100 : (p.price||0); }
 /* One place that turns a product into a fresh cart line, honouring loose mode. The server
    reprices from the loose flag; price here is for the cart display only. A loose line carries
    a distinct display label and starts at 1 piece (the carton MOQ does not apply). */
@@ -2200,6 +2200,7 @@ function mapProduct(row){
     modifiers:Array.isArray(row.Modifiers)?row.Modifiers:[],
     moq:(row.MOQ===null||row.MOQ===undefined||row.MOQ==='')?1:Math.max(1,parseInt(row.MOQ,10)||1),
     packSize:(row.PackSize===null||row.PackSize===undefined||row.PackSize==='')?0:(parseInt(row.PackSize,10)||0),
+    piecePrice:(row.PiecePrice===null||row.PiecePrice===undefined||row.PiecePrice==='')?null:num(row.PiecePrice),
     unit:String(row.Unit||'').trim(),
     popularity:num(row.Popularity), createdAt:Number(row.Created)||0,
     image:String(row.Image||row.Photo||row.Image_URL||row['Image URL']||'')};
