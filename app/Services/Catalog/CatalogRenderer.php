@@ -268,6 +268,7 @@ final class CatalogRenderer
                     'moq' => $p->moq ? (int) $p->moq : null,
                     'price' => (float) $p->price,
                     'pack' => (int) ($p->pack_size ?? 0),          // per-piece (loose) pricing on the card
+                    'piece' => $p->piece_price !== null ? (float) $p->piece_price : null,   // explicit per-piece retail override
                     'sku' => (string) ($p->sku ?: ''),
                     'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7 — manufacturer part no. (mechanics order by this)
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7 — powers the per-card "Fits" line
@@ -341,6 +342,7 @@ final class CatalogRenderer
                     'moq' => $p->moq ? (int) $p->moq : null,
                     'price' => (float) $p->price,
                     'pack' => (int) ($p->pack_size ?? 0),          // per-piece (loose) pricing on the card
+                    'piece' => $p->piece_price !== null ? (float) $p->piece_price : null,   // explicit per-piece retail override
                     'sku' => (string) ($p->sku ?: ''),
                     'oem' => (string) ($p->oem_number ?? ''),      // v4.7.7
                     'brand' => (string) ($p->brand ?? ''),         // v4.7.7
@@ -2045,9 +2047,10 @@ HTML;
 
                 // Per-piece (loose) price — same gate & formula as the bot quote / storefront.
                 $pack = (int) ($it['pack'] ?? 0);
-                $isLoose = ! empty($ctx['loose']) && $pack > 1 && (float) $it['price'] > 0;
+                $pieceOverride = isset($it['piece']) && $it['piece'] !== null ? (float) $it['piece'] : null;
+                $isLoose = ! empty($ctx['loose']) && (($pieceOverride ?? 0) > 0 || ($pack > 1 && (float) $it['price'] > 0));
                 if ($isLoose) {
-                    $pp = \App\Services\Pricing::loosePrice((float) $it['price'], $pack, (float) ($ctx['loosePct'] ?? 20), \App\Services\Pricing::decimalsForCurrency($currency));
+                    $pp = \App\Services\Pricing::piecePrice($pieceOverride, (float) $it['price'], $pack, (float) ($ctx['loosePct'] ?? 20), \App\Services\Pricing::decimalsForCurrency($currency));
                     [$pbig, $psmall] = $this->moneyParts($pp, $currency);
                     $pcMain = $pbig . ($psmall !== '' ? ' <span class="prc">' . e($psmall) . '</span>' : '') . ' <span class="prc">/pc</span>';
                 }

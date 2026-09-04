@@ -21,7 +21,7 @@ final class CatalogExport
      * on every product. New columns are appended at the END so an existing spreadsheet
      * template keeps working; the importer matches on header name, not position.
      */
-    private const HEADERS = ['Product Name', 'Category', 'Price UGX', 'Cost', 'Stock', 'SKU', 'Keywords', 'Unit', 'Pack Size', 'MOQ', 'Image', 'Brand', 'Size', 'Origin', 'Barcode', 'Description'];
+    private const HEADERS = ['Product Name', 'Category', 'Price UGX', 'Cost', 'Stock', 'SKU', 'Keywords', 'Unit', 'Pack Size', 'Piece Price', 'MOQ', 'Image', 'Brand', 'Size', 'Origin', 'Barcode', 'Description'];
 
     /**
      * v4.37 — the price header now names the currency the numbers are actually in.
@@ -74,6 +74,7 @@ final class CatalogExport
                 (string) ($p->keywords ?: ''),
                 (string) ($p->unit_label ?: ''),
                 $p->pack_size !== null ? (string) (0 + $p->pack_size) : '',
+                ($p->piece_price !== null && (0 + $p->piece_price) > 0) ? (string) (0 + $p->piece_price) : '',
                 $p->moq !== null ? (string) (0 + $p->moq) : '',
                 $img,
                 (string) ($p->brand ?: ''),

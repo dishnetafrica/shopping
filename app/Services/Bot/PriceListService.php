@@ -105,8 +105,9 @@ class PriceListService
                 : '<i style="color:#888">On request</i>';
             // When sold loose, show the per-piece price beneath the carton price so a customer
             // ordering one piece sees what it costs (the carton price stays as the reference).
-            if ($looseOn && (int) $p->pack_size > 1 && (float) $p->price > 0) {
-                $pp = \App\Services\Pricing::loosePrice((float) $p->price, (int) $p->pack_size, $loosePct, $dec);
+            $pieceOverride = isset($p->piece_price) && $p->piece_price !== null ? (float) $p->piece_price : null;
+            if ($looseOn && (($pieceOverride ?? 0) > 0 || ((int) $p->pack_size > 1 && (float) $p->price > 0))) {
+                $pp = \App\Services\Pricing::piecePrice($pieceOverride, (float) $p->price, (int) $p->pack_size, $loosePct, $dec);
                 $price .= '<br><span style="color:#666;font-size:10px">' . $cur . ' ' . number_format($pp, $dec) . ' / piece</span>';
             }
             $moq = ((int) $p->moq > 0) ? (int) $p->moq . ' ' . e((string) ($p->unit_label ?: '')) : '—';

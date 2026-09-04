@@ -139,7 +139,8 @@ class OrderCalculator
             $loose = $looseOn && ! empty($it['loose']) && $pack > 1 && $price > 0
                      && ! ($grams > 0 && ! empty($p['sold_by_weight'])) && ! $isDealerLine;
             if ($loose) {
-                $price = \App\Services\Pricing::loosePrice($price, $pack, $loosePct, $dec);
+                $override = isset($p['piece_price']) && $p['piece_price'] !== null ? (float) $p['piece_price'] : null;
+                $price = \App\Services\Pricing::piecePrice($override, $price, $pack, $loosePct, $dec);
             }
 
             // MOQ enforcement — bot/customer quotes only (the POS trusted-price branch above is exempt,
@@ -233,6 +234,7 @@ class OrderCalculator
                     'category' => (string) ($p->category ?? ''), 'keywords' => (string) ($p->keywords ?? ''),
                     'unit_label' => (string) ($p->unit_label ?? ''), 'moq' => $p->moq ? (int) $p->moq : null,
                     'pack_size' => $p->pack_size ? (int) $p->pack_size : 0,
+                    'piece_price' => isset($p->piece_price) && $p->piece_price !== null ? (float) $p->piece_price : null,   // explicit per-piece retail override
                     // On-hand (home cache) — feeds the matcher's in-stock ranking bonus (until now the
                     // field was never supplied, so that bonus was dead) and lets bot quotes skip items
                     // we don't actually have.

@@ -35,6 +35,7 @@ final class ProductWriteService
             'stock'      => (int) ($d['stock'] ?? 0),
             'moq'        => isset($d['moq']) && $d['moq'] !== '' ? max(1, (int) $d['moq']) : null,
             'pack_size'  => isset($d['pack_size']) && $d['pack_size'] !== '' ? max(1, (int) $d['pack_size']) : null,
+            'piece_price' => isset($d['piece_price']) && $d['piece_price'] !== '' && (float) $d['piece_price'] > 0 ? (float) $d['piece_price'] : null,
             'reorder_point' => isset($d['reorder_point']) && $d['reorder_point'] !== '' ? max(0, (int) $d['reorder_point']) : null,
             'unit_label' => trim((string) ($d['unit_label'] ?? '')) ?: null,
             'active'     => true,
@@ -150,6 +151,11 @@ final class ProductWriteService
         }
         if (array_key_exists('pack_size', $d)) {
             $p->pack_size = $d['pack_size'] === '' || $d['pack_size'] === null ? null : max(1, (int) $d['pack_size']);
+        }
+        // Explicit per-piece retail price. A blank field CLEARS it (back to auto from pack×markup);
+        // a non-positive value is treated as clear too. Guarded on the column so an older DB is safe.
+        if (array_key_exists('piece_price', $d) && \Illuminate\Support\Facades\Schema::hasColumn('products', 'piece_price')) {
+            $p->piece_price = ($d['piece_price'] === '' || $d['piece_price'] === null || (float) $d['piece_price'] <= 0) ? null : (float) $d['piece_price'];
         }
         if (array_key_exists('reorder_point', $d)) {
             // 0 is a legitimate floor ("only reorder once genuinely out"), so it is kept, not nulled —
