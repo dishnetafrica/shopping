@@ -204,6 +204,20 @@ final class ProductCapability implements ObjectCapability
         if ($p->pack_size !== null) {
             $fins[] = new Financial('pack', 'Pack size', (int) $p->pack_size);
         }
+        // Per-piece (retail) price — mirrors what the storefront shows, so the owner sees the single-piece
+        // price right here. Uses the explicit piece_price when set, else the derived carton÷pack×markup.
+        if ((bool) $ctx->tenant->setting('loose_enabled', false) && $p->pack_size !== null && (int) $p->pack_size > 1 && (float) $price > 0) {
+            $pct = (float) $ctx->tenant->setting('loose_markup_pct', 20);
+            $pdec = \App\Services\Pricing::decimalsForCurrency((string) $cur);
+            $override = $p->piece_price !== null && (float) $p->piece_price > 0 ? (float) $p->piece_price : null;
+            $pp = \App\Services\Pricing::piecePrice($override, (float) $price, (int) $p->pack_size, $pct, $pdec);
+            $fins[] = [
+                'key' => 'piece', 'label' => 'Per piece' . ($override !== null ? ' (set)' : ' (auto)'), 'value' => $pp, 'currency' => (string) $cur, 'tone' => 'ok',
+                'foot' => $override !== null
+                    ? 'retail — set for this product'
+                    : ('retail — auto (carton ÷ ' . (int) $p->pack_size . ' + ' . rtrim(rtrim(number_format($pct, 2), '0'), '.') . '%)'),
+            ];
+        }
 
         // v4.64 — where this stock came from. `order_costs` has carried `product_id`, `qty` and
         // `unit_cost` on every Buy stock line since that form was built, and the product record has
