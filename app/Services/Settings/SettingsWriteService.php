@@ -212,6 +212,29 @@ final class SettingsWriteService
             }
         }
 
+        // Custom domain lives on the tenant ROW (the column routing matches on), not the settings JSON.
+        // Same normalisation + validation + duplicate guard as the legacy panel writer, so V3 owns it too.
+        if (array_key_exists('custom_domain', $input)) {
+            $d = strtolower(trim((string) $input['custom_domain']));
+            $d = preg_replace('#^https?://#', '', $d);   // drop scheme
+            $d = preg_replace('#/.*$#', '', $d);          // drop any path
+            $d = preg_replace('/^www\./', '', $d);        // normalise www.
+            $d = trim((string) $d);
+            if ($d === '') {
+                if ($tenant->custom_domain !== null && $tenant->custom_domain !== '') {
+                    $tenant->custom_domain = null;
+                    $changed[] = 'custom domain cleared';
+                }
+            } elseif (! preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/', $d)) {
+                return ['ok' => false, 'error' => 'bad_domain', 'message' => 'Enter a valid domain like gslafrica.net — no https://, no path.'];
+            } elseif (Tenant::where('custom_domain', $d)->where('id', '!=', $tenant->id)->exists()) {
+                return ['ok' => false, 'error' => 'domain_taken', 'message' => 'That domain is already used by another shop.'];
+            } elseif ((string) $tenant->custom_domain !== $d) {
+                $tenant->custom_domain = $d;
+                $changed[] = 'custom domain → ' . $d;
+            }
+        }
+
         // Base currency (rateable only).
         $base = strtoupper(trim((string) ($input['base_currency'] ?? '')));
         if ($base !== '') {

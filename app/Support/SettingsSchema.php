@@ -324,9 +324,11 @@ final class SettingsSchema
                     ['key' => 'sf_diagrams', 'type' => 'bool', 'label' => 'Show exploded diagrams', 'default' => false, 'help' => 'OFF hides diagrams everywhere (menu, search tab, product & model links). Turn ON only when you have real diagram plates for your catalogue.'],
                 ]],
                 // v4.6.1 — which host goes into links the system SENDS (quotation review, order tracking).
-                ['label' => 'Custom domain', 'help' => 'Which web address customers see in WhatsApp links (quotation review, order tracking).', 'fields' => [
+                ['label' => 'Custom domain', 'help' => 'Serve your shop on your own web address, and use it in the links customers see (quotation review, order tracking).', 'fields' => [
+                    ['key' => 'custom_domain', 'type' => 'text', 'label' => 'Your domain', 'placeholder' => 'gslafrica.net',
+                     'help' => 'Enter your domain with no https:// and no path (e.g. gslafrica.net). Point its DNS A-record at CloudBSS first; HTTPS is issued automatically. Once saved, your shop opens at that address. Leave blank to use the platform address.'],
                     ['key' => 'custom_domain_live', 'type' => 'bool', 'label' => 'My own domain points to CloudBSS', 'default' => false,
-                     'help' => 'Turn ON only after your domain (e.g. familyshoppers.net) is actually connected to CloudBSS hosting — links will then use it. While OFF, links use the platform address, which always works. If your domain hosts a separate website, keep this OFF or every sent link breaks.'],
+                     'help' => 'Turn ON only after your domain (e.g. familyshoppers.net) is actually connected to CloudBSS hosting — sent links will then use it. While OFF, links use the platform address, which always works. If your domain hosts a separate website, keep this OFF or every sent link breaks.'],
                 ]],
                 ['label' => 'Trust & delivery promises', 'only' => ['auto_parts'], 'help' => 'Shown on your product pages and homepage to reassure customers before they buy. Leave blank to use sensible defaults.', 'fields' => [
                     ['key' => 'sf_genuine',      'type' => 'text', 'label' => 'Genuine-parts promise', 'help' => 'e.g. 100% genuine Bajaj — verify the hologram, or your money back.'],
