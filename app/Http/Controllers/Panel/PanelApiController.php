@@ -7476,6 +7476,7 @@ class PanelApiController extends Controller
             $def = $f['default'] ?? '';
             switch ($k) {
                 case 'business_name':        return (string) $t->name;
+                case 'custom_domain':        return (string) ($t->custom_domain ?? '');
                 case 'base_currency':        return \App\Services\Money\SalesBaseCurrency::baseCurrency($t);
                 case 'report_currency_mode': return (string) ($t->setting('report_currency_mode', 'base') ?: 'base');
                 case 'rate_ugx_per_usd':     return (int) round($fx->ratePerUsd('UGX') ?: 0);
