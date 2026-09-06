@@ -441,11 +441,34 @@ class InvoiceController extends Controller
         if (! $this->priv($u)) return response()->json(['ok' => false, 'error' => 'not_allowed'], 403);
         $inv = Invoice::where('tenant_id', $t->id)->find((int) $request->input('id'));
         if (! $inv) return response()->json(['ok' => false, 'error' => 'not_found'], 404);
+        // Idempotent: an already-void invoice must not run the restock a second time.
+        if ((string) $inv->status === 'void') {
+            return response()->json(['ok' => true, 'already' => true]);
+        }
         $inv->status = 'void';
         $inv->save();
         // Drop the cached PDF so a re-download shows the VOID state.
         try { if ($inv->pdf_path) Storage::disk('public')->delete($inv->pdf_path); } catch (\Throwable $e) {}
         $inv->pdf_path = null; $inv->save();
+
+        // Return the goods to stock: voiding an invoice reverses the sale, so the delivered stock goes
+        // back on the shelf. Routed through the ONE stock writer via the existing idempotent reversal
+        // (OrderStockIssuer::reverseForOrder reverses only the NET-outstanding issued qty for the order),
+        // so a double-void can never double-restock. The manual "backfill stock" tool skips voided orders,
+        // so it can never re-deduct what a void returned. Gated on ledger inventory being active AND the
+        // stock_return_on_void setting (default on); best-effort so a stock hiccup never blocks the void.
+        try {
+            if ($inv->order_id && (bool) $t->setting('stock_return_on_void', true)
+                && \App\Services\Inventory\OrderStockIssuer::active($t)) {
+                $order = \App\Models\Order::where('tenant_id', $t->id)->find((int) $inv->order_id);
+                if ($order) {
+                    app(\App\Services\Inventory\OrderStockIssuer::class)->reverseForOrder($t, $order);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('invoice void restock failed: ' . $e->getMessage());
+        }
+
         return response()->json(['ok' => true]);
     }
 }
