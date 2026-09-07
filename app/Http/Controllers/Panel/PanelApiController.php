@@ -6602,9 +6602,13 @@ class PanelApiController extends Controller
             $unresolvedHere = $hasItems && $lineCount === 0;
             if ($unresolvedHere) $unresolved++;
             $linesTotal += $lineCount;
+            // Never re-issue an order whose invoice was voided — the void already returned its stock,
+            // so issuing here would silently deduct it a second time.
+            $voided = \App\Models\Invoice::where('tenant_id', $t->id)->where('order_id', $o->id)->where('status', 'void')->exists();
             $rows[] = ['order' => (string) $o->order_no, 'status' => (string) $o->status, 'lines' => $lineCount,
                 'sample' => implode('; ', array_map(fn ($l) => $l['name'] . ' x' . rtrim(rtrim(number_format($l['qty'], 2, '.', ''), '0'), '.'), array_slice($lines, 0, 3))),
-                'unresolved' => $unresolvedHere, 'action' => $commit && $active ? 'issued' : ($active ? 'would issue' : 'dormant')];
+                'unresolved' => $unresolvedHere, 'action' => $voided ? 'skipped (invoice void)' : ($commit && $active ? 'issued' : ($active ? 'would issue' : 'dormant'))];
+            if ($voided) { continue; }
             if ($commit && $active) { try { $issued += $issuer->issueForOrder($t, $o); } catch (\Throwable $e) {} }
         }
 
