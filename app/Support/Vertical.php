@@ -24,8 +24,9 @@ class Vertical
     public const MANUFACTURER = 'manufacturer';
     public const SOLAR      = 'solar';           // Asset Lifecycle — equipment dealers (solar, generators, HVAC…)
     public const AUTO_PARTS = 'auto_parts';       // EPC catalogue — motorcycle / auto spare-parts dealers
+    public const TECHNOLOGY = 'technology';       // Software / IT / cybersecurity / networking resellers (B2B + B2C)
 
-    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS];
+    public const ALL = [self::GROCERY, self::RESTAURANT, self::SNACKS, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS, self::TECHNOLOGY];
 
     /**
      * feature key => list of verticals where it is shown BY DEFAULT.
@@ -37,8 +38,8 @@ class Vertical
         'item_options'  => [self::RESTAURANT],
         'kitchen_board' => [self::RESTAURANT],
         'daily_thali'   => [self::SNACKS],
-        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS],
-        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS],
+        'riders'        => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS, self::TECHNOLOGY],
+        'pos'           => [self::GROCERY, self::RESTAURANT, self::MANUFACTURER, self::SOLAR, self::AUTO_PARTS, self::TECHNOLOGY],
     ];
 
     /** Pretty labels for the admin select. */
@@ -49,6 +50,7 @@ class Vertical
         self::MANUFACTURER => 'Manufacturer / wholesale brand',
         self::SOLAR        => 'Solar / equipment',
         self::AUTO_PARTS   => 'Auto Parts / EPC catalogue',
+        self::TECHNOLOGY   => 'Technology / IT / Software & Security',
     ];
 
     /**

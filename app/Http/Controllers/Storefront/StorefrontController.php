@@ -67,6 +67,7 @@ class StorefrontController extends Controller
         $tenant = Tenant::byCustomDomain(request()->getHost());
         if ($tenant && ($tenant->status ?? 'active') !== 'suspended') {
             app(TenantContext::class)->set($tenant->id);
+            if ($this->technologyEnabled($tenant)) { return $this->technology('', $tenant, ''); }   // TECHNOLOGY
             if ($this->autoPartsEnabled($tenant)) { return $this->autoParts('', $tenant, ''); } // AUTO_PARTS
             return $this->brandSiteEnabled($tenant) ? $this->brand('', $tenant, '') : $this->renderShop($tenant, '');
         }
@@ -435,6 +436,7 @@ class StorefrontController extends Controller
     public function landing(?string $shop = null)
     {
         [$tenant, $base] = $this->resolveShop($shop);
+        if ($this->technologyEnabled($tenant)) { return $this->technology($shop, $tenant, $base); }   // TECHNOLOGY
         if ($this->autoPartsEnabled($tenant)) { return $this->autoParts($shop, $tenant, $base); } // AUTO_PARTS
         return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant, $base) : $this->renderShop($tenant, $base);
     }
@@ -487,6 +489,108 @@ class StorefrontController extends Controller
         return \App\Support\Vertical::of($tenant) === \App\Support\Vertical::AUTO_PARTS;
     }
     // <<< AUTO_PARTS
+
+    // >>> TECHNOLOGY
+    /**
+     * Is this tenant on the technology storefront?
+     *
+     * Mirrors brandSiteEnabled()/autoPartsEnabled() exactly: an explicit `technology_site`
+     * setting wins, otherwise it follows the tenant's vertical. Both halves are false for
+     * every tenant that has not opted in, so no existing shop's render can change — a
+     * grocery/restaurant/manufacturer/solar/auto-parts tenant never reaches this template.
+     */
+    private function technologyEnabled($tenant): bool
+    {
+        $flag = $tenant->setting('technology_site', null);
+        if ($flag !== null && $flag !== '') return filter_var($flag, FILTER_VALIDATE_BOOLEAN);
+
+        return \App\Support\Vertical::of($tenant) === \App\Support\Vertical::TECHNOLOGY;
+    }
+
+    /**
+     * Technology storefront — software, IT hardware, cybersecurity and networking.
+     *
+     * Reuses the existing machinery wholesale: the catalogue feed (/catalogue), the order
+     * endpoint (/order), the quote endpoint (/quote), tenant resolution, FX/currency, the
+     * product-visibility scope and the SEO helpers. The only new thing is presentation,
+     * and every part of it is resolved from tenant settings by App\Support\TechTheme —
+     * no tenant name, colour, logo, phone number, category or brand is hardcoded here.
+     */
+    public function technology(?string $shop = null, $tenant = null, ?string $base = null)
+    {
+        if ($tenant === null) { [$tenant, $base] = $this->resolveShop($shop); }
+        if ($base === null)   { $base = '/' . (string) $tenant->slug; }
+
+        $settings = is_array($tenant->settings) ? $tenant->settings : [];
+
+        $cfg = \App\Support\TechTheme::build($settings, [
+            'name'         => (string) $tenant->name,
+            'initials'     => $this->initials((string) $tenant->name),
+            'base'         => $base,
+            'currency'     => $this->currency($tenant),
+            'waNumber'     => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
+            'logo'         => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
+            'favicon'      => $tenant->setting('favicon', '') ? $this->imageUrl((string) $tenant->setting('favicon', '')) : '',
+            'catalogueUrl' => $base . '/catalogue',
+            'orderUrl'     => $base . '/order',
+            'quoteUrl'     => $base . '/quote',
+            'shopUrl'      => $base . '/shop',
+            'url'          => $base === '' ? url('/') : url($base),
+        ]);
+
+        // ---- SEO: server-rendered so crawlers and link previews read real bytes ----
+        $seo   = \App\Support\TechTheme::seo($settings, (string) $tenant->name);
+        $title = $seo['title'];
+        $desc  = $seo['description'];
+        $url   = $base === '' ? url('/') : url($base);
+        $logo  = $cfg['logo'];
+
+        $org = array_filter([
+            '@context' => 'https://schema.org', '@type' => 'Organization',
+            'name' => (string) $tenant->name, 'url' => $url, 'logo' => $logo ?: null,
+            'telephone' => $cfg['contact']['phones'][0] ?? null,
+            'email'     => $cfg['contact']['emails'][0] ?? null,
+            'address'   => $cfg['contact']['address']
+                ? ['@type' => 'PostalAddress', 'streetAddress' => $cfg['contact']['address']] : null,
+        ]);
+
+        $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG;  // HEX_TAG: a tenant field can't break out of the script
+
+        $metaParts = [
+            '<meta name="description" content="' . e($desc) . '">',
+            '<meta name="robots" content="index,follow">',
+            '<link rel="canonical" href="' . e($url) . '">',
+            '<meta property="og:type" content="website">',
+            '<meta property="og:site_name" content="' . e((string) $tenant->name) . '">',
+            '<meta property="og:title" content="' . e($title) . '">',
+            '<meta property="og:description" content="' . e($desc) . '">',
+            '<meta property="og:url" content="' . e($url) . '">',
+            $logo !== '' ? '<meta property="og:image" content="' . e($logo) . '">' : '',
+            '<meta name="twitter:card" content="summary_large_image">',
+            '<script type="application/ld+json">' . json_encode($org, $jf) . '</script>',
+        ];
+        if ($cfg['faq']) {
+            $metaParts[] = '<script type="application/ld+json">' . json_encode([
+                '@context' => 'https://schema.org', '@type' => 'FAQPage',
+                'mainEntity' => array_map(fn ($f) => [
+                    '@type' => 'Question', 'name' => $f['q'],
+                    'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f['a']],
+                ], $cfg['faq']),
+            ], $jf) . '</script>';
+        }
+        $meta = implode("\n", array_filter($metaParts));
+
+        $path = resource_path('storefront/technology.html');
+        $html = is_file($path) ? file_get_contents($path) : '<h1>Storefront unavailable</h1>';
+
+        $html = str_replace('__SEO_TITLE__',   e($title), $html);
+        $html = str_replace('__SEO_META__',    $meta, $html);
+        $html = str_replace('__TECH_CONFIG__', json_encode($cfg, $jf), $html);
+        $html = str_replace('__OPEN_PRODUCT__', '0', $html);
+
+        return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+    // <<< TECHNOLOGY
 
     /** Manufacturer brand site — content from tenant settings with sensible defaults. */
     public function brand(?string $shop = null, $tenant = null, ?string $base = null)
