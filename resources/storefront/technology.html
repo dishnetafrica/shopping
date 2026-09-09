@@ -8,8 +8,11 @@ __SEO_META__
 <style>
 /* ===========================================================================
    ShopBot technology storefront.
-   Every colour, font, radius and section comes from __TECH_CONFIG__ (see
-   App\Support\TechTheme) — this file contains NO tenant-specific value.
+   Every colour, font, radius and section comes from the injected TECH config
+   (see App\Support\TechTheme) — this file contains NO tenant-specific value.
+   NOTE: the config placeholder token is intentionally not written literally
+   here; the server replaces every occurrence, so the doc comment must not
+   contain it or the whole JSON blob lands inside this CSS comment.
    =========================================================================== */
 :root{
   --accent:#1F6FEB; --accent-d:#1652B8; --on-accent:#fff;
