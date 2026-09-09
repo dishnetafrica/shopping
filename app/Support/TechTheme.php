@@ -107,28 +107,19 @@ final class TechTheme
 
         // ---- layout knobs ----------------------------------------------------------
         $layout = [
-            'headerStyle'  => in_array($get('tech.header_style', 'standard'), ['standard', 'compact', 'bold'], true)
-                ? (string) $get('tech.header_style', 'standard') : 'standard',
-            'cardStyle'    => in_array($get('tech.card_style', 'bordered'), ['bordered', 'elevated', 'flat'], true)
-                ? (string) $get('tech.card_style', 'bordered') : 'bordered',
-            'radius'       => (int) $get('tech.radius', 10),
-            'density'      => in_array($get('tech.density', 'comfortable'), ['comfortable', 'compact'], true)
-                ? (string) $get('tech.density', 'comfortable') : 'comfortable',
+            'headerStyle'  => self::oneOf($get('tech.header_style'), ['standard', 'compact', 'bold'], 'standard'),
+            'cardStyle'    => self::oneOf($get('tech.card_style'), ['bordered', 'elevated', 'flat'], 'bordered'),
+            'radius'       => max(0, min(28, (int) $get('tech.radius', 10))),
+            'density'      => self::oneOf($get('tech.density'), ['comfortable', 'compact'], 'comfortable'),
             'showMegaMenu' => (bool) $get('tech.mega_menu', true),
         ];
 
         // ---- section order ---------------------------------------------------------
-        $sections = $get('tech.sections', null);
-        if (! is_array($sections) || $sections === []) {
-            $sections = self::SECTIONS;
-        }
-        $sections = array_values(array_filter(
-            array_map(static fn ($x) => is_string($x) ? trim($x) : '', $sections),
-            static fn ($x) => in_array($x, self::SECTIONS, true)
-        ));
-        if ($sections === []) {
-            $sections = self::SECTIONS;
-        }
+        // A section entry is EITHER a built-in name (string) OR an inline block
+        // (object) — {type: rail|banner|newsletter|gallery, …}. That single ordered
+        // list is what lets a tenant reproduce an arbitrary landing page: hero,
+        // banner, rail, banner, rail, … in whatever order their old site used.
+        $sections = self::sectionList($get('tech.sections', null));
 
         // ---- hero ------------------------------------------------------------------
         $hero = [
@@ -254,6 +245,117 @@ final class TechTheme
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────────
+
+    /** Return $v when it is one of $allowed, else $default. Never touches an undefined key. */
+    private static function oneOf($v, array $allowed, string $default): string
+    {
+        $v = is_string($v) ? trim($v) : '';
+
+        return in_array($v, $allowed, true) ? $v : $default;
+    }
+
+    /** Block types that may appear inline in `tech.sections` as objects. */
+    public const BLOCK_TYPES = ['rail', 'banner', 'newsletter', 'gallery', 'html_free'];
+
+    /**
+     * Normalise the ordered section list. Strings must name a built-in section;
+     * objects must carry a known `type`. Anything else is dropped rather than
+     * fataling, so a malformed setting degrades to a shorter page, never a 500.
+     */
+    private static function sectionList($raw): array
+    {
+        if (! is_array($raw) || $raw === []) {
+            return self::SECTIONS;
+        }
+
+        $out = [];
+        foreach ($raw as $entry) {
+            if (is_string($entry)) {
+                $name = trim($entry);
+                if (in_array($name, self::SECTIONS, true)) {
+                    $out[] = $name;
+                }
+                continue;
+            }
+            if (is_array($entry)) {
+                $block = self::block($entry);
+                if ($block !== null) {
+                    $out[] = $block;
+                }
+            }
+        }
+
+        return $out === [] ? self::SECTIONS : $out;
+    }
+
+    /** Normalise one inline block. Returns null for an unknown/empty block. */
+    private static function block(array $b): ?array
+    {
+        $type = strtolower(trim((string) ($b['type'] ?? '')));
+        if (! in_array($type, self::BLOCK_TYPES, true)) {
+            return null;
+        }
+
+        if ($type === 'rail') {
+            $r = self::rail($b, (string) ($b['title'] ?? ''), (string) ($b['text'] ?? ''));
+            if ($r['title'] === '' && $r['categories'] === [] && $r['keywords'] === []) {
+                return null;
+            }
+            $r['type'] = 'rail';
+            $r['alt']  = (bool) ($b['alt'] ?? false);
+            $r['sort'] = self::oneOf($b['sort'] ?? null, ['new', 'popular', 'price_asc', 'price_desc'], '');
+            $r['brands'] = self::stringList($b['brands'] ?? []);
+            return $r;
+        }
+
+        if ($type === 'banner') {
+            $out = [
+                'type'    => 'banner',
+                'eyebrow' => (string) ($b['eyebrow'] ?? ''),
+                'title'   => (string) ($b['title'] ?? ''),
+                'text'    => (string) ($b['text'] ?? ''),
+                'image'   => (string) ($b['image'] ?? ''),
+                'cta'     => (string) ($b['cta'] ?? ''),
+                'href'    => (string) ($b['href'] ?? ''),
+                'align'   => self::oneOf($b['align'] ?? null, ['left', 'right', 'center'], 'left'),
+                'tone'    => self::oneOf($b['tone'] ?? null, ['light', 'dark', 'accent'], 'light'),
+            ];
+            return ($out['title'] === '' && $out['image'] === '') ? null : $out;
+        }
+
+        if ($type === 'newsletter') {
+            return [
+                'type'  => 'newsletter',
+                'title' => (string) ($b['title'] ?? ''),
+                'text'  => (string) ($b['text'] ?? ''),
+                'cta'   => (string) ($b['cta'] ?? 'Subscribe'),
+            ];
+        }
+
+        if ($type === 'gallery') {
+            $raw = $b['images'] ?? [];
+            if (! is_array($raw)) {          // a bare string must NOT become a 1-image gallery
+                return null;
+            }
+            $imgs = [];
+            foreach ($raw as $i) {
+                if (is_string($i) && trim($i) !== '') {
+                    $imgs[] = trim($i);
+                } elseif (is_array($i) && trim((string) ($i['src'] ?? '')) !== '') {
+                    $imgs[] = ['src' => (string) $i['src'], 'href' => (string) ($i['href'] ?? ''),
+                               'caption' => (string) ($i['caption'] ?? '')];
+                }
+            }
+            if ($imgs === []) {
+                return null;
+            }
+            return ['type' => 'gallery', 'title' => (string) ($b['title'] ?? ''),
+                    'text' => (string) ($b['text'] ?? ''), 'images' => $imgs];
+        }
+
+        return null;
+    }
+
 
     /** Normalise a list of associative rows, keeping only the named keys, as strings. */
     private static function rows($raw, array $keys): array

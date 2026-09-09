@@ -1,0 +1,809 @@
+{
+  "vertical": "technology",
+  "technology_site": true,
+  "tagline": "Software, Security & IT Infrastructure",
+  "meta_title": "Secure-Africa Solutions — Software, Security & IT Infrastructure",
+  "meta_description": "Genuine software licences, cybersecurity, networking hardware and IT infrastructure for businesses across East Africa. Business pricing and written quotations on request.",
+  "currency": "USD",
+  "currency_basis": "converted",
+  "theme_accent": "#353B41",
+  "theme_accent_dark": "#22262A",
+  "tech": {
+    "colors": {
+      "ink": "#000000",
+      "muted": "#484F56",
+      "ground": "#FFFFFF",
+      "surface": "#F9FAFB",
+      "line": "#DFE3E7",
+      "on_accent": "#FFFFFF"
+    },
+    "fonts": {
+      "display": "",
+      "body": "",
+      "stack": "\"Helvetica Neue\",Helvetica,Arial,sans-serif"
+    },
+    "header_style": "standard",
+    "card_style": "bordered",
+    "radius": 3,
+    "density": "compact",
+    "mega_menu": true,
+    "sections": [
+      "hero",
+      "trust_bar",
+      "categories",
+      "featured",
+      "software",
+      "hardware",
+      "networking",
+      "brands",
+      "solutions",
+      "services",
+      "new_arrivals",
+      "why_us",
+      "quote_cta",
+      "faq",
+      "contact_cta"
+    ],
+    "hero": {
+      "eyebrow": "Authorised software & IT supplier",
+      "title": "Licensed software and IT infrastructure for African business",
+      "text": "Antivirus and endpoint security, Microsoft and Google licensing, SSL certificates, firewalls, switches and voice hardware — supplied with the paperwork your auditors ask for.",
+      "cta_label": "Browse the catalogue",
+      "alt_label": "Request a quote",
+      "stats": [
+        {
+          "k": "173",
+          "l": "Products in catalogue"
+        },
+        {
+          "k": "16",
+          "l": "Vendor brands"
+        },
+        {
+          "k": "9",
+          "l": "Product categories"
+        }
+      ]
+    },
+    "trust": [
+      {
+        "icon": "shield",
+        "title": "Genuine licensing",
+        "text": "Authentic keys and activation codes"
+      },
+      {
+        "icon": "bolt",
+        "title": "Fast digital delivery",
+        "text": "Keys issued electronically after payment"
+      },
+      {
+        "icon": "quote",
+        "title": "Business quotations",
+        "text": "Written quotes for teams and tenders"
+      },
+      {
+        "icon": "truck",
+        "title": "Hardware delivery",
+        "text": "Timelines confirmed on order"
+      }
+    ],
+    "rails": {
+      "software": {
+        "title": "Software & Licensing",
+        "text": "Productivity, operating systems, virtualisation and certificates",
+        "categories": [
+          "Microsoft Productivity",
+          "Windows Server",
+          "VMware & Virtualization",
+          "Google Workspace",
+          "Windows Operating Systems",
+          "Adobe & PDF Tools",
+          "Digital Certificates (DV/OV/EV SSL)"
+        ],
+        "limit": 8
+      },
+      "hardware": {
+        "title": "Security & Infrastructure",
+        "text": "Endpoint protection, firewalls and managed detection",
+        "categories": [
+          "Security & Infrastructure"
+        ],
+        "limit": 8
+      },
+      "networking": {
+        "title": "Networking & Infrastructure",
+        "text": "Switches, firewalls, access points and voice",
+        "categories": [
+          "Network & Voice Hardware"
+        ],
+        "limit": 8
+      }
+    },
+    "featured_categories": [
+      "Security & Infrastructure",
+      "Network & Voice Hardware",
+      "Microsoft Productivity",
+      "Windows Server",
+      "VMware & Virtualization",
+      "Google Workspace",
+      "Windows Operating Systems",
+      "Adobe & PDF Tools",
+      "Digital Certificates (DV/OV/EV SSL)"
+    ],
+    "featured_brands": [
+      "Sophos",
+      "Microsoft",
+      "Yeaster",
+      "Ruijie",
+      "VMWare",
+      "Google",
+      "McAfee",
+      "Bitdefender",
+      "Adobe",
+      "Multi-Brand SSL",
+      "Avast",
+      "ESET",
+      "AVG",
+      "Clarivate",
+      "Fanvil",
+      "Nitro"
+    ],
+    "solutions": [
+      {
+        "icon": "shield",
+        "title": "Endpoint & server security",
+        "text": "Sophos, Bitdefender, ESET, McAfee, Avast and AVG licensing for workstations, servers and mobile fleets.",
+        "cta": "See security products",
+        "href": "cat:Security & Infrastructure"
+      },
+      {
+        "icon": "grid",
+        "title": "Productivity & cloud licensing",
+        "text": "Microsoft Office and Windows licensing, Google Workspace plans and Adobe subscriptions for teams.",
+        "cta": "See productivity",
+        "href": "cat:Microsoft Productivity"
+      },
+      {
+        "icon": "tag",
+        "title": "Certificates & web trust",
+        "text": "DV, OV and EV SSL certificates for public websites and internal services.",
+        "cta": "See certificates",
+        "href": "cat:Digital Certificates (DV/OV/EV SSL)"
+      },
+      {
+        "icon": "bolt",
+        "title": "Network & voice infrastructure",
+        "text": "Ruijie switching, Sophos firewalls, Fanvil and Yeastar voice hardware.",
+        "cta": "See networking",
+        "href": "cat:Network & Voice Hardware"
+      }
+    ],
+    "services": [
+      {
+        "icon": "quote",
+        "title": "Quotations & tenders",
+        "text": "Formal written quotations for procurement, including multi-line and multi-year requirements."
+      },
+      {
+        "icon": "chat",
+        "title": "Pre-sales advice",
+        "text": "Talk to us about seat counts, licence terms and sizing before you commit to a purchase."
+      },
+      {
+        "icon": "truck",
+        "title": "Supply & delivery",
+        "text": "Digital keys delivered electronically; hardware delivery timelines confirmed on order."
+      }
+    ],
+    "why_us": [
+      {
+        "icon": "shield",
+        "title": "Genuine, auditable licensing",
+        "text": "Licences are supplied with the activation details and documentation your IT audit will ask for."
+      },
+      {
+        "icon": "grid",
+        "title": "Software and hardware from one supplier",
+        "text": "Security, productivity, certificates, switching and voice — sourced together rather than from four vendors."
+      },
+      {
+        "icon": "quote",
+        "title": "Built for business buyers",
+        "text": "Quotations, purchase orders and staged delivery alongside ordinary online checkout."
+      },
+      {
+        "icon": "chat",
+        "title": "Reachable people",
+        "text": "Phone, email and WhatsApp support across Uganda, Kenya and the UAE."
+      }
+    ],
+    "copy": {
+      "search_hint": "Search software, security, networking or a part number",
+      "quote_cta_title": "Buying for a business or a tender?",
+      "quote_cta_text": "Send us your requirement — seat counts, licence terms, hardware quantities — and our team will return a written quotation.",
+      "footer_note": "Prices shown include applicable conversion; final pricing is confirmed on your order."
+    },
+    "contact": {
+      "phones": [
+        "+256 703 834 115",
+        "+971 52 677 5695",
+        "+256 752 656 594",
+        "+254 792 477520"
+      ],
+      "emails": [
+        "sales@secure-solutions.co",
+        "secureafricasolutions@gmail.com"
+      ],
+      "address": "P.O. Box 34069, Kampala, Uganda, East Africa"
+    },
+    "faq": [
+      {
+        "q": "How do I place an order?",
+        "a": "Simply browse our website, select your desired product, click “Add to Cart,” and proceed to checkout. After successful payment, you will receive order confirmation details via email."
+      },
+      {
+        "q": "How are digital products delivered?",
+        "a": "Digital products such as license keys, activation codes, and subscriptions are delivered electronically via email or on-screen confirmation after payment. Delivery is usually instant or within a short processing time."
+      },
+      {
+        "q": "Are digital products refundable?",
+        "a": "Digital products are generally non-refundable once delivered. Refunds may only be approved if the key was not delivered, the key is invalid and verified by our support team, or you were charged twice. Please refer to our Refund & Exchanges Policy for full details."
+      },
+      {
+        "q": "How long does hardware delivery take?",
+        "a": "Delivery times vary depending on location and product availability. Our team will provide estimated delivery timelines after order confirmation."
+      },
+      {
+        "q": "Do your hardware products come with warranty?",
+        "a": "Yes. Most hardware products come with a manufacturer’s warranty. Warranty terms vary depending on the brand and product."
+      },
+      {
+        "q": "What should I do if I receive a damaged or incorrect item?",
+        "a": "Please contact us within 48 hours of delivery and provide your order number, photos or videos of the item, and a description of the issue. We will investigate and provide a replacement, exchange, or refund if verified."
+      },
+      {
+        "q": "How do I know which software version to buy?",
+        "a": "We recommend checking your operating system version, device compatibility, and the number of users or devices required. If unsure, contact our support team before purchasing."
+      },
+      {
+        "q": "Do you offer installation or configuration support?",
+        "a": "Yes, we may offer setup or configuration support for certain products. Contact us for availability and pricing."
+      },
+      {
+        "q": "What payment methods do you accept?",
+        "a": "We accept secure online payment methods. Available options will be displayed during checkout."
+      },
+      {
+        "q": "Is my payment information secure?",
+        "a": "Yes. We use secure payment processing systems to protect your personal and financial information."
+      },
+      {
+        "q": "Can I modify or cancel my order?",
+        "a": "Orders can only be modified or canceled before delivery. Digital products cannot be canceled once delivered."
+      },
+      {
+        "q": "How can I contact customer support?",
+        "a": "Email: secureafricasolutions@gmail.com Phone/WhatsApp: +256 703 834 115 | +256 752 656594 Address: P.O. Box 34069, Kampala, Uganda, East Africa"
+      }
+    ],
+    "pages": {
+      "refund": {
+        "title": "Refund and Exchanges Policy",
+        "blocks": [
+          {
+            "type": "p",
+            "text": "Effective Date: February 25, 2026. Company: Secure Africa Solutions"
+          },
+          {
+            "type": "p",
+            "text": "At Secure Africa Solutions, customer satisfaction is important to us. Please review our refund and exchange policy carefully before making a purchase."
+          },
+          {
+            "type": "h",
+            "text": "1. Digital Products (Software Licenses & Activation Keys)"
+          },
+          {
+            "type": "p",
+            "text": "Due to the nature of digital products (license keys, activation codes, downloadable software, and subscriptions), all digital sales are final once the product has been delivered."
+          },
+          {
+            "type": "h",
+            "text": "Refunds May Be Approved If:"
+          },
+          {
+            "type": "h",
+            "text": "Refunds Will NOT Be Issued If:"
+          },
+          {
+            "type": "p",
+            "text": "For technical claims, customers must provide screenshots and relevant details for verification."
+          },
+          {
+            "type": "h",
+            "text": "2. Hardware Products (Firewalls, Network Devices, IP PBX, Switches, etc.)"
+          },
+          {
+            "type": "p",
+            "text": "Hardware products may be returned within 30 days of delivery under the following conditions:"
+          },
+          {
+            "type": "h",
+            "text": "Eligible Returns:"
+          },
+          {
+            "type": "h",
+            "text": "Non-Eligible Returns:"
+          },
+          {
+            "type": "p",
+            "text": "A restocking fee of up to 15% may apply to opened but non-defective items."
+          },
+          {
+            "type": "h",
+            "text": "3. Defective, Damaged, or Incorrect Products"
+          },
+          {
+            "type": "p",
+            "text": "If you receive a defective, damaged, or incorrect item, notify us within 48 hours of delivery."
+          },
+          {
+            "type": "p",
+            "text": "Please provide:"
+          },
+          {
+            "type": "p",
+            "text": "After verification, we will offer:"
+          },
+          {
+            "type": "h",
+            "text": "4. Exchanges"
+          },
+          {
+            "type": "p",
+            "text": "Exchanges are subject to product eligibility and stock availability. Digital products may only be exchanged if proven invalid or unused."
+          },
+          {
+            "type": "h",
+            "text": "5. Return Process"
+          },
+          {
+            "type": "p",
+            "text": "To request a refund or exchange, contact us:"
+          },
+          {
+            "type": "p",
+            "text": "📞 Phone: +256 703 834 115 | +256 752 656594 📧 Email: secureafricasolutions@gmail.com 📍 Address: P.O. Box 34069, Kampala, Uganda, East Africa"
+          },
+          {
+            "type": "p",
+            "text": "Please do not return any product without prior approval from our support team."
+          },
+          {
+            "type": "h",
+            "text": "6. Shipping Costs"
+          },
+          {
+            "type": "h",
+            "text": "7. Refund Processing"
+          },
+          {
+            "type": "p",
+            "text": "Approved refunds will be processed to the original payment method within 5–14 business days, depending on your bank or payment provider."
+          },
+          {
+            "type": "h",
+            "text": "8. Policy Updates"
+          },
+          {
+            "type": "p",
+            "text": "Secure Africa Solutions reserves the right to update or modify this policy at any time. Changes become effective immediately upon posting on this page."
+          }
+        ]
+      },
+      "terms": {
+        "title": "Terms & Conditions",
+        "blocks": [
+          {
+            "type": "p",
+            "text": "Effective Date: February 25, 2026 Company: Secure Africa Solutions Address: P.O. Box 34069, Kampala, Uganda, East Africa Email: secureafricasolutions@gmail.com Phone: +256 703 834 115 | +256 752 656594"
+          },
+          {
+            "type": "p",
+            "text": "By accessing or purchasing from our website, you agree to be bound by the following Terms & Conditions. Please read them carefully."
+          },
+          {
+            "type": "h",
+            "text": "1. Acceptance of Terms"
+          },
+          {
+            "type": "p",
+            "text": "By using our website and purchasing our products, you confirm that you:"
+          },
+          {
+            "type": "p",
+            "text": "If you do not agree, please do not use our website."
+          },
+          {
+            "type": "h",
+            "text": "2. Products & Services"
+          },
+          {
+            "type": "p",
+            "text": "Secure Africa Solutions provides:"
+          },
+          {
+            "type": "p",
+            "text": "We reserve the right to modify or discontinue products without prior notice."
+          },
+          {
+            "type": "h",
+            "text": "3. Digital Products"
+          },
+          {
+            "type": "p",
+            "text": "We are not responsible for incorrect purchases made by the customer."
+          },
+          {
+            "type": "h",
+            "text": "4. Pricing & Payments"
+          },
+          {
+            "type": "h",
+            "text": "5. Order Acceptance & Cancellation"
+          },
+          {
+            "type": "p",
+            "text": "We reserve the right to:"
+          },
+          {
+            "type": "p",
+            "text": "If your order is canceled after payment, a full refund will be issued."
+          },
+          {
+            "type": "h",
+            "text": "6. Shipping & Delivery (Hardware)"
+          },
+          {
+            "type": "p",
+            "text": "Risk of loss transfers to the customer upon delivery."
+          },
+          {
+            "type": "h",
+            "text": "7. Returns & Refunds"
+          },
+          {
+            "type": "p",
+            "text": "Refunds and exchanges are governed by our Refund & Exchanges Policy, which forms part of these Terms & Conditions."
+          },
+          {
+            "type": "h",
+            "text": "8. Product Warranty"
+          },
+          {
+            "type": "p",
+            "text": "Hardware products may carry manufacturer warranties where applicable. Secure Africa Solutions does not provide additional warranties beyond those offered by the manufacturer unless explicitly stated."
+          },
+          {
+            "type": "p",
+            "text": "Software products are subject to the original publisher’s licensing terms."
+          },
+          {
+            "type": "h",
+            "text": "9. Intellectual Property"
+          },
+          {
+            "type": "p",
+            "text": "All website content, including:"
+          },
+          {
+            "type": "p",
+            "text": "is the property of Secure Africa Solutions and may not be copied, reproduced, or distributed without written permission."
+          },
+          {
+            "type": "h",
+            "text": "10. Limitation of Liability"
+          },
+          {
+            "type": "p",
+            "text": "Secure Africa Solutions shall not be liable for:"
+          },
+          {
+            "type": "p",
+            "text": "Our maximum liability shall not exceed the amount paid for the product purchased."
+          },
+          {
+            "type": "h",
+            "text": "11. User Responsibilities"
+          },
+          {
+            "type": "p",
+            "text": "You agree not to:"
+          },
+          {
+            "type": "p",
+            "text": "Violation may result in account suspension or legal action."
+          },
+          {
+            "type": "h",
+            "text": "12. Privacy"
+          },
+          {
+            "type": "p",
+            "text": "Your personal information is handled in accordance with our Privacy Policy."
+          },
+          {
+            "type": "h",
+            "text": "13. Force Majeure"
+          },
+          {
+            "type": "p",
+            "text": "We are not liable for delays or failure to perform due to circumstances beyond our control, including:"
+          },
+          {
+            "type": "h",
+            "text": "14. Governing Law"
+          },
+          {
+            "type": "p",
+            "text": "These Terms & Conditions shall be governed by the laws of Uganda. Any disputes shall be resolved under the jurisdiction of Ugandan courts."
+          },
+          {
+            "type": "h",
+            "text": "15. Changes to Terms"
+          },
+          {
+            "type": "p",
+            "text": "We reserve the right to update these Terms & Conditions at any time. Changes become effective immediately upon posting on our website."
+          }
+        ]
+      },
+      "privacy": {
+        "title": "Privacy Policy",
+        "blocks": [
+          {
+            "type": "p",
+            "text": "Effective date: February 25, 2026. Store: Secure Africa Solutions (“we”, “us”, “our”)"
+          },
+          {
+            "type": "p",
+            "text": "We want you to be satisfied with your purchase. This Refund & Exchanges Policy explains when refunds, exchanges, or replacements may apply for products purchased from our website."
+          },
+          {
+            "type": "h",
+            "text": "1) Product Types We Sell"
+          },
+          {
+            "type": "p",
+            "text": "Our catalog may include:"
+          },
+          {
+            "type": "p",
+            "text": "Refund rules differ depending on the product type."
+          },
+          {
+            "type": "h",
+            "text": "2) Digital Products (License Keys, Subscriptions, Software)"
+          },
+          {
+            "type": "p",
+            "text": "Because digital items are delivered instantly and can be activated, all sales of digital products are generally final once delivered."
+          },
+          {
+            "type": "h",
+            "text": "When a refund may be approved (Digital)"
+          },
+          {
+            "type": "p",
+            "text": "We may issue a refund or replacement if:"
+          },
+          {
+            "type": "h",
+            "text": "When a refund is not approved (Digital)"
+          },
+          {
+            "type": "p",
+            "text": "Refunds will not be granted if:"
+          },
+          {
+            "type": "p",
+            "text": "Important: If troubleshooting is required, you agree to provide basic information (order number, device/OS details, and screenshots of the error message) so we can assist."
+          },
+          {
+            "type": "h",
+            "text": "3) Hardware Products (Firewalls, Network Hardware, IP Phones, PBX)"
+          },
+          {
+            "type": "p",
+            "text": "If you purchase physical hardware, you may request a return within 30 days of delivery, subject to the conditions below."
+          },
+          {
+            "type": "h",
+            "text": "Eligible returns (Hardware)"
+          },
+          {
+            "type": "p",
+            "text": "A return may be accepted if the item is:"
+          },
+          {
+            "type": "h",
+            "text": "Non-returnable items (Hardware)"
+          },
+          {
+            "type": "p",
+            "text": "We do not accept returns for:"
+          },
+          {
+            "type": "h",
+            "text": "Restocking fees (Hardware)"
+          },
+          {
+            "type": "p",
+            "text": "If a return is approved, we may apply a restocking fee of up to [ 10–20%] for opened but functional items. No restocking fee applies for verified defective items."
+          },
+          {
+            "type": "h",
+            "text": "4) Defective, Damaged, or Wrong Item Received"
+          },
+          {
+            "type": "p",
+            "text": "If your order arrives damaged, defective, or incorrect, contact us within 48 hours of delivery."
+          },
+          {
+            "type": "p",
+            "text": "We will request:"
+          },
+          {
+            "type": "p",
+            "text": "If verified, we will offer (at our discretion):"
+          },
+          {
+            "type": "h",
+            "text": "5) Exchanges"
+          },
+          {
+            "type": "p",
+            "text": "Exchanges are available only where:"
+          },
+          {
+            "type": "p",
+            "text": "For digital products, exchanges may be possible only if the delivered key is proven invalid/unused and replaced by our supplier."
+          },
+          {
+            "type": "h",
+            "text": "6) How to Request a Refund/Return/Exchange"
+          },
+          {
+            "type": "p",
+            "text": "To start a request, contact us with:"
+          },
+          {
+            "type": "p",
+            "text": "Email: [Insert your support email] Phone/WhatsApp: [Insert number] Business address (for returns): [Insert return address]"
+          },
+          {
+            "type": "p",
+            "text": "Do not send items back without approval—unapproved returns may not be received or processed."
+          },
+          {
+            "type": "h",
+            "text": "7) Shipping Costs"
+          },
+          {
+            "type": "h",
+            "text": "8) Refund Processing Time"
+          },
+          {
+            "type": "p",
+            "text": "If approved:"
+          },
+          {
+            "type": "h",
+            "text": "9) Chargebacks & Disputes"
+          },
+          {
+            "type": "p",
+            "text": "If you have an issue, please contact us first so we can resolve it quickly. Unauthorized chargebacks may delay support and order resolution."
+          },
+          {
+            "type": "h",
+            "text": "10) Policy Updates"
+          },
+          {
+            "type": "p",
+            "text": "We may update this policy from time to time. Changes take effect when posted on this page."
+          }
+        ]
+      }
+    },
+    "nav": [
+      {
+        "label": "Security & Infrastructure",
+        "href": "cat:Security & Infrastructure",
+        "children": []
+      },
+      {
+        "label": "Network & Voice Hardware",
+        "href": "cat:Network & Voice Hardware",
+        "children": []
+      },
+      {
+        "label": "Microsoft Productivity",
+        "href": "cat:Microsoft Productivity",
+        "children": []
+      },
+      {
+        "label": "Windows Server",
+        "href": "cat:Windows Server",
+        "children": []
+      },
+      {
+        "label": "VMware & Virtualization",
+        "href": "cat:VMware & Virtualization",
+        "children": []
+      },
+      {
+        "label": "Google Workspace",
+        "href": "cat:Google Workspace",
+        "children": []
+      },
+      {
+        "label": "Windows Operating Systems",
+        "href": "cat:Windows Operating Systems",
+        "children": []
+      }
+    ],
+    "footer_columns": [
+      {
+        "title": "Shop",
+        "links": [
+          {
+            "label": "Security & Infrastructure",
+            "href": "cat:Security & Infrastructure"
+          },
+          {
+            "label": "Network & Voice Hardware",
+            "href": "cat:Network & Voice Hardware"
+          },
+          {
+            "label": "Microsoft Productivity",
+            "href": "cat:Microsoft Productivity"
+          },
+          {
+            "label": "Windows Server",
+            "href": "cat:Windows Server"
+          },
+          {
+            "label": "VMware & Virtualization",
+            "href": "cat:VMware & Virtualization"
+          },
+          {
+            "label": "Google Workspace",
+            "href": "cat:Google Workspace"
+          }
+        ]
+      },
+      {
+        "title": "Information",
+        "links": [
+          {
+            "label": "Refund and Exchanges Policy",
+            "href": "page:refund"
+          },
+          {
+            "label": "Terms & Conditions",
+            "href": "page:terms"
+          },
+          {
+            "label": "Privacy Policy",
+            "href": "page:privacy"
+          }
+        ]
+      }
+    ],
+    "allow_cart": true,
+    "allow_buy_now": true,
+    "allow_quote": true,
+    "allow_wishlist": true,
+    "wa_message": "Hello Secure-Africa Solutions, I would like to ask about"
+  }
+}

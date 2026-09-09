@@ -192,6 +192,51 @@ ok($junk['nav'] === [], 'bad nav value degrades to empty');
 ok(is_int($junk['layout']['radius']), 'non-numeric radius coerced to int');
 ok(! isset($junk['pages']['../bad']) && ! isset($junk['pages']['bad']), 'path-ish page slug rejected or sanitised');
 
+echo "\n=== 5b. Inline landing-page blocks (rail / banner / newsletter / gallery) ===\n";
+
+$page = TechTheme::build(['tech' => ['sections' => [
+    'hero',
+    ['type' => 'newsletter', 'title' => 'Join', 'text' => 'news', 'cta' => 'Go'],
+    ['type' => 'rail', 'title' => 'Windows', 'categories' => ['Windows OS'], 'limit' => 6, 'alt' => true, 'sort' => 'new'],
+    ['type' => 'banner', 'title' => 'Promo', 'text' => 'x', 'cta' => 'Shop', 'href' => 'cat:X', 'tone' => 'dark', 'align' => 'right'],
+    ['type' => 'gallery', 'title' => 'G', 'images' => ['a.jpg', ['src' => 'b.jpg', 'caption' => 'B']]],
+    ['type' => 'not_a_block', 'title' => 'nope'],      // unknown -> dropped
+    ['type' => 'rail'],                                 // empty rail -> dropped
+    ['type' => 'banner'],                               // empty banner -> dropped
+    'faq',
+]]], ['name' => 'X']);
+$sec = $page['sections'];
+ok(count($sec) === 6, 'unknown and empty blocks dropped', 'got ' . count($sec));
+ok($sec[0] === 'hero' && $sec[5] === 'faq', 'built-in names still work alongside blocks');
+ok(is_array($sec[1]) && $sec[1]['type'] === 'newsletter' && $sec[1]['cta'] === 'Go', 'newsletter block parsed');
+ok(is_array($sec[2]) && $sec[2]['type'] === 'rail' && $sec[2]['limit'] === 6
+   && $sec[2]['alt'] === true && $sec[2]['sort'] === 'new', 'rail block parsed with limit/alt/sort');
+ok($sec[3]['type'] === 'banner' && $sec[3]['tone'] === 'dark' && $sec[3]['align'] === 'right', 'banner tone/align parsed');
+ok($sec[4]['type'] === 'gallery' && count($sec[4]['images']) === 2, 'gallery images parsed');
+// ORDER is preserved — this is what makes an arbitrary landing page reproducible
+$types = array_map(fn ($x) => is_string($x) ? $x : $x['type'], $sec);
+ok($types === ['hero', 'newsletter', 'rail', 'banner', 'gallery', 'faq'], 'section ORDER preserved exactly',
+   implode(',', $types));
+// hostile values must not fatal
+$bad = TechTheme::build(['tech' => ['sections' => [
+    ['type' => 'banner', 'tone' => 'nonsense', 'align' => 'nonsense', 'title' => 'T'],
+    ['type' => 'gallery', 'images' => 'not-a-list'],
+    ['type' => 'rail', 'title' => 'R', 'categories' => 'a,b', 'limit' => 9999],
+]]], ['name' => 'X']);
+$bs = $bad['sections'];
+ok($bs[0]['tone'] === 'light' && $bs[0]['align'] === 'left', 'invalid tone/align fall back to defaults');
+ok(count($bs) === 2, 'gallery with no valid images dropped', 'got ' . count($bs));
+ok($bs[1]['limit'] === 24 && $bs[1]['categories'] === ['a', 'b'], 'rail limit clamped; comma string accepted');
+// slides
+$sl = TechTheme::build(['tech' => ['hero' => ['slides' => [
+    ['title' => 'A', 'image' => 'a.jpg', 'cta' => 'Go', 'href' => 'cat:A'], ['title' => 'B'],
+]]]], ['name' => 'X']);
+ok(count($sl['hero']['slides']) === 2 && $sl['hero']['slides'][0]['cta'] === 'Go', 'hero slides parsed');
+// blocks must not leak between tenants either
+$t1 = TechTheme::build(['tech' => ['sections' => [['type' => 'banner', 'title' => 'AlphaPromo']]]], ['name' => 'A']);
+$t2 = TechTheme::build(['tech' => ['sections' => [['type' => 'banner', 'title' => 'BetaPromo']]]], ['name' => 'B']);
+ok(! str_contains(json_encode($t2), 'AlphaPromo'), 'blocks do not leak between tenants');
+
 echo "\n=== 6. SEO helper carries no hardcoded vertical copy ===\n";
 $seo = TechTheme::seo([], 'Generic Co');
 ok($seo['title'] === 'Generic Co', 'title is just the name when nothing is set', $seo['title']);
