@@ -618,7 +618,7 @@ function card(p){
 /* ---------- homepage sections ---------- */
 function secHead(t,s,link){
   return '<div class="sechead"><div><h2>'+esc(t)+'</h2>'+(s?'<p class="sub">'+esc(s)+'</p>':'')+'</div>'
-       + (link?'<a class="seclink" href="#" onclick="'+link.js+';return false">'+esc(link.label)+' →</a>':'')+'</div>';
+       + (link?'<a class="seclink" href="#" onclick="'+String(link.js).replace(/"/g,'&quot;')+';return false">'+esc(link.label)+' →</a>':'')+'</div>';
 }
 function railProducts(r){
   var cats=(r.categories||[]).map(function(x){return x.toLowerCase()});
@@ -665,7 +665,7 @@ var SEC={
     if(!list.length) return '';
     return '<section class="sec"><div class="wrap">'+secHead('Shop by category','Browse the catalogue by product family',{label:'All products',js:"go('browse')"})
       + '<div class="cats">'+list.slice(0,12).map(function(c){
-          return '<div class="cat" onclick="go(\'browse\',{cat:'+JSON.stringify(c)+'})">'
+          return '<div class="cat" onclick="go(\'browse\',{cat:'+JSON.stringify(c).replace(/"/g,'&quot;')+'})">'
             + '<div class="thumb">'+(imgs[c]?'<img src="'+esc(imgs[c])+'" alt="" loading="lazy">':icon('grid',30))+'</div>'
             + '<b>'+esc(c)+'</b><span>'+counts[c]+' product'+(counts[c]===1?'':'s')+'</span></div>';
         }).join('')+'</div></div></section>';
@@ -686,7 +686,7 @@ var SEC={
     if(!list.length) return '';
     return '<section class="sec"><div class="wrap">'+secHead('Trusted brands','Products supplied from these vendors')
       + '<div class="brands">'+list.slice(0,18).map(function(b){
-          return '<div class="brandcell" onclick="go(\'browse\',{brand:'+JSON.stringify(b)+'})">'+esc(b)+'</div>'}).join('')
+          return '<div class="brandcell" onclick="go(\'browse\',{brand:'+JSON.stringify(b).replace(/"/g,'&quot;')+'})">'+esc(b)+'</div>'}).join('')
       + '</div></div></section>';
   },
   solutions:function(){return cardsSec('solutions','Business solutions','')},
