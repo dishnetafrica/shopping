@@ -554,7 +554,11 @@ class StorefrontController extends Controller
                 ? ['@type' => 'PostalAddress', 'streetAddress' => $cfg['contact']['address']] : null,
         ]);
 
-        $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG;  // HEX_TAG: a tenant field can't break out of the script
+        // HEX_TAG: a tenant field can't break out of the <script>. INVALID_UTF8_SUBSTITUTE:
+        // a panel-pasted value with a stray non-UTF-8 byte (Word/Excel/PDF paste, half an emoji)
+        // must not make json_encode() return false — that injects `var CFG = ;` and white-screens
+        // the whole storefront. Substitute U+FFFD and keep valid JSON instead.
+        $jf = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE;
 
         $metaParts = [
             '<meta name="description" content="' . e($desc) . '">',
