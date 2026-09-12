@@ -172,6 +172,10 @@ final class JubaProductCapability implements ObjectCapability
             ])
             ->headline($this->num($onShelf) . ' ' . $unit, 'on shelf', $status === 'out' ? 'danger' : ($status === 'low' ? 'warn' : 'ok'))
             ->financials($fins)
+            // A single tab routes the shell to the full record view (renderRecord → tabContent),
+            // which is the ONLY path that renders overviewCards; without it the payload falls to the
+            // inline object renderer that shows timeline/related only ("No linked records").
+            ->tabs([['key' => 'overview', 'label' => 'Transactions']])
             ->overviewCards([$buyCard, $saleCard, $ledCard])
             ->answers($answers)
             ->actions([$recordCount, $openProduct, $backToList])
