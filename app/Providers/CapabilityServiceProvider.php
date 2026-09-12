@@ -114,6 +114,7 @@ final class CapabilityServiceProvider extends ServiceProvider
                 Route::get('products-export', [\App\Http\Controllers\V3\DocumentController::class, 'productsExport']);
                 Route::get('spec-sheet', [\App\Http\Controllers\V3\DocumentController::class, 'specSheet']);
                 Route::get('tasks-export', [\App\Http\Controllers\V3\DocumentController::class, 'tasksExport']);
+                Route::get('juba-product', [\App\Http\Controllers\V3\DocumentController::class, 'jubaProduct']);
             });
         });
     }

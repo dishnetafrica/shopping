@@ -434,6 +434,46 @@ final class DocumentController extends Controller
         return $this->stream($doc, ($doc['fileName'] ?? ('LPO-' . $po->id . '.pdf')));
     }
 
+    /**
+     * GET /api/v1/doc/juba-product?id=X&format=pdf|csv — one product's Juba Stock transaction report
+     * (summary + purchases by supplier + sales by customer + movement ledger). Same figures the
+     * drill-down screen shows, from App\Services\Inventory\JubaLedger.
+     */
+    public function jubaProduct(Request $r)
+    {
+        $t = $r->user()->tenant;
+        if (! $t) {
+            abort(401);
+        }
+        $id = (int) $r->query('id', 0);
+        $p = Product::where('tenant_id', $t->id)->find($id);
+        if (! $p) {
+            abort(404, 'Product not found');
+        }
+        $L = \App\Services\Inventory\JubaLedger::forProduct($t->id, $id);
+        $exp = app(\App\Services\Inventory\JubaLedgerExport::class);
+
+        $slug = trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', (string) $p->name), '-');
+        $base = 'Transactions-' . (substr($slug, 0, 40) ?: ('product-' . $id)) . '-' . now()->format('Ymd');
+
+        if (strtolower(trim((string) $r->query('format', 'pdf'))) === 'csv') {
+            return response($exp->csv($L), 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $base . '.csv"',
+            ]);
+        }
+
+        $pdf = $exp->pdf($t, $L);
+        if (! $pdf) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $base . '.pdf"',
+        ]);
+    }
+
     private function stream(array $doc, string $filename)
     {
         $disk = Storage::disk('public');

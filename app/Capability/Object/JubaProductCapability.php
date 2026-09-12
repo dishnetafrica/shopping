@@ -164,6 +164,10 @@ final class JubaProductCapability implements ObjectCapability
             'endpoint' => '/api/v1/workspace/product/' . $p['id'], 'actor' => 'human', 'tone' => 'default'];
         $backToList = ['key' => 'back', 'label' => '← Juba Stock', 'method' => 'GET',
             'endpoint' => '/api/v1/workspace/juba.stock', 'actor' => 'human', 'tone' => 'default'];
+        $dlPdf = ['key' => 'download_pdf', 'label' => 'Download PDF', 'icon' => 'download',
+            'href' => '/api/v1/doc/juba-product?id=' . $p['id'] . '&format=pdf', 'actor' => 'human', 'tone' => 'default'];
+        $dlCsv = ['key' => 'download_csv', 'label' => 'Download Excel', 'icon' => 'download',
+            'href' => '/api/v1/doc/juba-product?id=' . $p['id'] . '&format=csv', 'actor' => 'human', 'tone' => 'default'];
 
         return (new WorkspacePayload)
             ->object([
@@ -178,7 +182,8 @@ final class JubaProductCapability implements ObjectCapability
             ->tabs([['key' => 'overview', 'label' => 'Transactions']])
             ->overviewCards([$buyCard, $saleCard, $ledCard])
             ->answers($answers)
-            ->actions([$recordCount, $openProduct, $backToList])
+            ->actions([$recordCount, $dlPdf, $dlCsv])
+            ->more([$openProduct, $backToList])
             ->meta(['capability' => 'juba.product', 'listKey' => 'juba.stock', 'ttl' => 30, 'permissions' => ['menu:products']]);
     }
 
