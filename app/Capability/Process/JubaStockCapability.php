@@ -291,6 +291,10 @@ final class JubaStockCapability implements ProcessCapability
             }
 
             $rows[] = [
+                // Click-through to the product's transaction history (JubaProductCapability). Same
+                // derivation, per line — so the drill-down reconciles to this exact row.
+                'id'   => $pid,
+                'link' => '/api/v1/workspace/juba.product/' . $pid,
                 'product' => ['value' => (string) ($names[$pid] ?? ('#' . $pid)), 'sub' => $sub, 'avatar' => false],
                 'opening' => ['value' => $this->qty($oq), 'sort' => $oq],
                 'bought'  => ['value' => $this->qty($bq), 'sort' => $bq],
