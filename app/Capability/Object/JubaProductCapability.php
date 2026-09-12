@@ -178,6 +178,12 @@ final class JubaProductCapability implements ObjectCapability
             ->meta(['capability' => 'juba.product', 'listKey' => 'juba.stock', 'ttl' => 30, 'permissions' => ['menu:products']]);
     }
 
+    /** Read-only drill-down: no commands of its own. Record-count delegates to the product capability. */
+    public function command(CapabilityContext $ctx, string $action, array $input): array
+    {
+        return ['ok' => false, 'error' => 'unknown_action'];
+    }
+
     private function num($v): string
     {
         $f = (float) $v;
