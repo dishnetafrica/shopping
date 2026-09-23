@@ -597,7 +597,11 @@ function card(p){
   var cls='card'+((CFG.layout||{}).cardStyle==='elevated'?' elevated':((CFG.layout||{}).cardStyle==='flat'?' flat':''));
   var h='<article class="'+cls+'">';
   h+='<div class="cimg" onclick="openPdp('+pid(p)+')">';
-  h+='<span class="ctype'+(sw?' sw':'')+'">'+(sw?'Licence':'Hardware')+'</span>';
+  var tagMode=(CFG.layout||{}).cardTag||'kind';
+  if(tagMode!=='off'){
+    var tagLabel=(tagMode==='category')?((p.Category||'').trim()||(sw?'Licence':'Hardware')):(sw?'Licence':'Hardware');
+    h+='<span class="ctype'+(sw?' sw':'')+'">'+esc(tagLabel)+'</span>';
+  }
   if(C.allowWishlist) h+='<button class="cwish'+(WISH[pid(p)]?' on':'')+'" aria-label="Wishlist" onclick="event.stopPropagation();toggleWish('+pid(p)+')">'+
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="'+(WISH[pid(p)]?'currentColor':'none')+'" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></button>';
   h+= p.Image ? '<img src="'+esc(p.Image)+'" alt="'+esc(p['Product Name'])+'" loading="lazy">' : '<span style="color:var(--muted);font-size:.8rem">No image</span>';

@@ -112,6 +112,9 @@ final class TechTheme
             'radius'       => max(0, min(28, (int) $get('tech.radius', 10))),
             'density'      => self::oneOf($get('tech.density'), ['comfortable', 'compact'], 'comfortable'),
             'showMegaMenu' => (bool) $get('tech.mega_menu', true),
+            // Product-card corner label: 'kind' = Hardware/Licence (default, unchanged for
+            // existing tenants), 'category' = the product's own category, 'off' = no label.
+            'cardTag'      => self::oneOf($get('tech.card_tag'), ['kind', 'category', 'off'], 'kind'),
         ];
 
         // ---- section order ---------------------------------------------------------
