@@ -1104,7 +1104,18 @@ function checkout(){
 }
 function quoteCart(){ sendQuote(cartItems()) }
 function quoteOne(id){ var p=byId(id); if(p) sendQuote([{name:p['Product Name'],qty:1}]) }
-function openQuote(){ sendQuote(cartItems()) }
+function openQuote(){
+  var items=cartItems();
+  if(items.length){ sendQuote(items); return; }
+  // Empty cart: a standalone "Request a quote" has no lines to price, and the server rejects an
+  // item-less quotation — which used to dead-end at a "Could not send" error. Hand off to WhatsApp
+  // instead (a general enquiry), or hint to add items if no WhatsApp number is configured.
+  if(CFG.waNumber){
+    window.open('https://wa.me/'+CFG.waNumber+'?text='+encodeURIComponent('Hello, I would like to request a quotation.'),'_blank','noopener');
+  } else {
+    toast('Add items to your cart, then request a quote.');
+  }
+}
 function sendQuote(items){
   contactForm('Request a quotation','Send request',function(n,p,note){
     post(CFG.quoteUrl,{name:n,phone:p,items:items,note:note},
