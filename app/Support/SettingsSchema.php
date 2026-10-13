@@ -145,6 +145,20 @@ final class SettingsSchema
                     ['key' => 'receipt_page_size',   'type' => 'enum', 'label' => 'Receipt page size', 'options' => ['A4', 'A5'], 'default' => 'A5'],
                     ['key' => 'receipt_orientation', 'type' => 'enum', 'label' => 'Receipt orientation', 'options' => ['portrait', 'landscape'], 'default' => 'landscape'],
                 ]],
+                // Printed on the Commercial Invoice and Packing List a clearing agent uses to clear
+                // a cross-border shipment. Set once; every customs document reuses them. Exporter
+                // fields override the general business name/address/TIN when the goods ship from a
+                // different entity (e.g. a Kenya supplier invoicing a Uganda buyer).
+                ['label' => 'Exporter / Customs profile', 'help' => 'Printed on your Commercial Invoice and Packing List for customs clearance. Leave a field blank to fall back to your business name / address / tax number.', 'fields' => [
+                    ['key' => 'exporter_name',        'type' => 'text',     'label' => 'Exporter name', 'help' => 'If the goods are invoiced by a different entity from your business name.'],
+                    ['key' => 'exporter_address',     'type' => 'textarea', 'label' => 'Exporter address'],
+                    ['key' => 'exporter_tax_id',      'type' => 'text',     'label' => 'Exporter tax / customs PIN', 'help' => 'e.g. KRA PIN (Kenya) or TIN. Customs requires the exporter tax number.'],
+                    ['key' => 'customs_incoterms',    'type' => 'enum',     'label' => 'Default Incoterms', 'options' => ['EXW', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'], 'default' => 'FOB'],
+                    ['key' => 'customs_country_export', 'type' => 'text',   'label' => 'Country of export', 'help' => 'Where the shipment is dispatched from, e.g. Kenya.'],
+                    ['key' => 'customs_default_origin', 'type' => 'text',   'label' => 'Default country of origin', 'help' => 'Used per line when a product has no origin set, e.g. the manufacturer country.'],
+                    ['key' => 'customs_declaration',  'type' => 'textarea', 'label' => 'Customs declaration text', 'help' => 'e.g. "We certify this invoice is true and correct and the goods are of the stated origin."'],
+                    ['key' => 'customs_terms',        'type' => 'textarea', 'label' => 'Customs document footer terms'],
+                ]],
             ]],
             ['key' => 'inventory', 'label' => 'Stock tracking', 'icon' => 'warehouse', 'groups' => [
                 ['label' => 'Real inventory', 'help' => 'Turn on once your on-hand counts are trusted.', 'fields' => [

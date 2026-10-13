@@ -69,6 +69,10 @@ final class SettingsWriteService
         'quote_payment_terms', 'quote_prepared_by',
         // Default terms & conditions printed on every Local Purchase Order (LPO) PDF (blank = none).
         'lpo_terms',
+        // Exporter / customs profile — printed on the Commercial Invoice & Packing List for a
+        // clearing agent. Blank falls back to the general business name/address/tin.
+        'exporter_name', 'exporter_address', 'exporter_tax_id',
+        'customs_country_export', 'customs_default_origin', 'customs_declaration', 'customs_terms',
         // v4.46 — the company stamp printed on customer documents (an image field holds its URL).
         'stamp_image',
         // Storefront trust & delivery promises (shown on product pages / homepage).
@@ -178,6 +182,8 @@ final class SettingsWriteService
         // Numbers already issued are never rewritten, whichever way this is set.
         'quote_number_mode'   => ['legacy', 'sequential'],
         'quote_number_reset'  => ['year', 'plain'],
+        // Default Incoterms printed on the Commercial Invoice (customs).
+        'customs_incoterms'   => ['EXW', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'],
         // native = base currency (USD) IS the operating currency for selling; converted = local (UGX).
         'currency_basis'      => ['native', 'converted'],
         // MOQ handling in bot quotes/orders (read by OrderCalculator + AiBrain; v4.6 exposes it here —
