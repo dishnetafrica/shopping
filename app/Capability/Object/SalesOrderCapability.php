@@ -121,6 +121,9 @@ final class SalesOrderCapability implements ObjectCapability
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
         // Signature paper for the driver: quantities only, received-by / delivered-by blocks.
         $deliveryNote = ['key' => 'delivery_note', 'label' => 'Print delivery note', 'href' => '/api/v1/doc/delivery-note/' . $o->id, 'actor' => 'human', 'tone' => 'default'];
+        // Customs paperwork for a cross-border shipment (part no, HS code, weight, Incoterms).
+        $commercialInvoice = ['key' => 'commercial_invoice', 'label' => 'Commercial invoice (customs)', 'href' => '/api/v1/doc/commercial-invoice/' . $o->id, 'actor' => 'human', 'tone' => 'default'];
+        $packingList = ['key' => 'packing_list', 'label' => 'Packing list (customs)', 'href' => '/api/v1/doc/packing-list/' . $o->id, 'actor' => 'human', 'tone' => 'default'];
         // v4.88 (ADR-019) — the same line picker the invoice screen opens. Reachable from the order
         // because that is where staff are standing when a driver brings 2 cartons back.
         $returnItems = ['key' => 'return_items', 'label' => 'Return items', 'href' => '/panel/returns?order=' . $o->id, 'actor' => 'human', 'tone' => 'default'];
@@ -295,6 +298,8 @@ final class SalesOrderCapability implements ObjectCapability
             ->timeline($tl)
             ->documents([
                 ['type' => 'delivery_note', 'title' => 'Delivery note (customer signs on delivery)', 'url' => '/api/v1/doc/delivery-note/' . $o->id],
+                ['type' => 'commercial_invoice', 'title' => 'Commercial invoice (customs)', 'url' => '/api/v1/doc/commercial-invoice/' . $o->id],
+                ['type' => 'packing_list', 'title' => 'Packing list (customs)', 'url' => '/api/v1/doc/packing-list/' . $o->id],
             ])
             ->tabs([
                 ['key' => 'overview', 'label' => 'Overview'],
@@ -303,7 +308,7 @@ final class SalesOrderCapability implements ObjectCapability
                 ['key' => 'documents', 'label' => 'Documents'],
             ])
             ->actions(array_values(array_filter([$primary])))
-            ->more(array_values(array_filter([$changeStatus, $recordPayment, $deliveryNote, $returnItems, $openCustomer, $openInvoice, $cancelOrder])))
+            ->more(array_values(array_filter([$changeStatus, $recordPayment, $deliveryNote, $commercialInvoice, $packingList, $returnItems, $openCustomer, $openInvoice, $cancelOrder])))
             ->meta(['capability' => 'salesOrder', 'ttl' => 30, 'layout' => 'record', 'listKey' => 'salesOrders', 'permissions' => ['menu:orders']]);
     }
 
