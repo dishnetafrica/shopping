@@ -474,6 +474,59 @@ final class DocumentController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/v1/doc/commercial-invoice/{id}?source=order|quotation
+     * Customs valuation document (part no, HS code, origin, weights, Incoterms). Read-only — it
+     * renders from existing order/quotation data and writes nothing to the books.
+     */
+    public function commercialInvoice(Request $r, int $id)
+    {
+        [$t, $d] = $this->customsData($r, $id);
+        $doc = app(\App\Services\Customs\CommercialInvoiceRenderer::class)->pdf($t, $d);
+        if (! $doc) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return $this->stream($doc, $doc['fileName']);
+    }
+
+    /** GET /api/v1/doc/packing-list/{id}?source=order|quotation — contents & weights, no prices. */
+    public function packingList(Request $r, int $id)
+    {
+        [$t, $d] = $this->customsData($r, $id);
+        $doc = app(\App\Services\Customs\PackingListRenderer::class)->pdf($t, $d);
+        if (! $doc) {
+            abort(404, 'PDF engine unavailable');
+        }
+
+        return $this->stream($doc, $doc['fileName']);
+    }
+
+    /** Resolve an order (default) or a quotation (?source=quotation) into customs line data. */
+    private function customsData(Request $r, int $id): array
+    {
+        $t = $r->user()->tenant;
+        $builder = app(\App\Services\Customs\CustomsLineBuilder::class);
+        if ((string) $r->query('source') === 'quotation') {
+            $q = \App\Models\Quotation::where('tenant_id', $t->id)->find($id);
+            if (! $q) {
+                abort(404);
+            }
+            $d = $builder->fromQuotation($t, $q);
+        } else {
+            $o = \App\Models\Order::where('tenant_id', $t->id)->find($id);
+            if (! $o) {
+                abort(404);
+            }
+            $d = $builder->fromOrder($t, $o);
+        }
+        if (empty($d['lines'])) {
+            abort(404, 'No line items to print.');
+        }
+
+        return [$t, $d];
+    }
+
     private function stream(array $doc, string $filename)
     {
         $disk = Storage::disk('public');
