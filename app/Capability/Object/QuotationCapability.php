@@ -73,6 +73,9 @@ final class QuotationCapability implements ObjectCapability
         // Download via the same proven streaming route the legacy panel uses (Content-Disposition, same
         // session) — avoids any public-storage-URL/domain problem. The v3 shell opens the href directly.
         $downloadPdf = ['key' => 'quotation_pdf', 'label' => 'Download PDF', 'href' => '/papi/quotation-pdf?id=' . $q->id, 'actor' => 'human', 'tone' => $converted ? 'default' : 'primary'];
+        // Customs paperwork for a cross-border shipment, rendered from this quotation's lines.
+        $commercialInvoice = ['key' => 'commercial_invoice', 'label' => 'Commercial invoice (customs)', 'href' => '/api/v1/doc/commercial-invoice/' . $q->id . '?source=quotation', 'actor' => 'human', 'tone' => 'default'];
+        $packingList = ['key' => 'packing_list', 'label' => 'Packing list (customs)', 'href' => '/api/v1/doc/packing-list/' . $q->id . '?source=quotation', 'actor' => 'human', 'tone' => 'default'];
         $convert = ['key' => 'convert_to_order', 'label' => 'Convert to order', 'method' => 'POST', 'endpoint' => $ep . '/convert_to_order', 'actor' => 'human', 'tone' => 'primary', 'confirm' => 'Convert quotation ' . $q->quote_no . ' into an order?'];
         $openCustomer = $profile ? ['key' => 'open_customer', 'label' => 'Open customer', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/customer/' . $profile->id, 'actor' => 'human', 'tone' => 'default'] : null;
         $openOrder = $converted ? ['key' => 'open_order', 'label' => 'Open order', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/salesOrder/' . $q->order_id, 'actor' => 'human', 'tone' => 'default'] : null;
@@ -142,6 +145,8 @@ final class QuotationCapability implements ObjectCapability
         if ($q->pdf_path) {
             $docs[] = ['type' => 'quotation', 'title' => 'Quotation ' . $q->quote_no . ' (PDF)', 'url' => '/papi/quotation-pdf?id=' . $q->id];
         }
+        $docs[] = ['type' => 'commercial_invoice', 'title' => 'Commercial invoice (customs)', 'url' => '/api/v1/doc/commercial-invoice/' . $q->id . '?source=quotation'];
+        $docs[] = ['type' => 'packing_list', 'title' => 'Packing list (customs)', 'url' => '/api/v1/doc/packing-list/' . $q->id . '?source=quotation'];
 
         $rail = [
             ['key' => 'total', 'label' => 'Quotation total', 'value' => $fmt($q->total)],
@@ -209,6 +214,7 @@ final class QuotationCapability implements ObjectCapability
         $headerActions = array_values(array_filter([$primary, $editQuote]));
         $moreActions = array_values(array_filter([
             $downloadPdf === $primary ? null : $downloadPdf,
+            $commercialInvoice, $packingList,
             $copyQuote, $accept, $decline, $resend, $expire, $openCustomer, $archive,
         ]));
         $quickActions = array_values(array_filter([$downloadPdf, $canConvert ? $convert : null, $editQuote, $copyQuote, $resend, $openOrder, $openCustomer]));
