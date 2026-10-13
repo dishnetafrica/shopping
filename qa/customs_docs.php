@@ -45,8 +45,9 @@ check('"890 g" = 890', $pg('890 g'), 890);
 check('"2.5kg" = 2500', $pg('2.5kg'), 2500);
 check('"~0.3 kg (est)" = 300', $pg('~0.3 kg (est)'), 300);
 check('"1.8 kg" = 1800', $pg('1.8 kg'), 1800);
-check('bare "2" = 2000 (kg default)', $pg('2'), 2000);
-check('bare "500" = 500 (grams)', $pg('500'), 500);
+check('"890 g" variant = 890', $pg('890g'), 890);
+check('bare "2" (no unit) = 0', $pg('2'), 0);
+check('"500ml" is not a weight = 0', $pg('500ml'), 0);
 check('empty = 0', $pg(''), 0);
 check('"no weight here" = 0', $pg('no weight here'), 0);
 

@@ -94,12 +94,14 @@ final class CustomsLineBuilder
 
     private function line(Tenant $t, string $name, float $qty, float $unitPrice, ?Product $p): array
     {
-        // Weight precedence: the explicit gram columns win; otherwise fall back to parsing the
-        // free-text unit_size ("2.89 kg", "890 g") — that is where a CSV "Net Weight" column lands,
-        // so a catalogue imported with weights as text still prints them on the customs documents.
-        $net   = ($p && (int) $p->reference_weight_grams > 0) ? (int) $p->reference_weight_grams
-               : ($p ? $this->parseGrams((string) $p->unit_size) : 0);
-        $gross = ($p && (int) $p->gross_weight_grams > 0) ? (int) $p->gross_weight_grams : 0;
+        // Weight precedence (customs): the CSV "Net Weight" lands in unit_size as free text
+        // ("2.89 kg"), so parse that FIRST. reference_weight_grams is a weight-based-PRICING field
+        // that DEFAULTS to 1000 g — using it ahead of unit_size made every item read "1.00 kg", so
+        // it is only a fallback and its 1000 default is treated as "unset".
+        $fromSize = $p ? $this->parseGrams((string) $p->unit_size) : 0;
+        $ref      = $p ? (int) $p->reference_weight_grams : 0;
+        $net      = $fromSize > 0 ? $fromSize : (($ref > 0 && $ref !== 1000) ? $ref : 0);
+        $gross    = ($p && (int) $p->gross_weight_grams > 0) ? (int) $p->gross_weight_grams : 0;
         $origin = ($p && trim((string) $p->origin_country) !== '')
             ? (string) $p->origin_country
             : (string) $t->setting('customs_default_origin', '');
@@ -118,25 +120,21 @@ final class CustomsLineBuilder
         ];
     }
 
-    /** Parse a free-text weight ("2.89 kg", "890 g", "2.5kg") into integer grams; 0 if none. */
+    /**
+     * Parse a free-text weight ("2.89 kg", "890 g", "2.5kg") into integer grams; 0 if none.
+     * Requires an explicit kg/g unit so a non-weight unit_size like "500ml" is never mistaken
+     * for a weight.
+     */
     private function parseGrams(string $s): int
     {
         $s = mb_strtolower(trim($s));
-        if ($s === '' || ! preg_match('/([0-9]+(?:\.[0-9]+)?)\s*(kg|kgs|g|gram|grams|gm)?/', $s, $m)) {
+        if ($s === '' || ! preg_match('/([0-9]+(?:\.[0-9]+)?)\s*(kg|kgs|g|gram|grams|gm)\b/', $s, $m)) {
             return 0;
         }
         $n = (float) $m[1];
-        $unit = $m[2] ?? '';
-        // Default to kg when a bare number is given with no unit (catalogue weights are usually kg),
-        // except an integer >= 100 with no unit reads as grams.
-        if ($unit === 'g' || $unit === 'gram' || $unit === 'grams' || $unit === 'gm') {
-            return (int) round($n);
-        }
-        if ($unit === '' && $n >= 100 && $n == (int) $n) {
-            return (int) round($n);
-        }
+        $unit = $m[2];
 
-        return (int) round($n * 1000);
+        return in_array($unit, ['g', 'gram', 'grams', 'gm'], true) ? (int) round($n) : (int) round($n * 1000);
     }
 
     private function pack(array $lines, array $meta): array
