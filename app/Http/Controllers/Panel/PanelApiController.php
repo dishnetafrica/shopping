@@ -111,6 +111,7 @@ class PanelApiController extends Controller
                 'Description'  => (string) ($p->description ?? ''),                  // v4.28 — editable in the panel at last
                 'Unit_Size'    => (string) ($p->unit_size ?? ''),                    // v4.28 — "500ml", size of ONE piece
                 'Origin'       => (string) ($p->origin_country ?? ''),               // v4.28
+                'HS_Code'      => (string) ($p->hs_code ?? ''),                      // customs tariff code
                 'Keywords'     => (string) ($p->keywords ?? ''),
                 'Price_UGX'    => (float) ($p->base_price ?? $p->price ?? 0),
                 'Price'        => (float) ($p->price ?? 0),
@@ -2370,6 +2371,8 @@ class PanelApiController extends Controller
         if ($iSize !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'unit_size')) $iSize = null;
         $iOrig = $col(['origin', 'country of origin', 'origin country', 'made in', 'country']);      // v4.28
         if ($iOrig !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'origin_country')) $iOrig = null;
+        $iHs = $col(['hs code', 'hs_code', 'hs', 'tariff code', 'tariff', 'hs/tariff']);             // customs tariff code
+        if ($iHs !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'hs_code')) $iHs = null;
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
         // Product specs (Wattage, Voltage, Capacity, Battery Chemistry, …): map any CSV column whose
         // heading matches a spec definition (by label or key) so specs fill in on import. Tenant-generic
@@ -2497,9 +2500,11 @@ class PanelApiController extends Controller
                 if ($dlr > 0)     { $product->dealer_price = $dlr; }   // v4.9 (guard: $iDlr null pre-migration)
                 $usz = $iSize !== null ? trim((string) ($c[$iSize] ?? '')) : '';   // v4.28 (guard: null pre-migration)
                 $orc = $iOrig !== null ? trim((string) ($c[$iOrig] ?? '')) : '';
+                $hsc = $iHs   !== null ? trim((string) ($c[$iHs]   ?? '')) : '';   // customs tariff code (guard: null pre-migration)
                 if ($usz !== '') { $product->unit_size = mb_substr($usz, 0, 40); }
                 if ($orc !== '') { $product->origin_country = mb_substr($orc, 0, 60); }
-                if ($oem !== '' || $dlr > 0 || $usz !== '' || $orc !== '') { $product->save(); }
+                if ($hsc !== '') { $product->hs_code = mb_substr($hsc, 0, 20); }
+                if ($oem !== '' || $dlr > 0 || $usz !== '' || $orc !== '' || $hsc !== '') { $product->save(); }
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
@@ -2572,6 +2577,8 @@ class PanelApiController extends Controller
         if ($iSize !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'unit_size')) $iSize = null;
         $iOrig = $col(['origin', 'country of origin', 'origin country', 'made in', 'country']);      // v4.28
         if ($iOrig !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'origin_country')) $iOrig = null;
+        $iHs = $col(['hs code', 'hs_code', 'hs', 'tariff code', 'tariff', 'hs/tariff']);             // customs tariff code
+        if ($iHs !== null && ! \Illuminate\Support\Facades\Schema::hasColumn('products', 'hs_code')) $iHs = null;
         $iSell  = $col(['sell mode', 'sell_mode', 'sales mode']);   // 'buy' (default) or 'quote'
         $iDesc  = $col(['description', 'desc', 'details', 'about']);   // v4.7.3 — imported, single-line text
         // Product specs (see productsImport): map CSV columns matching this tenant's spec definitions.
@@ -2659,9 +2666,11 @@ class PanelApiController extends Controller
                 if ($dlr > 0)     { $product->dealer_price = $dlr; }   // v4.9 (guard: $iDlr null pre-migration)
                 $usz = $iSize !== null ? trim((string) ($c[$iSize] ?? '')) : '';   // v4.28 (guard: null pre-migration)
                 $orc = $iOrig !== null ? trim((string) ($c[$iOrig] ?? '')) : '';
+                $hsc = $iHs   !== null ? trim((string) ($c[$iHs]   ?? '')) : '';   // customs tariff code (guard: null pre-migration)
                 if ($usz !== '') { $product->unit_size = mb_substr($usz, 0, 40); }
                 if ($orc !== '') { $product->origin_country = mb_substr($orc, 0, 60); }
-                if ($oem !== '' || $dlr > 0 || $usz !== '' || $orc !== '') { $product->save(); }
+                if ($hsc !== '') { $product->hs_code = mb_substr($hsc, 0, 20); }
+                if ($oem !== '' || $dlr > 0 || $usz !== '' || $orc !== '' || $hsc !== '') { $product->save(); }
                 if ($specColMap) {
                     $pairs = [];
                     foreach ($specColMap as $idx => $key) { $pairs[$key] = (string) ($c[$idx] ?? ''); }
