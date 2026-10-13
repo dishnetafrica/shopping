@@ -1921,10 +1921,17 @@ class PanelApiController extends Controller
         if ($r->has('brand'))       $p->brand       = trim((string) $r->query('brand', '')) ?: null;
         if ($r->has('barcode'))     $p->barcode     = trim((string) $r->query('barcode', '')) ?: null;
         if ($r->has('description')) $p->description = trim((string) $r->query('description', '')) ?: null;
-        foreach (['unit_size', 'origin_country'] as $col) {
+        foreach (['unit_size', 'origin_country', 'hs_code'] as $col) {
             if ($r->has($col) && \Illuminate\Support\Facades\Schema::hasColumn('products', $col)) {
-                $p->{$col} = trim((string) $r->query($col, '')) ?: null;
+                $v = trim((string) $r->query($col, ''));
+                if ($col === 'hs_code') $v = mb_substr($v, 0, 20);                                    // customs: HS/tariff code (col is string(20))
+                $p->{$col} = $v ?: null;
             }
+        }
+        // v4.?? — gross shipping weight (grams) for the packing list; Schema-guarded like the above.
+        if ($r->has('gross_weight_grams') && \Illuminate\Support\Facades\Schema::hasColumn('products', 'gross_weight_grams')) {
+            $gw = trim((string) $r->query('gross_weight_grams', ''));
+            $p->gross_weight_grams = ($gw === '' ? null : max(0, (int) $gw));
         }
         if ($r->has('sell_mode')) {
             $sm = strtolower(trim((string) $r->query('sell_mode', '')));
