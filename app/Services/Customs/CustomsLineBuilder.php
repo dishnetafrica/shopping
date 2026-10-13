@@ -84,7 +84,10 @@ final class CustomsLineBuilder
     private function byName(Tenant $t): array
     {
         $m = [];
-        $cols = ['name', 'oem_number', 'hs_code', 'origin_country', 'reference_weight_grams', 'gross_weight_grams', 'unit_label'];
+        // NOTE: unit_size MUST be here — line() parses the net weight ("2.89 kg") out of it.
+        // Leaving it off hydrates the model without that column, so every quotation line read 0 g
+        // and the packing/gross weight printed "—" while part no/HS (which ARE listed) filled fine.
+        $cols = ['name', 'oem_number', 'hs_code', 'origin_country', 'unit_size', 'reference_weight_grams', 'gross_weight_grams', 'unit_label'];
         foreach (Product::where('tenant_id', $t->id)->whereNull('archived_at')->get($cols) as $p) {
             $m[mb_strtolower(trim((string) $p->name))] = $p;
         }
