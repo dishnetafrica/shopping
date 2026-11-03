@@ -316,6 +316,9 @@ final class DocumentController extends Controller
             'currency' => (string) ($stmt['currency'] ?? 'USD'),
             'rows' => $rows,
             'closingText' => (string) ($stmt['balanceText'] ?? ''),
+            'purchases' => $stmt['purchases'] ?? [],
+            'products' => $stmt['products'] ?? [],
+            'productsTotalText' => (string) ($stmt['productsTotalText'] ?? ''),
         ]);
         if (! $pdf) {
             abort(404, 'PDF engine unavailable');

@@ -169,18 +169,40 @@ final class CustomerInsight
         $byPhone = fn ($q) => $q->whereRaw("regexp_replace(coalesce(customer_phone,''),'[^0-9]','','g') = ?", [$digits]);
 
         $rows = [];
+        $purchases = [];   // itemised lines grouped by invoice (for the statement's Purchases section)
+        $prodAgg = [];     // per-product rollup: name => ['qty'=>float, 'amt'=>float] in report currency
         $tenant = $ctx->tenant;
         // v4.51 — `with('items')` so the description below can name the goods without a query per
         // invoice. A statement of twenty lines was otherwise twenty extra round trips.
         $byPhone(Invoice::where('tenant_id', $t))
             ->where('status', '!=', 'void')->with('items')->get()
-            ->each(function ($i) use (&$rows, $native, $tenant) {
+            ->each(function ($i) use (&$rows, &$purchases, &$prodAgg, $native, $tenant, $rc) {
                 // Derive the invoice's true currency from its order — the stored tag is unreliable.
                 $icur = \App\Services\Money\SalesBaseCurrency::txnCurrency($i, $tenant);
-                $rows[] = ['t' => $i->issued_at ? Carbon::parse($i->issued_at) : Carbon::parse($i->created_at),
+                $when = $i->issued_at ? Carbon::parse($i->issued_at) : Carbon::parse($i->created_at);
+                $rows[] = ['t' => $when,
                     'detail' => self::invoiceDetail($i), 'amt' => (float) $i->total, 'side' => 'dr',
                     'cur' => $icur, 'usd' => null,
                     'link' => '/api/v1/workspace/invoice/' . $i->id];
+
+                // Itemised purchases + per-product spend. Each line is consolidated into the report
+                // currency the SAME way the ledger rows are (invoice currency, effective-dated), so
+                // the product rollup reconciles with the invoice charges shown above.
+                $date = $when->format('Y-m-d');
+                $lines = [];
+                foreach ($i->items as $it) {
+                    $name = trim((string) $it->name);
+                    if ($name === '') { continue; }
+                    $qty = (float) $it->qty;
+                    $amt = $rc->consolidate([['amount' => (float) $it->line_total, 'currency' => $icur, 'usd' => null, 'date' => $date]])['amount'];
+                    $lines[] = ['name' => $name, 'qty' => $qty, 'amt' => $amt];
+                    if (! isset($prodAgg[$name])) { $prodAgg[$name] = ['qty' => 0.0, 'amt' => 0.0]; }
+                    $prodAgg[$name]['qty'] += $qty;
+                    $prodAgg[$name]['amt'] += $amt;
+                }
+                if ($lines) {
+                    $purchases[] = ['t' => $when, 'no' => (string) ($i->invoice_no ?: ('#' . $i->id)), 'lines' => $lines];
+                }
             });
         $byPhone(CustomerPayment::where('tenant_id', $t))->get()
             ->each(function ($p) use (&$rows, $native) {
@@ -208,7 +230,31 @@ final class CustomerInsight
             ];
         }
 
-        return ['rows' => $out, 'balance' => round($bal, 2), 'balanceText' => \App\Capability\Support\Money::fmt(round($bal, 2), $base), 'currency' => $base];
+        // Itemised purchases (chronological) + per-product spend summary (biggest spend first).
+        usort($purchases, fn ($a, $b) => $a['t']->timestamp <=> $b['t']->timestamp);
+        $qfmt = fn ($q) => rtrim(rtrim(number_format((float) $q, 2), '0'), '.') ?: '0';
+        $purchaseOut = array_map(fn ($p) => [
+            'date'  => $p['t']->format('d M Y'),
+            'no'    => $p['no'],
+            'items' => array_map(fn ($l) => [
+                'name'       => $l['name'],
+                'qty'        => $qfmt($l['qty']),
+                'amountText' => \App\Capability\Support\Money::fmt(round($l['amt'], 2), $base),
+            ], $p['lines']),
+        ], $purchases);
+
+        uasort($prodAgg, fn ($a, $b) => $b['amt'] <=> $a['amt']);
+        $products = [];
+        $prodTotal = 0.0;
+        foreach ($prodAgg as $name => $agg) {
+            $prodTotal += $agg['amt'];
+            $products[] = ['name' => $name, 'qty' => $qfmt($agg['qty']), 'totalText' => \App\Capability\Support\Money::fmt(round($agg['amt'], 2), $base)];
+        }
+
+        return ['rows' => $out, 'balance' => round($bal, 2),
+            'balanceText' => \App\Capability\Support\Money::fmt(round($bal, 2), $base), 'currency' => $base,
+            'purchases' => $purchaseOut, 'products' => $products,
+            'productsTotalText' => \App\Capability\Support\Money::fmt(round($prodTotal, 2), $base)];
     }
 
     /**

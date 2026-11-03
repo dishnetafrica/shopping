@@ -43,16 +43,44 @@ final class CustomerStatement
         }
         $rows .= '<tr class="tot"><td colspan="4">Balance due</td><td class="r b">' . $e($d['closingText'] ?? '') . '</td></tr>';
 
+        // --- Purchases (itemised, grouped by invoice) + Spend by product (summary) ---
+        $purchasesHtml = '';
+        foreach (($d['purchases'] ?? []) as $inv) {
+            $purchasesHtml .= '<tr class="ih"><td colspan="3">' . $e($inv['date'] ?? '') . ' &nbsp;·&nbsp; ' . $e($inv['no'] ?? '') . '</td></tr>';
+            foreach (($inv['items'] ?? []) as $it) {
+                $purchasesHtml .= '<tr><td>' . $e($it['name'] ?? '') . '</td><td class="r">' . $e($it['qty'] ?? '')
+                    . '</td><td class="r">' . $e($it['amountText'] ?? '') . '</td></tr>';
+            }
+        }
+        $productsHtml = '';
+        foreach (($d['products'] ?? []) as $p) {
+            $productsHtml .= '<tr><td>' . $e($p['name'] ?? '') . '</td><td class="r">' . $e($p['qty'] ?? '')
+                . '</td><td class="r">' . $e($p['totalText'] ?? '') . '</td></tr>';
+        }
+        $extra = '';
+        if ($productsHtml !== '') {
+            $extra = '<h2>Purchases</h2>'
+                . '<table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Amount</th></tr></thead><tbody>'
+                . $purchasesHtml . '</tbody></table>'
+                . '<h2>Spend by product</h2>'
+                . '<table><thead><tr><th>Product</th><th class="r">Qty</th><th class="r">Total spent</th></tr></thead><tbody>'
+                . $productsHtml
+                . '<tr class="tot"><td>Total</td><td class="r"></td><td class="r b">' . $e($d['productsTotalText'] ?? '') . '</td></tr>'
+                . '</tbody></table>';
+        }
+
         return '<!doctype html><html><head><meta charset="utf-8"><style>
             * { font-family: DejaVu Sans, sans-serif; }
             body { color: #1f2933; font-size: 11px; }
             h1 { font-size: 18px; margin: 0 0 2px; color: #15803d; }
+            h2 { font-size: 13px; margin: 20px 0 6px; color: #15803d; page-break-after: avoid; }
             .sub { color: #6b7280; font-size: 10.5px; margin-bottom: 14px; }
             table { width: 100%; border-collapse: collapse; }
             th { text-align: left; background: #f3f4f6; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; padding: 5px 7px; border-bottom: 1px solid #e5e7eb; }
             th.r { text-align: right; }
             td { padding: 5px 7px; border-bottom: 1px solid #eef1f4; } td.r { text-align: right; } td.b { font-weight: bold; }
             tr.tot td { font-weight: bold; background: #f9fafb; border-top: 2px solid #d1d5db; }
+            tr.ih td { font-weight: bold; background: #f9fafb; color: #374151; }
             .in { color: #15803d; } .out { color: #b91c1c; }
             .foot { margin-top: 16px; color: #9ca3af; font-size: 9px; text-align: center; }
         </style></head><body>
@@ -60,6 +88,7 @@ final class CustomerStatement
             <div class="sub">' . $e($d['customer'] ?? '') . (($d['meta'] ?? '') ? ' &nbsp;·&nbsp; ' . $e($d['meta']) : '') . ' &nbsp;·&nbsp; ' . $e($d['generated'] ?? '') . '</div>
             <table><thead><tr><th>Date</th><th>Description</th><th class="r">Charge</th><th class="r">Payment</th><th class="r">Balance</th></tr></thead>
             <tbody>' . $rows . '</tbody></table>
+            ' . $extra . '
             <div class="foot">Amounts shown in ' . $e($d['currency'] ?? 'USD') . ' (report currency). Balance due ' . $e($d['closingText'] ?? '') . '.</div>
         </body></html>';
     }
