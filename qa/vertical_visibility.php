@@ -33,6 +33,16 @@ check('snacks pos',           Vertical::decide('snacks', [], 'pos'),           f
 check('snacks kitchen_board', Vertical::decide('snacks', [], 'kitchen_board'), false);
 check('snacks item_options',  Vertical::decide('snacks', [], 'item_options'),  false);
 
+// --- Travel: enquiry→quotation; NO riders, NO pos, no restaurant/snacks features ---
+check('travel riders',        Vertical::decide('travel', [], 'riders'),        false);
+check('travel pos',           Vertical::decide('travel', [], 'pos'),           false);
+check('travel kitchen_board', Vertical::decide('travel', [], 'kitchen_board'), false);
+check('travel item_options',  Vertical::decide('travel', [], 'item_options'),  false);
+check('travel daily_thali',   Vertical::decide('travel', [], 'daily_thali'),   false);
+check('travel pos override on', Vertical::decide('travel', ['pos' => true], 'pos'), true);
+check('travel unknown=orders',  Vertical::decide('travel', [], 'orders'),      true);
+check('isValid travel',         Vertical::isValid('travel'),                   true);
+
 // --- Overrides force-ON (the "opt" cells) ---
 check('snacks pos override on',          Vertical::decide('snacks',  ['pos' => true],          'pos'),          true);
 check('snacks item_options override on', Vertical::decide('snacks',  ['item_options' => true], 'item_options'), true);
