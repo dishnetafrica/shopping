@@ -179,6 +179,15 @@ class BillingController extends Controller
         $pay   = Payment::where('tx_ref', $txRef)->first();
         if (! $pay) return response('ok'); // not ours; ack anyway
 
+        // P0 defense-in-depth: Payment has no tenant global scope (the webhook runs with no tenant
+        // context, keyed on the globally-unique tx_ref), so assert the tenant the row belongs to
+        // matches the tenant id embedded in tx_ref (CB-{tenantId}-{rand}). A row whose tenant_id and
+        // tx_ref disagree must NEVER activate a plan — fail closed.
+        if (! $this->txRefMatchesTenant($txRef, (int) $pay->tenant_id)) {
+            \Log::warning('billing.flutterwave.tenant_mismatch', ['tx_ref' => $txRef, 'row_tenant' => $pay->tenant_id]);
+            return response('ok');
+        }
+
         if ($pay->status !== 'successful'
             && strtolower((string) data_get($data, 'status')) === 'successful'
             && (int) data_get($data, 'amount') >= (int) $pay->amount) {
@@ -212,6 +221,13 @@ class BillingController extends Controller
             if ($tenant = Tenant::find((int) $tenantId)) {
                 $ref = (string) (data_get($obj, 'client_reference_id') ?: data_get($obj, 'id'));
                 $pay = Payment::firstOrNew(['tx_ref' => $ref]);
+                // P0 defense-in-depth: never let a webhook reassign an existing payment row to a
+                // different tenant. firstOrNew returns the existing row by tx_ref; if its tenant_id
+                // disagrees with the Stripe metadata tenant, fail closed instead of overwriting it.
+                if ($pay->exists && (int) $pay->tenant_id !== (int) $tenant->id) {
+                    \Log::warning('billing.stripe.tenant_mismatch', ['tx_ref' => $ref, 'row_tenant' => $pay->tenant_id, 'meta_tenant' => $tenant->id]);
+                    return response('ok');
+                }
                 $pay->fill([
                     'tenant_id' => $tenant->id, 'provider' => 'stripe', 'plan' => $plan,
                     'months' => 1, 'amount' => (float) (config('plans.' . $plan . '.price_usd') ?? 0),
@@ -224,6 +240,20 @@ class BillingController extends Controller
             }
         }
         return response('ok');
+    }
+
+    /**
+     * tx_ref is minted as CB-{tenantId}-{rand} (payMobileMoney/payCard). Confirm the embedded
+     * tenant id matches the payment row's tenant. Unknown formats (e.g. a Stripe id) return true —
+     * they are guarded separately in the Stripe webhook — so this never blocks a legitimate ref.
+     */
+    private function txRefMatchesTenant(string $txRef, int $tenantId): bool
+    {
+        if (! preg_match('/^CB-(\d+)-/', $txRef, $m)) {
+            return true;
+        }
+
+        return (int) $m[1] === $tenantId;
     }
 
     /** Shared: mark a pending payment successful and extend the plan. */
