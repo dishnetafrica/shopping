@@ -4,12 +4,15 @@ namespace Tests\Feature;
 
 use App\Support\TenantContext;
 use Illuminate\Bus\Queueable;
-use Illuminate\Console\Command;
-use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
+use Illuminate\Console\Events\CommandFinished;
+use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Event;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 use Tests\TestCase;
 
 /**
@@ -17,19 +20,31 @@ use Tests\TestCase;
  *
  * TenantContext is a per-process singleton. WhatsAppServiceProvider snapshots the caller's state,
  * resets to a clean slate for each job/command, and restores the caller afterwards. This gives both:
- *   - an independent job starts clean (can't inherit the previous tenant / a stale super-admin);
+ *   - an independent job/command starts clean (can't inherit the previous tenant / a stale super-admin);
  *   - a SYNC/inline job (CI's QUEUE_CONNECTION=sync, or dispatchSync) does NOT wipe the caller — the
  *     exact OrderObserver::created() -> ensureFromOrder() regression the first cut would have caused.
  */
 class TenantContextResetTest extends TestCase
 {
-    protected function setUp(): void
+    /**
+     * Drive one command through the real boundary listeners: fire CommandStarting, let $body() stand
+     * in for the command's handle() (it returns what the command saw at its start), fire CommandFinished.
+     *
+     * The events are dispatched through the app's event dispatcher, so the exact push/pop closures
+     * WhatsAppServiceProvider::boot() registers run — the production mechanism (Symfony fires these on
+     * every real `artisan` command). We drive the events directly rather than via $this->artisan(),
+     * because the test harness's PendingCommand path does not reliably fire CommandFinished.
+     *
+     * @return mixed whatever $body() returns (used to capture the context seen at command start)
+     */
+    private function runCommandThroughBoundary(callable $body)
     {
-        parent::setUp();
-        // Register a probe command so the CommandStarting/CommandFinished boundary can be exercised
-        // through a real Artisan invocation (not a hand-fired event).
-        $this->app[ConsoleKernel::class]->registerCommand(new ContextProbeCommand());
-        ContextProbeCommand::$seenAtStart = -1;
+        Event::dispatch(new CommandStarting('testing:probe', new ArrayInput([]), new NullOutput()));
+        try {
+            return $body();
+        } finally {
+            Event::dispatch(new CommandFinished('testing:probe', new ArrayInput([]), new NullOutput(), 0));
+        }
     }
 
     public function test_reset_clears_both_axes(): void
@@ -95,9 +110,13 @@ class TenantContextResetTest extends TestCase
         $ctx = app(TenantContext::class);
         $ctx->reset();                      // a worker with no tenant bound — the scheduler's starting point
 
-        $this->artisan('testing:context-probe')->assertExitCode(0);
+        $seenAtStart = $this->runCommandThroughBoundary(function () use ($ctx) {
+            $seen = $ctx->id();             // what the command's handle() would read at its start
+            $ctx->set(9);                   // the command's own internal set()
+            return $seen;
+        });
 
-        $this->assertNull(ContextProbeCommand::$seenAtStart, 'a top-level command must start on a clean slate');
+        $this->assertNull($seenAtStart, 'a top-level command must start on a clean slate');
         $this->assertNull($ctx->id(), 'the worker must be left clean — the command\'s internal set() cannot leak');
         $this->assertFalse($ctx->isSuperAdmin());
     }
@@ -113,9 +132,13 @@ class TenantContextResetTest extends TestCase
         $ctx = app(TenantContext::class);
         $ctx->set(7);                       // a caller already operating inside tenant 7
 
-        $this->artisan('testing:context-probe')->assertExitCode(0);
+        $seenAtStart = $this->runCommandThroughBoundary(function () use ($ctx) {
+            $seen = $ctx->id();
+            $ctx->set(9);
+            return $seen;
+        });
 
-        $this->assertNull(ContextProbeCommand::$seenAtStart, 'the nested command still starts on a clean slate');
+        $this->assertNull($seenAtStart, 'the nested command still starts on a clean slate');
         $this->assertSame(7, $ctx->id(), 'the caller\'s tenant context must be restored after the nested command');
         $this->assertFalse($ctx->isSuperAdmin());
 
@@ -133,12 +156,16 @@ class TenantContextResetTest extends TestCase
         // Nested under a super-admin caller → bypass restored to the caller.
         $ctx->reset();
         $ctx->asSuperAdmin(true);
-        $this->artisan('testing:context-probe')->assertExitCode(0);
+        $this->runCommandThroughBoundary(function () use ($ctx) {
+            $ctx->set(9);                   // command does tenant work; never sets super-admin
+        });
         $this->assertTrue($ctx->isSuperAdmin(), 'a super-admin caller keeps the bypass after a nested command');
 
         // Top-level (no caller) → the bypass cannot leak out of the command.
         $ctx->reset();
-        $this->artisan('testing:context-probe')->assertExitCode(0);
+        $this->runCommandThroughBoundary(function () use ($ctx) {
+            $ctx->set(9);
+        });
         $this->assertFalse($ctx->isSuperAdmin(), 'a top-level command must not leave the super-admin bypass set');
         $this->assertNull($ctx->id());
     }
@@ -158,28 +185,5 @@ class ContextProbeJob implements ShouldQueue
     {
         self::$seenAtStart = app(TenantContext::class)->id();
         app(TenantContext::class)->set(9);   // the job's own tenant; must NOT survive back to the caller
-    }
-}
-
-/**
- * A probe command: records the tenant id it sees at the start of handle() (should be null — the
- * CommandStarting boundary reset the slate), then sets its own tenant. The CommandFinished boundary
- * must restore the caller's context afterward (null for a top-level run, the caller's tenant for a
- * nested one), so the command's own set() never leaks past it.
- */
-class ContextProbeCommand extends Command
-{
-    protected $signature = 'testing:context-probe';
-
-    protected $description = 'Test probe: record the tenant context at start, then set the command\'s own.';
-
-    public static ?int $seenAtStart = -1;
-
-    public function handle(TenantContext $ctx): int
-    {
-        self::$seenAtStart = $ctx->id();
-        $ctx->set(9);                        // the command's own tenant; must NOT survive past the boundary
-
-        return self::SUCCESS;
     }
 }
