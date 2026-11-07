@@ -603,10 +603,15 @@ class StorefrontController extends Controller
         if ($base === null)   { $base = '/' . (string) $tenant->slug; }
         $theme  = $this->resolveTheme($tenant);
 
-        $defaultBrands = \App\Support\BrandDefaults::brands($theme['accent']);
-        $defaultStats  = \App\Support\BrandDefaults::stats();
-        $defaultFaq    = \App\Support\BrandDefaults::faq();
-        $td            = \App\Support\BrandDefaults::text();
+        // The hardcoded brand defaults are ONE customer's paper brand — only apply them to the
+        // tenant that owns them. Every other manufacturer tenant gets neutral fallbacks (its own
+        // name as the hero title, its own FAQ setting, and no foreign brand/stat blocks).
+        $useBd         = \App\Support\BrandDefaults::enabledFor($tenant);
+        $defaultBrands = $useBd ? \App\Support\BrandDefaults::brands($theme['accent']) : [];
+        $defaultStats  = $useBd ? \App\Support\BrandDefaults::stats() : [];
+        $defaultFaq    = $useBd ? \App\Support\BrandDefaults::faq() : [];
+        $td            = $useBd ? \App\Support\BrandDefaults::text()
+            : ['tagline' => '', 'eyebrow' => '', 'trustLine' => '', 'heroTitle' => (string) $tenant->name, 'heroText' => '', 'metaDescription' => ''];
 
         $cfg = [
             'name'        => (string) $tenant->name,

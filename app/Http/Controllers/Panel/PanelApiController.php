@@ -202,7 +202,7 @@ class PanelApiController extends Controller
     {
         $t = $r->user()->tenant;
         $s = $t->settings ?? [];
-        $isMfr = \App\Support\Vertical::of($t) === \App\Support\Vertical::MANUFACTURER;
+        $isMfr = \App\Support\BrandDefaults::enabledFor($t);   // only the brand that owns the defaults — never all manufacturers
         $bd = \App\Support\BrandDefaults::text();
         return response()->json([
             'ok'            => true,

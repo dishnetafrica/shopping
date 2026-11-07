@@ -1911,9 +1911,9 @@ class AiBrain
     /** The "big prompt": persona + rules + company knowledge + FAQ + grounded catalogue. */
     private function systemPrompt(Tenant $tenant, string $channel = 'whatsapp'): string
     {
-        $isMfr   = Vertical::of($tenant) === Vertical::MANUFACTURER;
+        $useBd   = BrandDefaults::enabledFor($tenant);   // only the brand that owns the defaults
         $persona = (string) $tenant->setting('ai_persona', '');
-        if ($persona === '' && $isMfr) $persona = BrandDefaults::persona((string) $tenant->name);
+        if ($persona === '' && $useBd) $persona = BrandDefaults::persona((string) $tenant->name);
         $know = (string) $tenant->setting('brand_knowledge', '');
         // Strip placeholder lines that would leak template scaffolding to customers.
         // Any line containing [FILL IN or [TODO is removed; header warns of this behaviour.
@@ -1927,7 +1927,7 @@ class AiBrain
         // Learned glossary (2026-07-18): DATA, not instructions — what customers call things.
         $lex = (array) $tenant->setting('shop_lexicon', []);
         $lexTxt = collect($lex)->map(fn ($e) => '"'.($e['term'] ?? '').'" = '.($e['means'] ?? ''))->filter()->implode("\n");
-        if ($know === '' && $isMfr) $know = BrandDefaults::knowledge();
+        if ($know === '' && $useBd) $know = BrandDefaults::knowledge();
         $faqTxt  = collect($this->brandFaq($tenant))
             ->map(fn ($f) => 'Q: ' . ($f['q'] ?? '') . "\nA: " . ($f['a'] ?? ''))
             ->implode("\n\n");
@@ -2457,7 +2457,7 @@ class AiBrain
     {
         $faq = $tenant->setting('faq', null);
         if (is_array($faq) && $faq) return array_values($faq);
-        if (Vertical::of($tenant) === Vertical::MANUFACTURER) return BrandDefaults::faq();
+        if (BrandDefaults::enabledFor($tenant)) return BrandDefaults::faq();
         return [];
     }
 

@@ -1316,7 +1316,7 @@ class ProcessIncomingMessage implements ShouldQueue
     {
         $faq = $tenant->setting('faq', null);
         if (is_array($faq) && $faq) return array_values($faq);
-        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::MANUFACTURER) {
+        if (\App\Support\BrandDefaults::enabledFor($tenant)) {
             return \App\Support\BrandDefaults::faq();
         }
         return [];

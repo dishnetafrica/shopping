@@ -8,6 +8,20 @@ namespace App\Support;
  */
 class BrandDefaults
 {
+    /**
+     * Whether these hardcoded brand defaults apply to a tenant.
+     *
+     * CRITICAL: the content below is ONE specific customer's brand (a paper & tissue maker).
+     * It must NEVER bleed into other manufacturer tenants (e.g. a foil-container maker). So it is
+     * no longer keyed to the whole MANUFACTURER vertical — a tenant opts in explicitly with the
+     * `mfr_brand_defaults` setting, which is set true ONLY on the brand that owns this content.
+     * Every other tenant gets its own settings and neutral fallbacks.
+     */
+    public static function enabledFor($tenant): bool
+    {
+        return $tenant !== null && (bool) $tenant->setting('mfr_brand_defaults', false);
+    }
+
     /** Default bot persona for a manufacturer tenant (used when "AI persona" is left blank). */
     public static function persona(string $companyName = 'our company'): string
     {
