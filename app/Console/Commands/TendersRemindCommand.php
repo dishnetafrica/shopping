@@ -21,7 +21,10 @@ class TendersRemindCommand extends Command
 
     public function handle(): int
     {
-        $tenders = Tender::whereNotIn('status', self::CLOSED)
+        // Cross-tenant sweep: this scheduled command sets no tenant context, so it must opt out of
+        // the (P0) BelongsToTenant global scope — it groups by tenant_id and resolves each Tenant
+        // below. Same pattern AiCampaignSendCommand/Campaign already use.
+        $tenders = Tender::withoutGlobalScopes()->whereNotIn('status', self::CLOSED)
             ->whereNotNull('deadline')
             ->whereDate('deadline', '>=', now()->toDateString())
             ->orderBy('deadline')->limit(300)->get();

@@ -47,17 +47,20 @@ class AiCampaignSendCommand extends Command
                 if ($budget <= 0) {
                     break;
                 }
-                $due = AiCampaignDraft::where('tenant_id', $t->id)->where('campaign_id', $c->id)
+                // withoutGlobalScopes(): this command sets no tenant context (it loops tenants),
+                // so after AiCampaignDraft gained the P0 BelongsToTenant scope these reads must opt
+                // out; the explicit ->where('tenant_id', $t->id) still constrains them correctly.
+                $due = AiCampaignDraft::withoutGlobalScopes()->where('tenant_id', $t->id)->where('campaign_id', $c->id)
                     ->where('status', 'approved')->orderBy('id')->limit($budget)->get();
 
                 if ($due->isEmpty()) {
                     // Nothing approved left → campaign finishes when nothing is pending either.
-                    $pending = AiCampaignDraft::where('tenant_id', $t->id)->where('campaign_id', $c->id)
+                    $pending = AiCampaignDraft::withoutGlobalScopes()->where('tenant_id', $t->id)->where('campaign_id', $c->id)
                         ->whereIn('status', ['draft', 'approved'])->exists();
                     if (! $pending) {
                         $stats = is_array($c->stats) ? $c->stats : [];
                         $stats['finished_at'] = now()->toIso8601String();
-                        $stats['ai_sent'] = AiCampaignDraft::where('campaign_id', $c->id)->where('status', 'sent')->count();
+                        $stats['ai_sent'] = AiCampaignDraft::withoutGlobalScopes()->where('campaign_id', $c->id)->where('status', 'sent')->count();
                         $c->update(['status' => 'sent', 'stats' => $stats]);
                     }
                     continue;
