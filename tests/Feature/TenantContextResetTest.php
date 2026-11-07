@@ -11,14 +11,13 @@ use Illuminate\Queue\SerializesModels;
 use Tests\TestCase;
 
 /**
- * WS-3 — tenant-context isolation is structural, not by convention.
+ * WS-3 — tenant-context isolation is structural, with SAVE/RESTORE at every boundary.
  *
- * TenantContext is a per-process singleton; on a long-lived queue worker the tenant id and the
- * super-admin bypass set by one job would otherwise linger into the next. WhatsAppServiceProvider
- * registers Queue::before/after/failing + CommandFinished hooks that call reset() at every
- * boundary, so a unit of work that forgets to set() reads an empty scope instead of the previous
- * tenant's data. These tests pin that contract. (Sync-dispatched jobs fire the same queue events,
- * so this runs under CI's QUEUE_CONNECTION=sync.)
+ * TenantContext is a per-process singleton. WhatsAppServiceProvider snapshots the caller's state,
+ * resets to a clean slate for each job/command, and restores the caller afterwards. This gives both:
+ *   - an independent job starts clean (can't inherit the previous tenant / a stale super-admin);
+ *   - a SYNC/inline job (CI's QUEUE_CONNECTION=sync, or dispatchSync) does NOT wipe the caller — the
+ *     exact OrderObserver::created() -> ensureFromOrder() regression the first cut would have caused.
  */
 class TenantContextResetTest extends TestCase
 {
@@ -27,11 +26,9 @@ class TenantContextResetTest extends TestCase
         $ctx = app(TenantContext::class);
         $ctx->set(9);
         $ctx->asSuperAdmin(true);
-
         $ctx->reset();
-
-        $this->assertNull($ctx->id(), 'reset() must clear the tenant id');
-        $this->assertFalse($ctx->isSuperAdmin(), 'reset() must clear the super-admin bypass');
+        $this->assertNull($ctx->id());
+        $this->assertFalse($ctx->isSuperAdmin());
     }
 
     public function test_clear_is_tenant_id_only_by_contract(): void
@@ -39,39 +36,57 @@ class TenantContextResetTest extends TestCase
         $ctx = app(TenantContext::class);
         $ctx->set(3);
         $ctx->asSuperAdmin(true);
-
         $ctx->clear();
-
         $this->assertNull($ctx->id(), 'clear() clears the tenant id');
-        $this->assertTrue($ctx->isSuperAdmin(), 'clear() must NOT touch the super-admin flag (use reset() for that)');
-
+        $this->assertTrue($ctx->isSuperAdmin(), 'clear() must NOT touch super-admin (use reset())');
         $ctx->reset();
     }
 
-    public function test_queue_boundary_resets_context_so_a_job_cannot_inherit_the_previous_tenant(): void
+    public function test_snapshot_restore_round_trips_both_axes(): void
     {
         $ctx = app(TenantContext::class);
-
-        // Simulate the state a PREVIOUS job left behind.
-        $ctx->set(5);
+        $ctx->set(42);
         $ctx->asSuperAdmin(true);
+        $snap = $ctx->snapshot();
+        $ctx->reset();
+        $this->assertNull($ctx->id());
+        $ctx->restore($snap);
+        $this->assertSame(42, $ctx->id());
+        $this->assertTrue($ctx->isSuperAdmin());
+        $ctx->reset();
+    }
 
-        // A job that deliberately does NOT set tenant context. With the boundary hook, the
-        // Queue::before reset means it starts clean; Queue::after leaves the slate clean too.
-        NoopTenantContextJob::dispatch();
+    public function test_sync_inline_job_starts_clean_and_preserves_caller_context(): void
+    {
+        $ctx = app(TenantContext::class);
+        $ctx->set(5);                       // the "caller" (e.g. an observer inside a request)
 
-        $this->assertNull($ctx->id(), 'tenant id must not survive a job boundary');
-        $this->assertFalse($ctx->isSuperAdmin(), 'super-admin bypass must not survive a job boundary');
+        ContextProbeJob::$seenAtStart = -1;
+        ContextProbeJob::dispatch();        // QUEUE_CONNECTION=sync -> runs inline
+
+        // The job must have started on a CLEAN slate (reset by the boundary)...
+        $this->assertNull(ContextProbeJob::$seenAtStart, 'a job must start with a clean tenant context');
+        // ...and the caller's context must be RESTORED after the inline job returns.
+        $this->assertSame(5, $ctx->id(), 'caller tenant must survive an inline/sync job');
+        $this->assertFalse($ctx->isSuperAdmin());
+
+        $ctx->reset();
     }
 }
 
-/** A no-op queued job used only to drive the queue lifecycle events in the test above. */
-class NoopTenantContextJob implements ShouldQueue
+/**
+ * A probe job: records the tenant id it sees at the very start of handle() (should be null — the
+ * boundary reset the slate), then sets its own tenant to prove the restore does not leak it out.
+ */
+class ContextProbeJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public static ?int $seenAtStart = -1;
+
     public function handle(): void
     {
-        // Intentionally does not touch TenantContext.
+        self::$seenAtStart = app(TenantContext::class)->id();
+        app(TenantContext::class)->set(9);   // the job's own tenant; must NOT survive back to the caller
     }
 }

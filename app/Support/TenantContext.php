@@ -23,6 +23,21 @@ class TenantContext
      */
     public function reset(): void { $this->tenantId = null; $this->superAdmin = false; }
 
+    /**
+     * Capture the full state (both axes) so a nested unit of work can run on a clean slate and then
+     * hand the caller's state back. Used by the job/command boundary: snapshot the caller, reset for
+     * the job, restore the caller when it finishes — so a SYNC/inline job (dispatchSync, or CI's
+     * QUEUE_CONNECTION=sync) never wipes the context the caller is still using.
+     */
+    public function snapshot(): array { return ['tenantId' => $this->tenantId, 'superAdmin' => $this->superAdmin]; }
+
+    /** Restore a snapshot captured by snapshot(). */
+    public function restore(array $state): void
+    {
+        $this->tenantId   = $state['tenantId'] ?? null;
+        $this->superAdmin = (bool) ($state['superAdmin'] ?? false);
+    }
+
     /** When true (super admin context) the tenant global scope is bypassed. */
     public function asSuperAdmin(bool $v = true): void { $this->superAdmin = $v; }
     public function isSuperAdmin(): bool { return $this->superAdmin; }
