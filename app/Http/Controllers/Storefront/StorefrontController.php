@@ -424,6 +424,8 @@ class StorefrontController extends Controller
                 '<script>if(!location.search){location.replace("'.($base ?: '').'/?cat='.rawurlencode($seoCat).'");}</script></body>', $html);
         }
 
+        $html = str_replace('</body>', $this->poweredByBadge($tenant) . '</body>', $html);
+
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=utf-8')
             ->header('Cache-Control', 'no-store');
@@ -591,8 +593,42 @@ class StorefrontController extends Controller
         $html = str_replace('__SEO_META__',    $meta, $html);
         $html = str_replace('__TECH_CONFIG__', json_encode($cfg, $jf), $html);
         $html = str_replace('__OPEN_PRODUCT__', '0', $html);
+        $html = str_replace('</body>', $this->poweredByBadge($tenant) . '</body>', $html);
 
         return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    /**
+     * Growth loop — a small "Powered by ShopBot" pill injected bottom-right of every FREE
+     * tenant's public storefront, linking to signup with attribution (so every free shop
+     * quietly markets the platform). Paid plans (starter/pro) drop it — a standard SaaS
+     * free-tier badge — and a tenant can force-hide it with the `hide_powered_badge` setting.
+     * Pure HTML + CSS, no scripts. Signup URL is configurable via services.shopbot.signup_url.
+     */
+    private function poweredByBadge($tenant): string
+    {
+        if ($tenant === null || $tenant->effectivePlan() !== 'free') return '';
+        if ((bool) $tenant->setting('hide_powered_badge', false)) return '';
+        $base = rtrim((string) (config('services.shopbot.signup_url') ?: 'https://mycloudbss.com'), '/');
+        $href = e($base . '?utm_source=shopbot_badge&utm_medium=owned&utm_campaign=storefront&utm_content=' . rawurlencode((string) $tenant->slug));
+
+        return '<a href="' . $href . '" target="_blank" rel="noopener" class="sbot-badge" aria-label="Powered by ShopBot — start your own WhatsApp shop">'
+            . '<span class="sbot-ic" aria-hidden="true">⚡</span>'
+            . '<span class="sbot-tx">Powered by <b>ShopBot</b></span>'
+            . '<span class="sbot-cta">Start your own shop →</span></a>'
+            . '<style>'
+            . '.sbot-badge{position:fixed;right:14px;bottom:14px;z-index:2147483000;display:inline-flex;align-items:center;gap:8px;'
+            . 'padding:9px 14px;border-radius:999px;background:#0f172a;color:#fff;text-decoration:none;'
+            . "font:600 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;"
+            . 'box-shadow:0 6px 24px rgba(2,8,23,.28);border:1px solid rgba(255,255,255,.12);transition:transform .15s ease,box-shadow .15s ease}'
+            . '.sbot-badge:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(2,8,23,.36)}'
+            . '.sbot-ic{font-size:14px;line-height:1}'
+            . '.sbot-tx b{font-weight:800}'
+            . '.sbot-cta{max-width:0;overflow:hidden;white-space:nowrap;opacity:0;color:#5eead4;font-weight:700;'
+            . 'transition:max-width .25s ease,opacity .2s ease,margin .25s ease}'
+            . '.sbot-badge:hover .sbot-cta{max-width:170px;opacity:1;margin-left:2px}'
+            . '@media(max-width:520px){.sbot-tx{display:none}.sbot-badge:hover .sbot-cta{max-width:150px}}'
+            . '</style>';
     }
     // <<< TECHNOLOGY
 
@@ -688,6 +724,8 @@ class StorefrontController extends Controller
         $html = str_replace('__SEO_TITLE__', e($title), $html);
         $html = str_replace('__SEO_META__', $meta, $html);
         $html = str_replace('__BRAND_CONFIG__', json_encode($cfg, $jflags), $html);
+
+        $html = str_replace('</body>', $this->poweredByBadge($tenant) . '</body>', $html);
 
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=utf-8')
@@ -907,6 +945,7 @@ class StorefrontController extends Controller
         $html = str_replace('__SEO_TITLE__', e($title), $html);
         $html = str_replace('__SEO_META__', $meta, $html);
         $html = str_replace('__AUTOPARTS_CONFIG__', json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $html);
+        $html = str_replace('</body>', $this->poweredByBadge($tenant) . '</body>', $html);
 
         // v4.8.1 — first-load performance. The single-file storefront is ~4 MB of text; gzip cuts
         // it to ~1.1 MB, and a short private cache stops repeat visitors re-downloading it on every
