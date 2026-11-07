@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 
 /** A cashier's till session: float in → sales → count → variance (v3.9). */
 class PosShift extends Model
 {
+    use BelongsToTenant;   // P0: structural tenant scoping — a till session is tenant-owned.
+
     protected $fillable = [
         'tenant_id', 'user_id', 'operator', 'opened_at', 'opening_float',
         'closed_at', 'expected_cash', 'counted_cash', 'variance',
