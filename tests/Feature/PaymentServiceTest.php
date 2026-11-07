@@ -6,6 +6,7 @@ use App\Models\CustomerPayment;
 use App\Models\OrderCost;
 use App\Models\Tenant;
 use App\Services\Money\PaymentService;
+use App\Support\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -56,8 +57,21 @@ class PaymentServiceTest extends TestCase
     public function test_advance_is_not_applied(): void
     {
         $t = Tenant::factory()->create();
-        $pay = app(PaymentService::class)->record($t, $this->data(['kind' => 'advance']));
-        $this->assertFalse((bool) CustomerPayment::find($pay['id'])->applied);
+        // A real caller of record() runs under request middleware that has set the tenant context, so
+        // the test establishes it too before reading the tenant-scoped CustomerPayment. This read used
+        // to work only by accident: PaymentService dispatches NotifyCustomerBilling, which (under the
+        // sync queue) ran inline, called TenantContext::set() and left it leaked, so the context-less
+        // find() below happened to resolve. The WS-3 job/command boundary now restores the caller's
+        // pre-dispatch context after an inline job — correctly closing that leak — so the read needs
+        // its own context, exactly as production always has. (Production is unaffected: every real
+        // record() caller already runs inside a tenant-scoped request.)
+        app(TenantContext::class)->set($t->id);
+        try {
+            $pay = app(PaymentService::class)->record($t, $this->data(['kind' => 'advance']));
+            $this->assertFalse((bool) CustomerPayment::find($pay['id'])->applied);
+        } finally {
+            app(TenantContext::class)->clear();
+        }
     }
 
     public function test_receipt_numbers_increment(): void
