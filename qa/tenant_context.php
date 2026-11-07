@@ -62,5 +62,24 @@ chk('super-admin reset for the unit of work', $c->isSuperAdmin(), false);
 $pop();
 chk('super-admin restored to caller', $c->isSuperAdmin(), true);
 
+// 6) Command boundary — two DISTINCT lifecycle expectations (CommandStarting/CommandFinished):
+//    a) TOP-LEVEL command on a worker: no caller context; the command sets its own; afterwards the
+//       worker must be LEFT CLEAN (restore to the empty slate it started from), so the next scheduled
+//       command cannot inherit it.
+$c->reset();                      // scheduler invokes `artisan foo` with nothing bound
+$push();                          // CommandStarting
+chk('top-level command: starts on a clean slate', [$c->id(), $c->isSuperAdmin()], [null, false]);
+$c->set(9);                       // the command's own internal set()
+$pop();                           // CommandFinished
+chk('top-level command: worker LEFT CLEAN afterwards', [$c->id(), $c->isSuperAdmin()], [null, false]);
+//    b) NESTED command (Artisan::call from within a tenant request/command): must still start clean,
+//       but afterwards RESTORE the caller's (non-empty) context — a different outcome from (a).
+$c->reset(); $c->set(7);          // caller already operating inside tenant 7
+$push();
+chk('nested command: starts on a clean slate', $c->id(), null);
+$c->set(9);
+$pop();
+chk('nested command: caller tenant RESTORED (not wiped)', $c->id(), 7);
+
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
 exit($fail === 0 ? 0 : 1);
