@@ -4,14 +4,22 @@ namespace Tests\Feature;
 
 use App\Models\AiCampaignDraft;
 use App\Models\Tender;
+use App\Models\TenderItem;
 use App\Support\TenantContext;
 use Tests\TestCase;
 
 /**
- * P0/WS-1b — Tender and AiCampaignDraft gain the BelongsToTenant global scope. Their panel access
- * already filters tenant_id; the two cross-tenant scheduled sweeps (TendersRemindCommand,
- * AiCampaignSendCommand) opt out via withoutGlobalScopes() because they set no tenant context.
- * These assert both halves at the query level (FK-free, deterministic).
+ * P0/WS-1b — Tender, TenderItem and AiCampaignDraft gain the BelongsToTenant global scope.
+ *
+ * TenderItem travels with Tender here (not in WS-1a) because the scheduled tender scan reads both
+ * in one loop iteration under one context, so their scope and the TendersScanCommand per-tenant
+ * context fix are one atomic change (see TenderScanContextTest for the data-level proof).
+ *
+ * Panel access to these models already filters tenant_id. The scheduled commands are PLATFORM
+ * operations: the tender scan establishes context per tenant (TendersScanCommand); the two
+ * cross-tenant sweeps (TendersRemindCommand's deadline sweep, AiCampaignSendCommand) read their
+ * index via withoutGlobalScopes() with an explicit tenant filter. These assert the scope at the
+ * query level (FK-free, deterministic); TenderScanContextTest asserts the data-level behaviour.
  */
 class TenderAiCampaignScopeTest extends TestCase
 {
@@ -21,6 +29,15 @@ class TenderAiCampaignScopeTest extends TestCase
         $q = Tender::query();
         $this->assertStringContainsString('tenant_id', $q->toSql());
         $this->assertContains(42, $q->getBindings());
+        app(TenantContext::class)->clear();
+    }
+
+    public function test_tenderitem_query_is_scoped_to_active_tenant(): void
+    {
+        app(TenantContext::class)->set(13);
+        $q = TenderItem::query();
+        $this->assertStringContainsString('tenant_id', $q->toSql());
+        $this->assertContains(13, $q->getBindings());
         app(TenantContext::class)->clear();
     }
 

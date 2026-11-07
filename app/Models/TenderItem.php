@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 
 /** v4.22 TenderBot — one product line the back office must price (see CLOUDBSS-APPLY-v4.22.md). */
 class TenderItem extends Model
 {
+    use BelongsToTenant;   // P0: structural tenant scoping — the scheduled scan establishes context per tenant.
+
     protected $fillable = ['tenant_id', 'tender_id', 'line', 'lot', 'item', 'qty', 'qty_num', 'unit',
         'spec', 'brand', 'alt_brand', 'needs_quote', 'status', 'supplier', 'unit_cost', 'currency',
         'margin_pct', 'bid_unit', 'note', 'priced_at', 'priced_by'];

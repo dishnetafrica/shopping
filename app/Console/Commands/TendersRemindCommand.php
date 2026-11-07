@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Models\Tender;
+use App\Support\TenantContext;
 use Illuminate\Console\Command;
 
 /**
@@ -19,11 +20,12 @@ class TendersRemindCommand extends Command
 
     private const CLOSED = ['submitted', 'won', 'lost', 'ignored', 'cancelled', 'failed'];
 
-    public function handle(): int
+    public function handle(TenantContext $ctx): int
     {
-        // Cross-tenant sweep: this scheduled command sets no tenant context, so it must opt out of
-        // the (P0) BelongsToTenant global scope — it groups by tenant_id and resolves each Tenant
-        // below. Same pattern AiCampaignSendCommand/Campaign already use.
+        // PLATFORM operation, step 1 — the cross-tenant index read. This scheduled command processes
+        // every tenant, so the initial sweep is an explicit, authorized cross-tenant read via
+        // withoutGlobalScopes() (there is no single tenant yet to scope to). It groups by tenant_id
+        // and resolves each Tenant below.
         $tenders = Tender::withoutGlobalScopes()->whereNotIn('status', self::CLOSED)
             ->whereNotNull('deadline')
             ->whereDate('deadline', '>=', now()->toDateString())
@@ -33,17 +35,26 @@ class TendersRemindCommand extends Command
         foreach ($tenders as $td) {
             $byTenant[$td->tenant_id][] = $td;
         }
+        // PLATFORM operation, step 2 — process each tenant WITH its context established, so any
+        // tenant-scoped read in remind() (or a helper it grows) is correctly scoped, and no tenant's
+        // id leaks into the next group (finally). remind()'s own Tender::save() is a keyed update and
+        // scope-free regardless, but establishing context here is the rule for a platform loop.
         foreach ($byTenant as $tenantId => $list) {
             $tenant = Tenant::find($tenantId);
             if (! $tenant || ! (bool) $tenant->setting('tender_notify', true)) {
                 continue;
             }
-            foreach ($list as $td) {
-                try {
-                    $this->remind($tenant, $td);
-                } catch (\Throwable $e) {
-                    \Log::warning('tenders:remind failed for #' . $td->id . ': ' . $e->getMessage());
+            $ctx->set((int) $tenantId);
+            try {
+                foreach ($list as $td) {
+                    try {
+                        $this->remind($tenant, $td);
+                    } catch (\Throwable $e) {
+                        \Log::warning('tenders:remind failed for #' . $td->id . ': ' . $e->getMessage());
+                    }
                 }
+            } finally {
+                $ctx->clear();
             }
         }
 
