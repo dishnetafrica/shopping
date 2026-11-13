@@ -684,18 +684,12 @@ class AiBrain
                     }
                 })
                 ->selectRaw('category, COUNT(*) as n')
-                ->groupBy('category')->orderByDesc('n')->limit(2)->get();
+                ->groupBy('category')->get();
 
-            $top = $counts->first();
-            if (! $top || (int) $top->n < 3) {
-                return null;   // fewer than 3 matching products = too weak a signal to pick a section
-            }
-            $second = $counts->skip(1)->first();
-            if ($second && (int) $second->n * 2 > (int) $top->n) {
-                return null;   // no clear winner → don't guess
-            }
-
-            return (string) $top->category;
+            // Every category's count is needed, not just the top two: the winner must hold a majority
+            // of all matches (see CategoryVote), or a variant word shared across the range ("mini")
+            // sends the wrong section.
+            return CategoryVote::winner($counts->pluck('n', 'category')->all());
         } catch (\Throwable $e) {
             return null;
         }
@@ -1159,8 +1153,11 @@ class AiBrain
 
             $conf = "\n\n🙏 Thank you — that's a *wholesale quantity*! Our team will prepare a *special bulk price* for you"
                   . ($delivery !== '' ? " and confirm delivery to *{$delivery}*" : '') . '.';
+            $statedPolicy = DeliveryWording::statedPolicy((string) $tenant->setting('delivery_note', ''), (string) $tenant->setting('free_delivery_towns', ''));
             $conf .= $delivery !== '' ? $this->deliveryNote($tenant, $delivery)
-                : "\nWhere should we deliver? Delivery to Juba is free; for other towns we'll confirm transport.";
+                : ($statedPolicy !== null
+                    ? "\nWhere should we deliver? " . $statedPolicy
+                    : "\nWhere should we deliver? Delivery to Juba is free; for other towns we'll confirm transport.");
             return self::stripQuoteClaims($clean) . $conf;
         }
 
@@ -1225,6 +1222,12 @@ class AiBrain
     {
         $town = trim($delivery);
         if ($town === '') return '';
+        // A shop that has stated its own delivery policy and listed no free areas gets that policy,
+        // never the built-in "free inside the home city" wording (see DeliveryWording).
+        $policy = DeliveryWording::statedPolicy((string) $tenant->setting('delivery_note', ''), (string) $tenant->setting('free_delivery_towns', ''));
+        if ($policy !== null) {
+            return "\n\u{1F69A} " . $policy;
+        }
         $from = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
 
         switch ($this->placeStatus($tenant, $town)) {
