@@ -45,6 +45,8 @@ use App\Capability\Process\BotDiagnosticsCapability;
 use App\Capability\Process\GuideCapability;
 use App\Capability\Process\ScheduledOrdersCapability;
 use App\Capability\Process\LeadListCapability;
+use App\Capability\Process\TravelEnquiryListCapability;
+use App\Capability\Object\TravelEnquiryCapability;
 use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
 use App\Capability\Process\QuotationListCapability;
@@ -125,6 +127,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         $r->register($sales, new CapabilityManifest(key: 'sales.process', type: 'process', owner: 'sales', permission: 'menu:orders', api: '/api/v1/workspace/sales.process'));
         $r->register(new CustomerListCapability(), new CapabilityManifest(key: 'customers', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/customers'));
         $r->register(new LeadListCapability(), new CapabilityManifest(key: 'leads', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/leads'));
+        // Travel Vertical (M1) — travel enquiries. Same permission as Leads; the screen is empty for non-travel tenants.
+        $r->register(new TravelEnquiryListCapability(), new CapabilityManifest(key: 'trips', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trips'));
+        $r->register(new TravelEnquiryCapability(), new CapabilityManifest(key: 'trip', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trip/{id}'));
         // Migration plan G1 — the WhatsApp inbox in v3 (list + single-conversation object).
         $r->register(new ChatListCapability(), new CapabilityManifest(key: 'chats', type: 'process', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chats'));
         $r->register(new ChatCapability(), new CapabilityManifest(key: 'chat', type: 'object', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chat/{id}'));

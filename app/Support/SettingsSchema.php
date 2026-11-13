@@ -201,6 +201,15 @@ final class SettingsSchema
                      'optionLabels' => ['off' => 'Advisory — quote any quantity, mention the minimum', 'roundup' => 'Enforced — round below-minimum requests up to the MOQ'],
                      'help' => 'Enforced: when a customer asks for less than a product\'s MOQ, the quote is raised to the MOQ, the line says "min order N — set to N", and the AI is instructed never to confirm a smaller quantity. Only products with the MOQ field filled are enforced (Products → edit, or import column "min order").'],
                 ]],
+                // Travel Vertical (M1) — shown only to travel agencies.
+                ['label' => 'Travel desk', 'only' => ['travel'], 'help' => 'How your travel assistant takes flight enquiries. It collects the trip details, never states a fare and never asks for passport details; your team prices each trip from the Trips screen.', 'fields' => [
+                    ['key' => 'travel_home_airport', 'type' => 'text', 'label' => 'Where most customers fly from', 'help' => 'For example "Entebbe". The assistant offers it as the likely departure point but always asks the customer to confirm.'],
+                    ['key' => 'travel_services', 'type' => 'textarea', 'label' => 'Services you offer', 'help' => 'For example: air tickets, hotel bookings, safaris, visa processing, airport transfers, travel insurance. The assistant only offers what is listed here.'],
+                    ['key' => 'travel_booking_terms', 'type' => 'textarea', 'label' => 'Booking and payment terms', 'help' => 'Deposit, how customers pay, and when a booking is confirmed. The assistant explains these in your words and never invents an amount or a deadline.'],
+                    ['key' => 'travel_cancellation_policy', 'type' => 'textarea', 'label' => 'Changes and cancellations', 'help' => 'Your rules for changing or cancelling a booking. Requests on an existing ticket are always passed to your team.'],
+                    ['key' => 'travel_abandon_hours', 'type' => 'int', 'default' => 48, 'label' => 'Hours of silence before an enquiry counts as "no reply"', 'help' => 'Used on the Trips screen to highlight enquiries where the customer stopped answering.'],
+                    ['key' => 'travel_use_history', 'type' => 'bool', 'default' => true, 'label' => 'Recognise returning customers', 'help' => 'When ON, the assistant can see a customer\'s earlier trip requests with your agency and offer the same details again. It always asks before reusing them. Turn OFF to have every conversation start from nothing.'],
+                ]],
             ]],
             ['key' => 'notifications', 'label' => 'Notifications', 'icon' => 'bell', 'groups' => [
                 ['label' => 'Daily digest', 'help' => 'A summary of the day sent to you.', 'fields' => [

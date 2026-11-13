@@ -4,7 +4,7 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', lpos:'Purchase Orders', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', lpo:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
-  jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', modules:'Modules', billing:'Billing', team:'Team & Roles',
+  jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', trips:'Trips', trip:'Trip', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping',
   tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence', engagement:'Customer Engagement', 'vision.review':'Stock & Loss' };
 // Navigation IA (2026-08) — grouped around the operator's question in the moment (Am I selling? buying?
@@ -13,7 +13,7 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
 // never changes what a role can see. Renames/order only — no routes, permissions or keys change.
 const GROUPS = [ ['Home',['briefing','worklist','setup','guide']],
   ['Sell',['pos','salesOrders','quotations','invoices','payments','collections','advisor']],
-  ['Customers',['customers','leads','followups','growth','discovery','visits','demand','tenders','evidence']],
+  ['Customers',['customers','leads','trips','followups','growth','discovery','visits','demand','tenders','evidence']],
   ['Buy',['purchase.process','suppliers','lpos','procurement.hub','demand.plans','juba.stock']],
   ['Stock',['products','categories','suggestions','warehouse','consignments','vision.review']],
   ['Money',['finance','cashbook','partners']],
@@ -26,7 +26,7 @@ const NAVCOUNT = { growth:'growth', demand:'demand', discovery:'discovery', visi
 // DOCUMENTATION ONLY — read by nothing. What actually gates a menu item is has() below,
 // via the permission keys the server sends. Left here as a list of what has been built,
 // and labelled because four test contracts were written against it as though it were a gate.
-const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence','engagement','vision.review']);
+const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','trips','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence','engagement','vision.review']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -44,6 +44,8 @@ const P = {
   maintenance:'M14.7 6.3a4 4 0 0 1-5.2 5.2l-6 6a1.8 1.8 0 0 0 2.5 2.5l6-6a4 4 0 0 1 5.2-5.2l-2.6 2.6-2-2 2.6-2.6z',
   maintenancePlan:'M14.7 6.3a4 4 0 0 1-5.2 5.2l-6 6a1.8 1.8 0 0 0 2.5 2.5l6-6a4 4 0 0 1 5.2-5.2l-2.6 2.6-2-2 2.6-2.6z',
   claims:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3zM9.5 12l2 2 4-4',
+  trips:'M2.5 13.5l19-8-5.5 14-3.6-5.4-4 3.4.4-4.6 8.2-6.2',
+  trip:'M2.5 13.5l19-8-5.5 14-3.6-5.4-4 3.4.4-4.6 8.2-6.2',
   warrantyClaim:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3zM9.5 12l2 2 4-4',
   shield:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3z',
   modules:'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
@@ -446,7 +448,11 @@ function renderNav(caps){
      this gate can only ever reveal too much, never hide a tool someone is using. */
   const vert = (CFG.flags && typeof CFG.flags.vertical === 'string') ? CFG.flags.vertical : '';
   const solarish = k => k!=='advisor' || vert==='' || vert==='solar';
-  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || (k==='engagement' && keys.has('campaigns')) || k==='vision.review' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k);
+  /* Travel Vertical (M1) — Trips is a travel-agency screen. Unlike the Solar gate above it is
+     STRICT: it shows only when the server says the business type is travel, so no other shop
+     ever gains a menu entry from this change. */
+  const travelish = k => k!=='trips' || vert==='travel';
+  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || (k==='engagement' && keys.has('campaigns')) || k==='vision.review' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k) && travelish(k);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';
