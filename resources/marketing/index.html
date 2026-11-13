@@ -225,7 +225,7 @@
   .dots button.on{background:var(--green);width:24px;border-radius:5px}
 
   /* pricing */
-  .plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:stretch}
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:stretch}
   .plan{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:30px 26px;display:flex;flex-direction:column}
   .plan.hot{border-color:var(--green);box-shadow:var(--shadow);position:relative}
   .plan .flag{position:absolute;top:-12px;left:26px;background:var(--green);color:#fff;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:4px 11px;border-radius:7px}
@@ -308,7 +308,7 @@
       <a class="lnk" href="#pricing">Pricing</a>
       <a class="lnk" href="#who">Who it's for</a>
       <a class="nav-login" href="/app/login">Log in</a>
-      <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20start%20my%20free%20trial" target="_blank" rel="noopener">Start free trial</a>
+      <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20get%20started" target="_blank" rel="noopener">Get started</a>
     </nav>
     <button class="burger" id="burger" aria-label="Menu">☰</button>
   </div>
@@ -323,13 +323,13 @@
       <h1 class="reveal">Your WhatsApp already <em>knows your business</em></h1>
       <p class="sub reveal">Connect WhatsApp and our AI learns your products, FAQs, offers, sales patterns and customer conversations — to create a <b>Digital Employee</b> trained on your business.<br><b>Connect. Wait ~15 minutes. Go live.</b></p>
       <div class="hero-cta reveal">
-        <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20start%20my%20free%20trial" target="_blank" rel="noopener">
+        <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20get%20started" target="_blank" rel="noopener">
           <svg class="wa-ico" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1 0 12 2Zm5.8 14.1c-.2.7-1.4 1.3-2 1.4-.5.1-1.2.1-1.9-.1-.4-.1-1-.3-1.8-.6-3.1-1.3-5-4.4-5.2-4.6-.1-.2-1.2-1.6-1.2-3 0-1.4.7-2.1 1-2.4.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.3 0 .5l-.4.6-.3.3c-.1.1-.3.3-.1.5.1.3.7 1.1 1.4 1.8 1 .9 1.7 1.1 2 1.2.2.1.4.1.5-.1l.7-.8c.2-.2.3-.2.6-.1l1.9.9c.3.1.4.2.5.3.1.2.1.7-.1 1.4Z"/></svg>
-          Start free trial
+          Get started
         </a>
         <a class="btn btn-ghost" href="#realorder"><span class="play">▶</span> Watch 2-minute demo</a>
       </div>
-      <p class="hero-note reveal">Free to start · works on your existing number · you approve before anything goes live</p>
+      <p class="hero-note reveal">Works on your existing number · you approve before anything goes live</p>
     </div>
 
     <div class="stage reveal">
@@ -557,7 +557,7 @@
       <div class="test on" style="text-align:center">
         <p class="quote">We're a young Ugandan team just opening CloudBSS to local businesses. Early customers get our full attention — personal setup, a direct line to us, and a real say in what we build next. No inflated promises, just a tool that earns its place in your shop.</p>
         <div style="display:flex;justify-content:center;margin-top:6px">
-          <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20start%20my%20free%20trial" target="_blank" rel="noopener">Start free trial</a>
+          <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20get%20started" target="_blank" rel="noopener">Get started</a>
         </div>
         <p style="margin-top:16px;color:var(--mute);font-size:14px">— The CloudBSS team, Kampala 🇺🇬</p>
       </div>
@@ -568,25 +568,16 @@
 <!-- 10. PRICING -->
 <section id="pricing">
   <div class="wrap">
-    <div class="sec-head center reveal"><span class="eyebrow">Digital Employee Plans</span><h2>Start free. Pay when it's earning.</h2><p>Try your Digital Employee with real customers before you pay a shilling. Upgrade only when you're ready.</p></div>
+    <div class="sec-head center reveal"><span class="eyebrow">Digital Employee Plans</span><h2>Simple pricing. One setup, one monthly fee.</h2><p>Plans start at UGX 205,000 a month (about $50). A one-time setup fee of UGX 205,000 (about $50) covers connecting your WhatsApp and training your Digital Employee.</p></div>
     <div class="plans">
-      <div class="plan reveal">
-        <div class="pn">Starter</div><div class="pt">One shop, getting going</div>
-        <div class="price">UGX 75,000 <span class="perm">/mo</span><small>≈ $20 · free trial first</small></div>
+      <div class="plan hot reveal">
+        <span class="flag">Most popular</span>
+        <div class="pn">Growth</div><div class="pt">A busy shop that sells daily</div>
+        <div class="price">UGX 205,000 <span class="perm">/mo</span><small>≈ $50 · plus UGX 205,000 one-time setup</small></div>
         <ul class="plist">
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> Business Discovery</li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> Digital Employee, day &amp; night</li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> Business Brain dashboard</li>
-          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> 1 staff login</li>
-        </ul>
-        <a class="btn btn-ghost" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20Starter" target="_blank" rel="noopener">Choose Starter</a>
-      </div>
-      <div class="plan hot reveal">
-        <span class="flag">Most popular</span>
-        <div class="pn">Growth</div><div class="pt">A busy shop that sells daily</div>
-        <div class="price">UGX 185,000 <span class="perm">/mo</span><small>≈ $50</small></div>
-        <ul class="plist">
-          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> Everything in Starter</li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> <b>Sales pattern learning</b></li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> Review queue + activity inbox</li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4 4 10-10" stroke="#0a7d3c" stroke-width="2.4" stroke-linecap="round"/></svg> Many staff logins</li>
@@ -619,16 +610,16 @@
 
     <div class="cmp reveal">
       <table class="cmp-t">
-        <thead><tr><th>Feature</th><th>Starter</th><th>Growth</th><th>Business</th><th>Enterprise</th></tr></thead>
+        <thead><tr><th>Feature</th><th>Growth</th><th>Business</th><th>Enterprise</th></tr></thead>
         <tbody>
-          <tr><td>Business Discovery &amp; Digital Employee</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>Business Brain dashboard</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>Sales pattern learning</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>Review queue &amp; activity inbox</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>Team Insights &amp; consensus</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>Multi-branch &amp; official WhatsApp API</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>Staff logins</td><td>1</td><td>Many</td><td>Many</td><td>Unlimited</td></tr>
-          <tr><td>Custom integrations &amp; SLAs</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+          <tr><td>Business Discovery &amp; Digital Employee</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>Business Brain dashboard</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>Sales pattern learning</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>Review queue &amp; activity inbox</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>Team Insights &amp; consensus</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>Multi-branch &amp; official WhatsApp API</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>Staff logins</td><td>Many</td><td>Many</td><td>Unlimited</td></tr>
+          <tr><td>Custom integrations &amp; SLAs</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
         </tbody>
       </table>
     </div>
@@ -648,10 +639,10 @@
         <li>✓ Your Digital Employee goes live</li>
       </ul>
       <div style="display:flex;gap:13px;justify-content:center;flex-wrap:wrap">
-        <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20start%20my%20free%20trial" target="_blank" rel="noopener">Start free trial</a>
+        <a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20get%20started" target="_blank" rel="noopener">Get started</a>
         <a class="btn btn-ghost" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20talk%20to%20sales" target="_blank" rel="noopener">Talk to sales</a>
       </div>
-      <div class="note">Connect WhatsApp, wait about 15 minutes, go live. No card needed to start.</div>
+      <div class="note">Connect WhatsApp, wait about 15 minutes, go live.</div>
     </div>
   </div>
 </section>
@@ -672,7 +663,7 @@
   </div>
 </footer>
 
-<div class="sticky"><a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20start%20my%20free%20trial" target="_blank" rel="noopener">Start free trial</a></div>
+<div class="sticky"><a class="btn btn-green" href="https://wa.me/211927797217?text=Hi%20CloudBSS%2C%20I%20want%20to%20get%20started" target="_blank" rel="noopener">Get started</a></div>
 
 <script>
   document.getElementById('yr').textContent=new Date().getFullYear();
