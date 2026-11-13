@@ -536,7 +536,7 @@
     {n:"Dhabaa Special Pizza", c:"Pizza", p:35000, d:"Our loaded house pizza — the chef's signature.", img:"https://mycloudbss.com/storage/products/11/p_6a3a6c97e28905.48107422.png"},
     {n:"Afghani Chicken Half", c:"Tandoori Starter", p:35000, d:"Half portion of our creamy tandoori Afghani chicken.", img:"https://mycloudbss.com/storage/products/11/p_6a395ae2044832.74918460.png"}
   ];
-  var ugx = function(n){ return "UGX " + Number(n).toLocaleString(); };
+  var ugx = function(n){ return "UGX " + Number(n).toLocaleString("en-US"); };
   var grid = document.getElementById('dishGrid');
   grid.innerHTML = DISHES.map(function(x){
     return '<article class="card reveal">'

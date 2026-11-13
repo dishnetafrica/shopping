@@ -418,10 +418,15 @@ var VIEW = {name:'home'};
 /* ---------- utils ---------- */
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+/* Fixed 'en-US' grouping (2,700,000) — never the visitor's device locale, which renders Indian-style
+   27,00,000 on a phone set to English (India). Zero-decimal currencies (UGX, SSP, …) stay whole, the
+   same list shop.html's ugx() uses; USD and the rest keep 2 decimals exactly as before. */
 function money(n){
   var c = CFG.currency||'';
   var v = Number(n||0);
-  return c + ' ' + v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  var zero=['UGX','KES','TZS','RWF','BIF','SSP','JPY','KRW','VND','XAF','XOF','GNF','MGA','CLP','PYG','ISK','KMF','XPF'];
+  var d = zero.indexOf(String(c).toUpperCase())>=0 ? 0 : 2;
+  return c + ' ' + v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 }
 function toast(m){var t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('on')},2200)}
 function store(){try{localStorage.setItem('tech_cart',JSON.stringify(CART));localStorage.setItem('tech_wish',JSON.stringify(WISH))}catch(e){}}
