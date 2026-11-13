@@ -26,7 +26,7 @@ class BotCategoryAskTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function call(string $method, ...$args)
+    private function brain(string $method, ...$args)
     {
         $m = new \ReflectionMethod(AiBrain::class, $method);
         $m->setAccessible(true);
@@ -65,7 +65,7 @@ class BotCategoryAskTest extends TestCase
         $t = $this->starlinkShop();
 
         $this->assertNull(
-            $this->call('detectCategoryAsk', $t, 'i need mini kit 5 pcs how much'),
+            $this->brain('detectCategoryAsk', $t, 'i need mini kit 5 pcs how much'),
             'a Mini Kit question must not be answered with the Mounts catalogue'
         );
     }
@@ -75,9 +75,9 @@ class BotCategoryAskTest extends TestCase
         $t = $this->starlinkShop();
 
         // pass 1 — the category name is in the message
-        $this->assertSame('Mounts', $this->call('detectCategoryAsk', $t, 'send me the mounts price list'));
+        $this->assertSame('Mounts', $this->brain('detectCategoryAsk', $t, 'send me the mounts price list'));
         // pass 2 — "mount" is in six product names, all in one category
-        $this->assertSame('Mounts', $this->call('detectCategoryAsk', $t, 'how much is a roof mount'));
+        $this->assertSame('Mounts', $this->brain('detectCategoryAsk', $t, 'how much is a roof mount'));
     }
 
     public function test_a_stated_delivery_policy_replaces_the_free_delivery_wording(): void
@@ -85,7 +85,7 @@ class BotCategoryAskTest extends TestCase
         $policy = 'Delivery is not free. Our team confirms the delivery cost when you order.';
         $t = $this->starlinkShop(['delivery_from_city' => 'Kampala', 'delivery_note' => $policy]);
 
-        $line = (string) $this->call('deliveryNote', $t, 'Ntinda');
+        $line = (string) $this->brain('deliveryNote', $t, 'Ntinda');
 
         $this->assertStringContainsString($policy, $line);
         $this->assertStringNotContainsString('is free', $line, 'must not promise free delivery');
@@ -96,7 +96,7 @@ class BotCategoryAskTest extends TestCase
     {
         $t = $this->starlinkShop(['delivery_from_city' => 'Kampala']);
 
-        $line = (string) $this->call('deliveryNote', $t, 'Ntinda');
+        $line = (string) $this->brain('deliveryNote', $t, 'Ntinda');
 
         $this->assertStringContainsString('Which town or area is *Ntinda* in?', $line);
     }
