@@ -3244,7 +3244,7 @@ function restaurantHome(){
 function comboStrip(){
   var cb=(SHOP.combos||[]); if(!cb.length) return '';
   var cur=(SHOP.currency||'UGX'), wn=(SHOP.waNumber||'');
-  function n(x){return Number(x||0).toLocaleString();}
+  function n(x){return Number(x||0).toLocaleString('en-US');}
   var cards=cb.map(function(c){
     var items=(c.items||[]).map(function(i){return '<li style="display:flex;gap:7px;font-size:13px;padding:2px 0;color:#2a3a30"><span style="color:var(--green);font-weight:800">✓</span>'+i.qty+'× '+esc(i.name)+'</li>';}).join('');
     var ribbon=c.save?'<div style="position:absolute;top:10px;left:10px;background:#FCEFE6;color:#C6531E;font-weight:800;font-size:11px;padding:5px 9px;border-radius:999px;border:1px solid #f2d8c7">SAVE '+cur+' '+n(c.save)+'</div>':'';
@@ -4042,7 +4042,7 @@ function whChatPaint(m,save){
     +(m.p.image?'<img loading="lazy" src="'+esc(m.p.image)+'" alt="">':'')
     +'<div class="ci"><b>'+esc(m.p.name||'')+'</b>'
     +(m.p.pack?'<span class="cm">Carton of '+(+m.p.pack)+' pcs</span>':'')
-    +'<span class="cp">'+esc(m.p.price!=null?(((m.p.currency||'')+' ').replace(/^ $/,'')+Number(m.p.price).toLocaleString()+(m.p.unit?' / '+m.p.unit:'')):'Price on request')+'</span>'
+    +'<span class="cp">'+esc(m.p.price!=null?(((m.p.currency||'')+' ').replace(/^ $/,'')+Number(m.p.price).toLocaleString('en-US')+(m.p.unit?' / '+m.p.unit:'')):'Price on request')+'</span>'
     +(m.p.moq?'<span class="cq">MOQ: '+(+m.p.moq)+(m.p.unit?(' '+esc(m.p.unit)):'')+'</span>':'')
     +'<div class="cctl" data-cq="'+esc(m.p.name||'')+'" data-cid="'+(+m.p.id||0)+'">'+whChatCtl(m.p.name||'',+m.p.id||0)+'</div>'
     +'</div></div></div>';
