@@ -49,7 +49,9 @@ class TravelPhotoRuleTest extends TestCase
 
     private function business(string $vertical): Tenant
     {
-        $t = Tenant::factory()->create(['settings' => ['vertical' => $vertical, 'timezone' => 'Africa/Kampala']]);
+        // A real tenant always has an instance name (sign-up assigns one); the bare factory row does not.
+        $t = Tenant::factory()->create(['whatsapp_instance' => 'test_' . $vertical,
+            'settings' => ['vertical' => $vertical, 'timezone' => 'Africa/Kampala']]);
         app(TenantContext::class)->set($t->id);
 
         return $t;
