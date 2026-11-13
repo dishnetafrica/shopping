@@ -208,16 +208,14 @@ class ProcessIncomingMessage implements ShouldQueue
         $travelPhoto = false;
         if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
             try {
-                foreach (['text', 'image_caption', 'media_caption'] as $tk) {
-                    if (isset($this->incoming[$tk]) && is_string($this->incoming[$tk])) {
-                        $this->incoming[$tk] = \App\Services\Travel\Privacy\PassportGuard::mask($this->incoming[$tk])['text'];
-                    }
-                }
-                if (! empty($this->incoming['has_image'])) {
-                    $travelPhoto = true;
-                    unset($this->incoming['image_b64'], $this->incoming['media_key']);
-                }
-            } catch (\Throwable $e) { /* never break message handling */ }
+                $scrub = \App\Services\Travel\Privacy\PassportGuard::scrubInbound($this->incoming);
+                $this->incoming = $scrub['incoming'];
+                $travelPhoto = $scrub['photo'];
+            } catch (\Throwable $e) {
+                // Fail closed: if the scrub itself breaks, the photo is still never fetched.
+                $travelPhoto = ! empty($this->incoming['has_image']);
+                unset($this->incoming['image_b64'], $this->incoming['media_key']);
+            }
         }
 
         // Always log what the customer said — even if the bot is off or a human

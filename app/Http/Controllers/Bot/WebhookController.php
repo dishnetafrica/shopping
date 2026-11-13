@@ -54,7 +54,7 @@ class WebhookController
         // Travel Vertical (M1): TRAVEL TENANTS ONLY. A customer photo could be a passport, so its
         // bytes are dropped here — before the message is queued — and are never stored or read.
         if (! empty($incoming['has_image']) && \App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
-            unset($incoming['image_b64']);
+            unset($incoming['image_b64'], $incoming['media_key']);
         }
 
         // Burst coalescing (v4.7.4): plain-text customer messages are stamped with an arrival

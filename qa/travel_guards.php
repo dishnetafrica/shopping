@@ -102,5 +102,26 @@ foreach ([
 chk('empty text', P::mask(''), ['text' => '', 'masked' => false]);
 chk('photos are withheld', [P::withholds('image'), P::withholds('audio'), P::withholds('file'), P::withholds('location')], [true, false, false, false]);
 
+echo "== incoming message scrub (what the webhook and the message job apply on a travel tenant)\n";
+$in = ['from' => '256700111222', 'text' => '', 'has_image' => true, 'image_b64' => 'QUJDRA==', 'media_key' => ['id' => 'ABC123'],
+    'image_caption' => 'my passport A1234567', 'instance' => 'main'];
+$r = P::scrubInbound($in);
+chk('a photo is reported', $r['photo'], true);
+chk('the image bytes are removed', array_key_exists('image_b64', $r['incoming']), false);
+chk('the key that could fetch the photo later is removed', array_key_exists('media_key', $r['incoming']), false);
+chk('the caption is masked', $r['incoming']['image_caption'], 'my passport ' . P::MASK);
+chk('the caller still knows a photo arrived', $r['incoming']['has_image'], true);
+chk('other fields are untouched', [$r['incoming']['from'], $r['incoming']['instance']], ['256700111222', 'main']);
+chk('scrubbing twice changes nothing more', P::scrubInbound($r['incoming']), $r);
+$r = P::scrubInbound(['text' => 'Passport no B7654321, flying 20 Dec', 'media_caption' => 'passport N1234567']);
+chk('typed number masked in text', $r['incoming']['text'], 'Passport no ' . P::MASK . ', flying 20 Dec');
+chk('typed number masked in a media caption', $r['incoming']['media_caption'], 'passport ' . P::MASK);
+chk('no photo reported for a text message', $r['photo'], false);
+$voice = ['text' => '', 'has_audio' => true, 'media_key' => ['id' => 'V1']];
+chk('a voice note keeps its key (only photos are withheld)', P::scrubInbound($voice), ['incoming' => $voice, 'photo' => false]);
+$plain = ['text' => 'Ticket to Dubai for 2', 'from' => '256700111222'];
+chk('an ordinary message is returned unchanged', P::scrubInbound($plain), ['incoming' => $plain, 'photo' => false]);
+chk('non-text values do not break it', P::scrubInbound(['text' => ['x'], 'has_image' => 0])['photo'], false);
+
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
 exit($fail === 0 ? 0 : 1);

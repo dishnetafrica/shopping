@@ -50,6 +50,29 @@ final class PassportGuard
         return ['text' => $out ?? $text, 'masked' => $masked];
     }
 
+    /**
+     * Apply both rules to one incoming message payload (the array the webhook builds and the message
+     * job handles). Typed passport numbers are masked in every text field; for a photo, the image
+     * bytes AND the key that could fetch them later are removed, so nothing downstream can download,
+     * store or show it. `has_image` is kept so the caller still knows a photo arrived. Idempotent.
+     *
+     * @return array{incoming:array,photo:bool}
+     */
+    public static function scrubInbound(array $incoming): array
+    {
+        foreach (['text', 'image_caption', 'media_caption'] as $k) {
+            if (isset($incoming[$k]) && is_string($incoming[$k])) {
+                $incoming[$k] = self::mask($incoming[$k])['text'];
+            }
+        }
+        $photo = ! empty($incoming['has_image']);
+        if ($photo) {
+            unset($incoming['image_b64'], $incoming['media_key']);
+        }
+
+        return ['incoming' => $incoming, 'photo' => $photo];
+    }
+
     /** Whether an incoming message kind is withheld on a travel tenant. Photos only, in milestone 1. */
     public static function withholds(string $kind): bool
     {
