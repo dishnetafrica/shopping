@@ -336,6 +336,24 @@ class TravelEnquiryFlowTest extends TestCase
         $this->assertSame(1, FollowupProposal::withoutGlobalScopes()->where('tenant_id', $shop->id)->where('trigger', 'part_request')->count());
     }
 
+    public function test_the_prompt_tells_the_model_what_is_stored_and_what_is_still_needed(): void
+    {
+        $t = $this->agency(['travel_home_airport' => 'Entebbe']);
+        $c = $this->convo($t);
+        $turn = app(TravelTurn::class);
+
+        $this->assertStringContainsString('nothing recorded yet', $turn->contextBlock($t, $c, self::PHONE, 'whatsapp'));
+        $this->assertStringContainsString('offering Entebbe as the likely answer', TravelTurn::promptBlock($t));
+
+        $this->say($t, $c, 'to Dubai for 2', "Ok\n<<TRIP {\"to\":\"Dubai\",\"adults\":2}>>");
+        $block = $turn->contextBlock($t, $c, self::PHONE, 'whatsapp');
+        $this->assertStringContainsString('TODAY: ' . now('Africa/Kampala')->format('Y-m-d'), $block);
+        $this->assertStringContainsString('Dubai, United Arab Emirates', $block);
+        $this->assertStringContainsString('2 adults', $block);
+        $this->assertStringContainsString('STILL NEEDED: where they are flying from; the travel date; whether it is one way or return', $block);
+        $this->assertStringNotContainsString('where they are flying to', $block, 'never ask again for what is stored');
+    }
+
     public function test_a_travel_reply_that_mentions_a_quotation_is_not_replaced(): void
     {
         $t = $this->agency();

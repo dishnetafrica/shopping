@@ -71,6 +71,9 @@ class AiBrain
         if ($isTravel) {
             $imageB64 = '';
             $photoMatch = null;
+            // Also the last lock on typed passport numbers: text reaches here from WhatsApp, website
+            // chat and voice-note transcription, and none of it may carry one to the model.
+            $text = \App\Services\Travel\Privacy\PassportGuard::mask($text)['text'];
         }
 
         // Nothing we can read (sticker / contact / empty) → ask politely instead of feeding junk to the AI.
