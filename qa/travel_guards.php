@@ -100,6 +100,17 @@ foreach ([
     chk("left alone: $s", P::mask($s), ['text' => $s, 'masked' => false]);
 }
 chk('empty text', P::mask(''), ['text' => '', 'masked' => false]);
+// A number spelt out one character at a time, as a voice note is often transcribed.
+chk('dictated with spaces', P::mask('my passport number is A 1 2 3 4 5 6 7 thanks'), ['text' => 'my passport number is ' . P::MASK . ' thanks', 'masked' => true]);
+chk('dictated with dashes', P::mask('Passport 1-2-3-4-5-6-7-8-9'), ['text' => 'Passport ' . P::MASK, 'masked' => true]);
+foreach ([
+    'passport ok, travelling 20 12 2026',                      // a date in groups
+    'passport ready, call 0772 123 456',                       // a grouped phone number
+    'passport ok, we are 2 adults 1 child 1 infant',           // small numbers between words
+    'passport ready. I need a b c options',                    // single letters, no digits
+] as $s) {
+    chk("left alone: $s", P::mask($s), ['text' => $s, 'masked' => false]);
+}
 chk('every attachment kind except a voice note is withheld', [P::withholds('image'), P::withholds('document'), P::withholds('file'), P::withholds('video'), P::withholds('audio'), P::withholds('location')], [true, true, true, true, false, false]);
 
 echo "== incoming message scrub (what the webhook and the message job apply on a travel tenant)\n";

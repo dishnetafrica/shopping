@@ -354,19 +354,22 @@ class TravelEnquiryFlowTest extends TestCase
         $this->assertStringNotContainsString('where they are flying to', $block, 'never ask again for what is stored');
     }
 
-    public function test_every_turn_records_whether_the_model_wrote_the_trip_line(): void
+    public function test_every_turn_records_two_yes_no_facts_and_no_customer_data(): void
     {
         $t = $this->agency();
         $c = $this->convo($t);
 
         $this->say($t, $c, 'I want to fly to Dubai', "Lovely! When?\n<<TRIP {\"to\":\"Dubai\"}>>");
         $this->say($t, $c, 'on 20 December, my passport is A1234567', 'Thank you, noted.');   // the model forgot the line
+        $this->say($t, $c, 'thanks', 'You are welcome.');                                      // nothing to report
 
-        $rows = \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'travel_turn')->orderBy('id')->pluck('detail')->all();
-        $this->assertCount(2, $rows);
-        $this->assertStringStartsWith('marker=yes | I want to fly to Dubai', $rows[0]);
-        $this->assertStringStartsWith('marker=no | on 20 December', $rows[1]);
-        $this->assertStringNotContainsString('A1234567', $rows[1]);
+        $rows = \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'travel_turn')->orderBy('id')->get();
+        $this->assertSame(
+            ['marker=yes details=yes', 'marker=no details=yes', 'marker=no details=no'],
+            $rows->pluck('detail')->all(),
+            'only two yes/no facts per turn: none of the customer\'s words'
+        );
+        $this->assertSame([null, null, null], $rows->pluck('phone')->all(), 'no phone number is stored with the measurement');
     }
 
     public function test_a_travel_reply_that_mentions_a_quotation_is_not_replaced(): void

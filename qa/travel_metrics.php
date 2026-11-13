@@ -51,5 +51,25 @@ chk('a custom limit is honoured', M::isAbandoned('DETAILS_COLLECTED', $now - 7 *
 chk('a zero limit is treated as one hour, not "always"', M::isAbandoned('NEW_ENQUIRY', $now - 1800, $now, 0), false);
 chk('current stage counts as reached even if history is missing', M::compute([$row(['stage' => 'DETAILS_COLLECTED', 'reached' => []])], $now)['successful_ai'], 1);
 
+echo "== did the customer's message contain a trip detail? (fixed rules, no AI, nothing stored but yes/no)\n";
+require_once __DIR__ . '/../app/Services/Travel/Enquiry/AirportDirectory.php';
+require_once __DIR__ . '/../app/Services/Travel/Quality/TripDetailSignal.php';
+$place = fn (string $q) => \App\Services\Travel\Enquiry\AirportDirectory::shared()->resolve($q);
+$sig = fn (string $m) => \App\Services\Travel\Quality\TripDetailSignal::present($m, $place);
+foreach ([
+    'I need a ticket to Dubai', 'From Entebbe, 20 December', 'Return on 4 January, 2 adults', 'Nairobi', 'Kampala',
+    'Actually make it 22 December', 'We will be 3 adults and one child', 'Business class, direct flights only',
+    'for 2', 'one way', 'next week', 'I want to go to London', 'on 12/03', 'Entebbe to Kigali', 'just me', '30kg baggage please',
+] as $m) {
+    chk("detail: $m", $sig($m), true);
+}
+foreach ([
+    'Hi', 'thanks', 'ok', 'yes please', 'how much is a ticket?', 'Hello, good morning', 'I want to book', 'can you help me',
+    'thank you so much', 'to you', 'I want to travel', 'what do you offer?', 'call me', 'my passport is ready', 'Good', 'Great',
+    'Nice', 'May I know the price', 'send to my email', '',
+] as $m) {
+    chk("no detail: '$m'", $sig($m), false);
+}
+
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
 exit($fail === 0 ? 0 : 1);

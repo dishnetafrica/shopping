@@ -207,7 +207,8 @@ class ProcessIncomingMessage implements ShouldQueue
         // so it can never be fetched later) nor downloaded. The webhook already did this before the
         // message was queued; this is the second lock. Every other tenant skips this block entirely.
         $travelWithheld = null;   // image | document | video | null
-        if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
+        $travelTenant   = \App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant);
+        if ($travelTenant) {
             try {
                 $scrub = \App\Services\Travel\Privacy\PassportGuard::scrubInbound($this->incoming);
                 $this->incoming = $scrub['incoming'];
@@ -539,6 +540,8 @@ class ProcessIncomingMessage implements ShouldQueue
                 $vt = new \App\Services\Bot\VoiceTranscriber();
                 if ($vt->enabled() && $b64 !== '') {
                     $tr = (string) $vt->transcribe($b64);
+                    // Travel Vertical (M1): TRAVEL TENANTS ONLY — a spoken passport number is masked like a typed one.
+                    if ($travelTenant) $tr = \App\Services\Travel\Privacy\PassportGuard::mask($tr)['text'];
                     if (trim($tr) !== '') { $aiText = trim($tr); $this->incoming['text'] = $aiText; BotTrace::log($this->tenantId, $trace, $from, 'voice_transcribed', mb_substr($aiText, 0, 90)); }
                 }
             }
@@ -741,6 +744,8 @@ class ProcessIncomingMessage implements ShouldQueue
                 }
                 $vt = new \App\Services\Bot\VoiceTranscriber();
                 if ($vt->enabled() && $b64 !== '') $transcript = $vt->transcribe($b64);
+                // Travel Vertical (M1): TRAVEL TENANTS ONLY — a spoken passport number is masked like a typed one.
+                if ($travelTenant && $transcript !== null) $transcript = \App\Services\Travel\Privacy\PassportGuard::mask((string) $transcript)['text'];
             }
             if ($transcript !== null && trim($transcript) !== '') {
                 BotTrace::log($this->tenantId, $trace, $from, 'voice_transcribed', mb_substr($transcript, 0, 90));

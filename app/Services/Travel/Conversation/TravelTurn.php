@@ -5,9 +5,11 @@ namespace App\Services\Travel\Conversation;
 use App\Models\Conversation;
 use App\Models\Product;
 use App\Models\Tenant;
+use App\Services\Travel\Enquiry\AirportDirectory;
 use App\Services\Travel\Enquiry\EnquiryService;
 use App\Services\Travel\Enquiry\EnquirySlots;
 use App\Services\Travel\Insight\CustomerTripHistory;
+use App\Services\Travel\Quality\TripDetailSignal;
 use App\Support\BotTrace;
 use Illuminate\Support\Facades\Log;
 
@@ -154,12 +156,13 @@ final class TravelTurn
                 $enquiry ? $this->enquiries->guardHit($enquiry, 'marker_malformed') : BotTrace::log($tenant->id, 'travel', $from, 'marker_malformed', null);
             }
 
-            // Measurement only — no extra model call. One trace row per turn recording whether the model
-            // wrote the hidden trip line, next to what the customer said (passport numbers masked), so
-            // the share of turns where trip details were given but not reported can be counted.
-            $wrote = $marker['malformed'] ? 'malformed' : (($marker['patch'] !== null || $marker['new_trip']) ? 'yes' : 'no');
-            BotTrace::log($tenant->id, 'travel', $from, 'travel_turn',
-                'marker=' . $wrote . ' | ' . mb_substr(\App\Services\Travel\Privacy\PassportGuard::mask($customerText)['text'], 0, 200));
+            // Measurement only — no extra model call, and no customer data. One trace row per turn with
+            // two yes/no facts: did the model write its hidden trip line, and did the customer's message
+            // contain a trip detail (fixed rules, TripDetailSignal). No phone number and none of the
+            // customer's words are stored, so the row can be counted and shared freely.
+            $wrote  = $marker['malformed'] ? 'malformed' : (($marker['patch'] !== null || $marker['new_trip']) ? 'yes' : 'no');
+            $detail = TripDetailSignal::present($customerText, fn (string $q) => AirportDirectory::shared()->resolve($q)) ? 'yes' : 'no';
+            BotTrace::log($tenant->id, 'travel', null, 'travel_turn', 'marker=' . $wrote . ' details=' . $detail);
 
             // Guard the model's own words. Real catalogue prices and the customer's own figures are allowed.
             $g = ReplyGuard::clean($clean, array_merge($this->cataloguePrices($tenant), ReplyGuard::amounts($customerText)));

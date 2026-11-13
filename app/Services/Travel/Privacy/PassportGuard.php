@@ -53,6 +53,19 @@ final class PassportGuard
             return self::MASK;
         }, $text);
 
+        // The same number spelt out one character at a time, as a voice note is often transcribed
+        // ("A 1 2 3 4 5 6 7", "1-2-3-4-5-6-7"). Only single characters separated by one space, dot or
+        // dash qualify, so a date ("20 12 2026") or a grouped phone number ("0772 123 456") is left.
+        $out = preg_replace_callback('/(?<![A-Za-z0-9])([A-Za-z0-9](?:[ .\-][A-Za-z0-9]){5,9})(?![A-Za-z0-9])/', function (array $m) use (&$masked) {
+            $token = preg_replace('/[ .\-]/', '', $m[1]) ?? '';
+            if (! preg_match('/^[A-Za-z]{0,3}\d{5,9}[A-Za-z]{0,2}$/', $token)) {
+                return $m[1];
+            }
+            $masked = true;
+
+            return self::MASK;
+        }, $out ?? $text);
+
         return ['text' => $out ?? $text, 'masked' => $masked];
     }
 

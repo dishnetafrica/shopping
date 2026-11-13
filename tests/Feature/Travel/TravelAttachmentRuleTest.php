@@ -36,11 +36,20 @@ class TravelAttachmentRuleTest extends TestCase
     /** "PASSPORTBYTES" in base64 — stands in for the content of an attachment. */
     private const BYTES = 'UEFTU1BPUlRCWVRFUw==';
 
+    /** What the transcription service returns for the voice note in the voice test. */
+    private const SPOKEN = 'My passport number is A1234567. I need a ticket to Dubai for two adults.';
+
+    /** The queued jobs exactly as the queue would store them (also what a failed job keeps). */
+    private string $stored = '';
+
     protected function setUp(): void
     {
         parent::setUp();
         config(['whatsapp.default' => 'evolution', 'whatsapp.drivers.evolution.base_url' => 'http://evolution.test', 'whatsapp.drivers.evolution.api_key' => 'k']);
-        Http::fake(['*' => Http::response(['key' => ['id' => 'OUT1']], 200)]);
+        Http::fake([
+            'api.openai.com/v1/audio/*' => Http::response(['text' => self::SPOKEN], 200),   // voice transcription
+            '*' => Http::response(['key' => ['id' => 'OUT1']], 200),                         // the WhatsApp provider
+        ]);
     }
 
     protected function tearDown(): void
@@ -85,7 +94,15 @@ class TravelAttachmentRuleTest extends TestCase
         Bus::fake([ProcessIncomingMessage::class, NotifyOwner::class]);
         $this->postJson('/api/webhook/whatsapp/evolution', $this->body($t, $message))->assertOk();
 
-        return Bus::dispatched(ProcessIncomingMessage::class)->map(fn ($job) => $job->incoming)->all();
+        $jobs = Bus::dispatched(ProcessIncomingMessage::class);
+        $this->stored = $jobs->map(fn ($job) => serialize($job))->implode("\n");
+
+        return $jobs->map(fn ($job) => $job->incoming)->all();
+    }
+
+    private static function leaksText(string $text): bool
+    {
+        return str_contains($text, 'UEFTU1BPUlRCWVRFUw') || str_contains($text, 'A1234567') || str_contains($text, 'passport-scan');
     }
 
     /** Run the real message job on a message exactly as the provider's parser produced it (NOT pre-scrubbed). */
@@ -123,6 +140,8 @@ class TravelAttachmentRuleTest extends TestCase
             $this->assertArrayNotHasKey($gone, $in);
         }
         $this->assertFalse(self::leaks($in), 'no bytes, no file name and no passport number anywhere in the queued message');
+        $this->assertNotSame('', $this->stored);
+        $this->assertFalse(self::leaksText($this->stored), 'nor in the job as the queue (and the failed-jobs table) would store it');
         $this->assertSame('my passport ' . PassportGuard::MASK, $in['media_caption']);
     }
 
@@ -136,6 +155,7 @@ class TravelAttachmentRuleTest extends TestCase
             $this->assertArrayNotHasKey($gone, $jobs[0]);
         }
         $this->assertFalse(self::leaks($jobs[0]));
+        $this->assertFalse(self::leaksText($this->stored));
     }
 
     public function test_a_typed_passport_number_is_masked_before_it_is_queued(): void
@@ -145,6 +165,7 @@ class TravelAttachmentRuleTest extends TestCase
         $this->assertCount(1, $jobs);
         $this->assertFalse(self::leaks($jobs[0]), 'not in the text and not in a raw copy of the webhook body');
         $this->assertStringContainsString(PassportGuard::MASK, $jobs[0]['text']);
+        $this->assertFalse(self::leaksText($this->stored));
     }
 
     public function test_a_voice_note_to_a_travel_agency_can_still_be_transcribed(): void
@@ -201,6 +222,32 @@ class TravelAttachmentRuleTest extends TestCase
         $this->assertSame(PassportGuard::PHOTO_PLACEHOLDER, $in->body);
         $this->assertEmpty($in->meta);
         Bus::assertDispatched(NotifyOwner::class, fn ($job) => str_contains($job->text, 'sent a photo'));
+    }
+
+    public function test_a_voice_note_still_opens_a_trip_and_a_spoken_passport_number_goes_nowhere(): void
+    {
+        config(['openai.api_key' => 'test-key']);
+        $answer = fn () => \OpenAI\Responses\Chat\CreateResponse::fake(['choices' => [['index' => 0, 'finish_reason' => 'stop',
+            'message' => ['role' => 'assistant', 'content' => "Lovely, Dubai! When would you like to travel?\n<<TRIP {\"to\":\"Dubai\",\"adults\":2}>>"]]]]);
+        \OpenAI\Laravel\Facades\OpenAI::fake([$answer(), $answer(), $answer(), $answer()]);
+        $t = $this->business('travel');
+
+        $audio = base64_encode(str_repeat('voice-note-bytes ', 40));   // long enough to be treated as audio
+        $this->process($t, ['audioMessage' => ['mimetype' => 'audio/ogg; codecs=opus'], 'base64' => $audio]);
+
+        // The existing behaviour still works: the voice note was transcribed and opened a trip.
+        $trip = \App\Models\TravelEnquiry::withoutGlobalScopes()->where('tenant_id', $t->id)->get();
+        $this->assertCount(1, $trip);
+        $this->assertSame('Dubai, United Arab Emirates', $trip[0]->destination);
+        $this->assertStringContainsString('2 adults', \App\Services\Travel\Enquiry\EnquirySlots::paxLine($trip[0]->state()));
+
+        // The passport number that was spoken reached neither the model, the chat log nor the trace.
+        \OpenAI\Laravel\Facades\OpenAI::assertSent(\OpenAI\Resources\Chat::class);
+        \OpenAI\Laravel\Facades\OpenAI::assertNotSent(\OpenAI\Resources\Chat::class,
+            fn (string $method, array $request) => str_contains((string) json_encode($request), 'A1234567'));
+        $this->assertSame(0, Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('body', 'like', '%A1234567%')->count());
+        $this->assertSame(0, \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('detail', 'like', '%A1234567%')->count());
+        $this->assertSame(1, \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'voice_transcribed')->count());
     }
 
     public function test_a_grocery_shop_photo_is_stored_with_its_media_reference_as_before(): void
