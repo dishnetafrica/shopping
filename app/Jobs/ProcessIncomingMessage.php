@@ -201,6 +201,25 @@ class ProcessIncomingMessage implements ShouldQueue
             return; // never auto-reply to our own number
         }
 
+        // Travel Vertical (M1): TRAVEL TENANTS ONLY. Passport data is never collected over chat.
+        // A typed passport number is masked before the message is stored or shown to the model, and
+        // a customer photo is neither kept (no media key is stored, so it can never be fetched
+        // later) nor downloaded. Every other tenant skips this block entirely.
+        $travelPhoto = false;
+        if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
+            try {
+                foreach (['text', 'image_caption', 'media_caption'] as $tk) {
+                    if (isset($this->incoming[$tk]) && is_string($this->incoming[$tk])) {
+                        $this->incoming[$tk] = \App\Services\Travel\Privacy\PassportGuard::mask($this->incoming[$tk])['text'];
+                    }
+                }
+                if (! empty($this->incoming['has_image'])) {
+                    $travelPhoto = true;
+                    unset($this->incoming['image_b64'], $this->incoming['media_key']);
+                }
+            } catch (\Throwable $e) { /* never break message handling */ }
+        }
+
         // Always log what the customer said — even if the bot is off or a human
         // has taken over. This is what powers the live web inbox.
         // WhatsApp-Web mode (2026-07-18): remember WHAT arrived, not just its text.
@@ -243,6 +262,11 @@ class ProcessIncomingMessage implements ShouldQueue
         $logText = $this->incoming['text'];
         if (trim((string) $logText) === '' && ! empty($mMeta['media']['caption'])) {
             $logText = (string) $mMeta['media']['caption'];
+        }
+        if ($travelPhoto) {
+            // Travel: the inbox shows that a photo arrived, and any caption, but not the photo itself.
+            $tpCap   = trim((string) ($this->incoming['image_caption'] ?? ($this->incoming['media_caption'] ?? '')));
+            $logText = trim(\App\Services\Travel\Privacy\PassportGuard::PHOTO_PLACEHOLDER . ' ' . (trim((string) $logText) !== '' ? $logText : $tpCap));
         }
         $inMsg = MessageLog::record(
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
@@ -493,7 +517,22 @@ class ProcessIncomingMessage implements ShouldQueue
             // Image → match it against our real catalogue, then hand the bytes to the AI (vision).
             $imageB64 = '';
             $photoMatch = null;
-            if (! empty($this->incoming['has_image'] ?? false)) {
+            if ($travelPhoto) {
+                // Travel Vertical (M1): TRAVEL TENANTS ONLY. The photo is not downloaded, matched or
+                // shown to the model. Say so once per burst, tell the team, and carry on only if the
+                // customer also typed something.
+                if (\Illuminate\Support\Facades\Cache::add('travelphoto:' . $this->tenantId . ':' . $from, 1, now()->addSeconds(120))) {
+                    $notice = \App\Services\Travel\Privacy\PassportGuard::PHOTO_NOTICE;
+                    $gateway->sendText($tenant->whatsapp_instance, $from, $notice);
+                    MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $notice);
+                    try {
+                        NotifyOwner::dispatch($this->tenantId, "📷 +{$from} sent a photo. On a travel account photos are not stored or read (passport privacy rule). Open WhatsApp on the business phone if you need to see it.");
+                    } catch (\Throwable $e) { /* alert best-effort */ }
+                }
+                BotTrace::log($this->tenantId, $trace, $from, 'travel_photo_withheld', null);
+                if (trim($aiText) === '') $aiText = trim((string) ($this->incoming['image_caption'] ?? ''));
+                if (trim($aiText) === '') return;
+            } elseif (! empty($this->incoming['has_image'] ?? false)) {
                 // A photo dump must not get a reply per photo. First work out WHO is sending:
                 //  • a SUPPLIER offering goods (their number is in Suppliers, or selling words in the
                 //    caption) → one "we'll review" reply + an owner alert, then silence.

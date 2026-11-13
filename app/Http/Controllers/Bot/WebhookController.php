@@ -51,6 +51,12 @@ class WebhookController
         \App\Support\BotTrace::log($tenant->id, $trace, $incoming['from'], 'queued');
         $incoming['t_recv'] = microtime(true);   // for end-to-end latency logging
 
+        // Travel Vertical (M1): TRAVEL TENANTS ONLY. A customer photo could be a passport, so its
+        // bytes are dropped here — before the message is queued — and are never stored or read.
+        if (! empty($incoming['has_image']) && \App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
+            unset($incoming['image_b64']);
+        }
+
         // Burst coalescing (v4.7.4): plain-text customer messages are stamped with an arrival
         // sequence and processed after a short window, so a two-line burst ("email…" then
         // "Pls share the details") gets ONE combined answer instead of two. Media, location

@@ -104,6 +104,10 @@ class PartRequestService
     public function captureUnmatched(Tenant $tenant, ?string $phone, array $quote, string $context = ''): void
     {
         if (! $phone) return;
+        // Travel Vertical (M1): NOT for travel agencies. A trip that has no catalogue price is not a
+        // missing spare part — it used to page the owner with "*Part request* … Bike …". Travel
+        // enquiries are recorded on the Trips screen instead (App\Services\Travel).
+        if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) return;
         foreach (($quote['lines'] ?? []) as $l) {
             if (! empty($l['matched'])) continue;
             $name = trim((string) ($l['name'] ?? ''));
