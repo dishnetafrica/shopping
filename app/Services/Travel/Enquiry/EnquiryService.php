@@ -22,9 +22,13 @@ use Illuminate\Support\Facades\Log;
  */
 final class EnquiryService
 {
-    public function __construct(private ?AirportDirectory $airports = null)
+    private AirportDirectory $airports;
+
+    public function __construct()
     {
-        $this->airports ??= AirportDirectory::shared();
+        // One shared directory per process: the container must not build a fresh 4,000-row index
+        // for every service instance.
+        $this->airports = AirportDirectory::shared();
     }
 
     public static function isTravel(?Tenant $tenant): bool
