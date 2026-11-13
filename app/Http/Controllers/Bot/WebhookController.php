@@ -29,7 +29,14 @@ class WebhookController
         // reach the pipeline — it has full transcription + vision branches waiting for them.
         // This guard predated those features and was dropping them at the front door.
         $hasMedia = $incoming && (! empty($incoming['has_audio']) || ! empty($incoming['has_image']));
-        if (!$incoming || ($incoming['text'] === '' && !$hasPin && !$hasMedia)) {
+        // Travel Vertical (M1): TRAVEL TENANTS ONLY. A customer's document or video has no text, so
+        // it is dropped just below without a word. On a travel agency it may be a passport scan: let
+        // it through (it is scrubbed before queueing, further down) so the customer is told not to
+        // send such files and the team is alerted. Every other tenant: unchanged, still dropped.
+        $travelAttachment = $incoming && ! $hasMedia && empty($incoming['from_me'])
+            && (! empty($incoming['has_document']) || ! empty($incoming['has_video']))
+            && \App\Services\Travel\Enquiry\EnquiryService::isTravel(Tenant::byWhatsappInstance((string) $incoming['instance']));
+        if (!$incoming || ($incoming['text'] === '' && !$hasPin && !$hasMedia && !$travelAttachment)) {
             // Not a customer message. Evolution also sends connection.update here —
             // use it to detect a dropped WhatsApp link and alert the shop owner.
             $this->maybeHandleConnection($request->all());
@@ -51,10 +58,16 @@ class WebhookController
         \App\Support\BotTrace::log($tenant->id, $trace, $incoming['from'], 'queued');
         $incoming['t_recv'] = microtime(true);   // for end-to-end latency logging
 
-        // Travel Vertical (M1): TRAVEL TENANTS ONLY. A customer photo could be a passport, so its
-        // bytes are dropped here — before the message is queued — and are never stored or read.
-        if (! empty($incoming['has_image']) && \App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
-            unset($incoming['image_b64'], $incoming['media_key']);
+        // Travel Vertical (M1): TRAVEL TENANTS ONLY. A customer's photo or document could be a
+        // passport, so before the message is queued: the attachment's bytes and the key that could
+        // fetch it are removed, a typed passport number is masked, and the provider's raw body (which
+        // repeats all of that) is dropped. What is queued can no longer lead to the attachment.
+        if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
+            try {
+                $incoming = \App\Services\Travel\Privacy\PassportGuard::scrubInbound($incoming)['incoming'];
+            } catch (\Throwable $e) {
+                unset($incoming['image_b64'], $incoming['media_key'], $incoming['doc_name'], $incoming['raw']);   // fail closed
+            }
         }
 
         // Burst coalescing (v4.7.4): plain-text customer messages are stamped with an arrival

@@ -203,18 +203,19 @@ class ProcessIncomingMessage implements ShouldQueue
 
         // Travel Vertical (M1): TRAVEL TENANTS ONLY. Passport data is never collected over chat.
         // A typed passport number is masked before the message is stored or shown to the model, and
-        // a customer photo is neither kept (no media key is stored, so it can never be fetched
-        // later) nor downloaded. Every other tenant skips this block entirely.
-        $travelPhoto = false;
+        // a customer's photo, document (PDF etc.) or video is neither kept (no media key is stored,
+        // so it can never be fetched later) nor downloaded. The webhook already did this before the
+        // message was queued; this is the second lock. Every other tenant skips this block entirely.
+        $travelWithheld = null;   // image | document | video | null
         if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
             try {
                 $scrub = \App\Services\Travel\Privacy\PassportGuard::scrubInbound($this->incoming);
                 $this->incoming = $scrub['incoming'];
-                $travelPhoto = $scrub['photo'];
+                $travelWithheld = $scrub['withheld'];
             } catch (\Throwable $e) {
-                // Fail closed: if the scrub itself breaks, the photo is still never fetched.
-                $travelPhoto = ! empty($this->incoming['has_image']);
-                unset($this->incoming['image_b64'], $this->incoming['media_key']);
+                // Fail closed: if the scrub itself breaks, no attachment is ever fetched.
+                $travelWithheld = ! empty($this->incoming['has_image']) ? 'image' : (! empty($this->incoming['media_key']) ? 'document' : null);
+                unset($this->incoming['image_b64'], $this->incoming['media_key'], $this->incoming['doc_name'], $this->incoming['raw']);
             }
         }
 
@@ -261,10 +262,11 @@ class ProcessIncomingMessage implements ShouldQueue
         if (trim((string) $logText) === '' && ! empty($mMeta['media']['caption'])) {
             $logText = (string) $mMeta['media']['caption'];
         }
-        if ($travelPhoto) {
-            // Travel: the inbox shows that a photo arrived, and any caption, but not the photo itself.
-            $tpCap   = trim((string) ($this->incoming['image_caption'] ?? ($this->incoming['media_caption'] ?? '')));
-            $logText = trim(\App\Services\Travel\Privacy\PassportGuard::PHOTO_PLACEHOLDER . ' ' . (trim((string) $logText) !== '' ? $logText : $tpCap));
+        if ($travelWithheld !== null) {
+            // Travel: the inbox shows that a photo or document arrived, and any caption, but not the
+            // attachment itself.
+            $tpCap   = trim((string) (($this->incoming['image_caption'] ?? '') ?: ($this->incoming['media_caption'] ?? '')));
+            $logText = trim(\App\Services\Travel\Privacy\PassportGuard::placeholder($travelWithheld) . ' ' . (trim((string) $logText) !== '' ? $logText : $tpCap));
         }
         $inMsg = MessageLog::record(
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
@@ -490,6 +492,35 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         } catch (\Throwable $e) { /* ad-awareness must never break message handling */ }
 
+        // ---- Travel Vertical (M1): TRAVEL TENANTS ONLY — a withheld photo, document or video ----
+        // The attachment was not downloaded and will not be. Say so once per burst, tell the team,
+        // and from here treat the message as its caption only (or stop, if there is none), whichever
+        // brain the tenant uses. Null for every other tenant, so they skip this block entirely.
+        if ($travelWithheld !== null) {
+            $twMuted = in_array($from, array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), (array) $tenant->setting('bot_muted', [])), true);
+            $twBotOn = in_array($botMode, ['ai', 'n8n', 'auto', 'inbuilt'], true);
+            try {
+                if (\Illuminate\Support\Facades\Cache::add('travelphoto:' . $this->tenantId . ':' . $from, 1, now()->addSeconds(120))) {
+                    if ($twBotOn && ! $twMuted) {
+                        $notice = \App\Services\Travel\Privacy\PassportGuard::NOTICE;
+                        $gateway->sendText($tenant->whatsapp_instance, $from, $notice);
+                        MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $notice);
+                    }
+                    NotifyOwner::dispatch($this->tenantId, \App\Services\Travel\Privacy\PassportGuard::staffAlert($travelWithheld, $from));
+                }
+            } catch (\Throwable $e) { /* the notice and the alert are best-effort; the attachment stays withheld */ }
+            BotTrace::log($this->tenantId, $trace, $from, 'travel_media_withheld', $travelWithheld);   // stage is 24 chars max
+            if (trim((string) $this->incoming['text']) === '') {
+                $this->incoming['text'] = trim((string) (($this->incoming['image_caption'] ?? '') ?: ($this->incoming['media_caption'] ?? '')));
+            }
+            $this->incoming['has_image'] = false;
+            $this->incoming['has_document'] = false;
+            $this->incoming['has_video'] = false;
+            if (trim((string) $this->incoming['text']) === '') {
+                return;
+            }
+        }
+
         // ---- Native AI brain (bot_mode = ai) — same behaviour as n8n, no external workflow ----
         if ($botMode === 'ai') {
             $mutedDigits = array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), (array) $tenant->setting('bot_muted', []));
@@ -515,22 +546,7 @@ class ProcessIncomingMessage implements ShouldQueue
             // Image → match it against our real catalogue, then hand the bytes to the AI (vision).
             $imageB64 = '';
             $photoMatch = null;
-            if ($travelPhoto) {
-                // Travel Vertical (M1): TRAVEL TENANTS ONLY. The photo is not downloaded, matched or
-                // shown to the model. Say so once per burst, tell the team, and carry on only if the
-                // customer also typed something.
-                if (\Illuminate\Support\Facades\Cache::add('travelphoto:' . $this->tenantId . ':' . $from, 1, now()->addSeconds(120))) {
-                    $notice = \App\Services\Travel\Privacy\PassportGuard::PHOTO_NOTICE;
-                    $gateway->sendText($tenant->whatsapp_instance, $from, $notice);
-                    MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $notice);
-                    try {
-                        NotifyOwner::dispatch($this->tenantId, "📷 +{$from} sent a photo. On a travel account photos are not stored or read (passport privacy rule). Open WhatsApp on the business phone if you need to see it.");
-                    } catch (\Throwable $e) { /* alert best-effort */ }
-                }
-                BotTrace::log($this->tenantId, $trace, $from, 'travel_photo_withheld', null);
-                if (trim($aiText) === '') $aiText = trim((string) ($this->incoming['image_caption'] ?? ''));
-                if (trim($aiText) === '') return;
-            } elseif (! empty($this->incoming['has_image'] ?? false)) {
+            if (! empty($this->incoming['has_image'] ?? false)) {
                 // A photo dump must not get a reply per photo. First work out WHO is sending:
                 //  • a SUPPLIER offering goods (their number is in Suppliers, or selling words in the
                 //    caption) → one "we'll review" reply + an owner alert, then silence.

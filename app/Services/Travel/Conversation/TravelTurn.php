@@ -154,12 +154,19 @@ final class TravelTurn
                 $enquiry ? $this->enquiries->guardHit($enquiry, 'marker_malformed') : BotTrace::log($tenant->id, 'travel', $from, 'marker_malformed', null);
             }
 
+            // Measurement only — no extra model call. One trace row per turn recording whether the model
+            // wrote the hidden trip line, next to what the customer said (passport numbers masked), so
+            // the share of turns where trip details were given but not reported can be counted.
+            $wrote = $marker['malformed'] ? 'malformed' : (($marker['patch'] !== null || $marker['new_trip']) ? 'yes' : 'no');
+            BotTrace::log($tenant->id, 'travel', $from, 'travel_turn',
+                'marker=' . $wrote . ' | ' . mb_substr(\App\Services\Travel\Privacy\PassportGuard::mask($customerText)['text'], 0, 200));
+
             // Guard the model's own words. Real catalogue prices and the customer's own figures are allowed.
             $g = ReplyGuard::clean($clean, array_merge($this->cataloguePrices($tenant), ReplyGuard::amounts($customerText)));
             $clean = $g['reply'];
             foreach (['fare_stripped' => $g['fare_hits'], 'passport_request_stripped' => $g['passport_hits']] as $guard => $n) {
                 if ($n > 0) {
-                    $enquiry ? $this->enquiries->guardHit($enquiry, $guard, $n) : BotTrace::log($tenant->id, 'travel', $from, $guard, (string) $n);
+                    $enquiry ? $this->enquiries->guardHit($enquiry, $guard, $n) : BotTrace::log($tenant->id, 'travel', $from, 'travel_guard', $guard . ' x' . $n);   // stage is 24 chars max
                 }
             }
 

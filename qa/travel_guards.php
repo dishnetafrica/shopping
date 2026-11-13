@@ -100,28 +100,48 @@ foreach ([
     chk("left alone: $s", P::mask($s), ['text' => $s, 'masked' => false]);
 }
 chk('empty text', P::mask(''), ['text' => '', 'masked' => false]);
-chk('photos are withheld', [P::withholds('image'), P::withholds('audio'), P::withholds('file'), P::withholds('location')], [true, false, false, false]);
+chk('every attachment kind except a voice note is withheld', [P::withholds('image'), P::withholds('document'), P::withholds('file'), P::withholds('video'), P::withholds('audio'), P::withholds('location')], [true, true, true, true, false, false]);
 
 echo "== incoming message scrub (what the webhook and the message job apply on a travel tenant)\n";
 $in = ['from' => '256700111222', 'text' => '', 'has_image' => true, 'image_b64' => 'QUJDRA==', 'media_key' => ['id' => 'ABC123'],
-    'image_caption' => 'my passport A1234567', 'instance' => 'main'];
+    'image_caption' => 'my passport A1234567', 'instance' => 'main', 'raw' => ['data' => ['message' => ['base64' => 'QUJDRA==']]]];
 $r = P::scrubInbound($in);
-chk('a photo is reported', $r['photo'], true);
+chk('a photo is reported', $r['withheld'], 'image');
 chk('the image bytes are removed', array_key_exists('image_b64', $r['incoming']), false);
 chk('the key that could fetch the photo later is removed', array_key_exists('media_key', $r['incoming']), false);
+chk('the raw provider body is removed', array_key_exists('raw', $r['incoming']), false);
+chk('no copy of the bytes is left anywhere', str_contains(json_encode($r['incoming']), 'QUJDRA'), false);
 chk('the caption is masked', $r['incoming']['image_caption'], 'my passport ' . P::MASK);
 chk('the caller still knows a photo arrived', $r['incoming']['has_image'], true);
 chk('other fields are untouched', [$r['incoming']['from'], $r['incoming']['instance']], ['256700111222', 'main']);
 chk('scrubbing twice changes nothing more', P::scrubInbound($r['incoming']), $r);
-$r = P::scrubInbound(['text' => 'Passport no B7654321, flying 20 Dec', 'media_caption' => 'passport N1234567']);
+
+$pdf = ['from' => '256700111222', 'text' => '', 'has_document' => true, 'doc_name' => 'John passport.pdf', 'media_mime' => 'application/pdf',
+    'media_caption' => 'passport N1234567', 'media_key' => ['id' => 'DOC1'], 'raw' => ['data' => ['message' => ['base64' => 'UERG']]]];
+$r = P::scrubInbound($pdf);
+chk('a PDF is reported as a document', $r['withheld'], 'document');
+chk('the PDF key, file name and raw body are removed', [array_key_exists('media_key', $r['incoming']), array_key_exists('doc_name', $r['incoming']), array_key_exists('raw', $r['incoming'])], [false, false, false]);
+chk('the PDF caption is masked', $r['incoming']['media_caption'], 'passport ' . P::MASK);
+chk('the caller still knows a document arrived', $r['incoming']['has_document'], true);
+chk('scrubbing a PDF twice changes nothing more', P::scrubInbound($r['incoming']), $r);
+chk('a Word file is a document too', P::scrubInbound(['has_document' => true, 'media_mime' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'media_key' => ['id' => 'D2']])['withheld'], 'document');
+chk('a video is withheld', P::scrubInbound(['has_video' => true, 'media_key' => ['id' => 'V9']]), ['incoming' => ['has_video' => true], 'withheld' => 'video']);
+chk('an attachment of an unknown type is withheld as a document', P::scrubInbound(['media_mime' => 'application/zip', 'media_key' => ['id' => 'Z1']]), ['incoming' => ['media_mime' => 'application/zip'], 'withheld' => 'document']);
+chk('an unflagged image by mime is withheld', P::attachmentKind(['media_mime' => 'image/png', 'media_key' => ['id' => 'I1']]), 'image');
+
+$r = P::scrubInbound(['text' => 'Passport no B7654321, flying 20 Dec', 'media_caption' => 'passport N1234567', 'quoted_text' => 'your passport A1234567 noted']);
 chk('typed number masked in text', $r['incoming']['text'], 'Passport no ' . P::MASK . ', flying 20 Dec');
 chk('typed number masked in a media caption', $r['incoming']['media_caption'], 'passport ' . P::MASK);
-chk('no photo reported for a text message', $r['photo'], false);
-$voice = ['text' => '', 'has_audio' => true, 'media_key' => ['id' => 'V1']];
-chk('a voice note keeps its key (only photos are withheld)', P::scrubInbound($voice), ['incoming' => $voice, 'photo' => false]);
+chk('typed number masked in a quoted message', $r['incoming']['quoted_text'], 'your passport ' . P::MASK . ' noted');
+chk('nothing withheld for a text message', $r['withheld'], null);
+$voice = ['text' => '', 'has_audio' => true, 'audio_b64' => 'T0dH', 'media_mime' => 'audio/ogg; codecs=opus', 'media_key' => ['id' => 'V1']];
+chk('a voice note keeps its bytes and key', P::scrubInbound($voice + ['raw' => ['x' => 1]]), ['incoming' => $voice, 'withheld' => null]);
 $plain = ['text' => 'Ticket to Dubai for 2', 'from' => '256700111222'];
-chk('an ordinary message is returned unchanged', P::scrubInbound($plain), ['incoming' => $plain, 'photo' => false]);
-chk('non-text values do not break it', P::scrubInbound(['text' => ['x'], 'has_image' => 0])['photo'], false);
+chk('an ordinary message loses only its raw body', P::scrubInbound($plain + ['raw' => ['text' => 'Ticket to Dubai for 2']]), ['incoming' => $plain, 'withheld' => null]);
+chk('a location pin is not an attachment', P::scrubInbound(['text' => '📍 location', 'lat' => 0.3, 'lng' => 32.5, 'media_key' => null])['withheld'], null);
+chk('non-text values do not break it', P::scrubInbound(['text' => ['x'], 'has_image' => 0])['withheld'], null);
+chk('placeholders by kind', [P::placeholder('image'), P::placeholder('document'), P::placeholder('video')], [P::PHOTO_PLACEHOLDER, P::DOCUMENT_PLACEHOLDER, P::VIDEO_PLACEHOLDER]);
+chk('the staff alert names what was sent', [str_contains(P::staffAlert('document', '256700111222'), '+256700111222 sent a document'), str_contains(P::staffAlert('image', '1'), 'sent a photo')], [true, true]);
 
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
 exit($fail === 0 ? 0 : 1);
