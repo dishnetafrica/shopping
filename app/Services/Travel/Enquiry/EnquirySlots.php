@@ -18,6 +18,8 @@ namespace App\Services\Travel\Enquiry;
  *   flexible_days  int | null
  *   direct_only    bool | null
  *   pending        open questions the validator raised, e.g. an ambiguous city
+ *   brief          everything that is not a flight: services wanted, destinations, approximate
+ *                  dates, children's ages, purpose, budget, accommodation, contact (EnquiryBrief)
  *
  * A place is {label, city, country, codes[], input} as returned by AirportDirectory.
  */
@@ -51,6 +53,7 @@ final class EnquirySlots
             'cabin' => null, 'airlines' => [], 'baggage' => null,
             'flexible_days' => null, 'direct_only' => null, 'notes' => null,
             'pending' => [],
+            'brief' => EnquiryBrief::blank(),
         ];
     }
 
@@ -71,6 +74,23 @@ final class EnquirySlots
         $issue   = function (string $code, string $field, string $detail = '') use (&$issues) {
             $issues[] = ['code' => $code, 'field' => $field, 'detail' => $detail];
         };
+
+        // --- a trip with no flight: its dates are the trip's dates, not a departure ---------------
+        // The model may report "depart_date" for a safari or a hotel stay. Without a flight there is
+        // no flight segment to hang it on, so it is stored as the trip's start (and end) date.
+        $state['brief'] = EnquiryBrief::normalise($state['brief'] ?? null);
+        $services = EnquiryBrief::previewServices($state, $patch);
+        $flightWords = array_intersect_key($patch, ['from' => 1, 'to' => 1, 'segments' => 1, 'segment' => 1, 'trip_type' => 1, 'cabin' => 1, 'airlines' => 1]) !== [];
+        if (! $flightWords && $services !== [] && ! in_array('flights', $services, true) && $state['segments'] === [] && $state['trip_type'] === null) {
+            foreach (['depart_date' => 'start_date', 'return_date' => 'end_date'] as $flightKey => $tripKey) {
+                if (array_key_exists($flightKey, $patch)) {
+                    if (! array_key_exists($tripKey, $patch)) {
+                        $patch[$tripKey] = $patch[$flightKey];
+                    }
+                    unset($patch[$flightKey]);
+                }
+            }
+        }
 
         // --- clear --------------------------------------------------------------------------------
         foreach ((array) ($patch['clear'] ?? []) as $f) {
@@ -242,6 +262,9 @@ final class EnquirySlots
             }
         }
 
+        // --- everything that is not a flight (services, destinations, ages, budget, contact) -------
+        EnquiryBrief::apply($state, $patch, $today, $changed, $issue);
+
         // --- cross-field checks -------------------------------------------------------------------
         $first = $state['segments'][0]['date'] ?? null;
         if ($state['trip_type'] === 'return' && $state['return_date'] !== null && $first !== null && $state['return_date'] < $first) {
@@ -269,7 +292,10 @@ final class EnquirySlots
     {
         $state = array_merge(self::blank(), $state);
         $out   = [];
-        if ($state['trip_type'] === 'multi_city') {
+        if (! EnquiryBrief::wantsFlight($state)) {
+            // No flight involved: a safari, a hotel stay, a visa, a transfer, or a plain request.
+            $out = EnquiryBrief::missing($state);
+        } elseif ($state['trip_type'] === 'multi_city') {
             if (count($state['segments']) < 2) {
                 $out[] = 'segments';
             }
@@ -277,6 +303,9 @@ final class EnquirySlots
                 if (! $seg['from'] || ! $seg['to'] || ! $seg['date']) {
                     $out[] = 'segment_' . ($i + 1);
                 }
+            }
+            if ($state['adults'] === null) {
+                $out[] = 'passengers';
             }
         } else {
             $seg = $state['segments'][0] ?? ['from' => null, 'to' => null, 'date' => null];
@@ -294,9 +323,12 @@ final class EnquirySlots
             } elseif ($state['trip_type'] === 'return' && ! $state['return_date']) {
                 $out[] = 'return_date';
             }
+            if ($state['adults'] === null) {
+                $out[] = 'passengers';
+            }
         }
-        if ($state['adults'] === null) {
-            $out[] = 'passengers';
+        if (EnquiryBrief::missingChildAges($state)) {
+            $out[] = 'child_ages';
         }
 
         return $out;
@@ -372,7 +404,12 @@ final class EnquirySlots
     public static function summaryLines(array $state): array
     {
         $state = array_merge(self::blank(), $state);
+        $brief = EnquiryBrief::summaryLines($state);
         $lines = [];
+        // "Services: …" leads; the rest of the brief follows the flights.
+        if ($brief && str_starts_with($brief[0], 'Services: ')) {
+            $lines[] = array_shift($brief);
+        }
         if ($state['trip_type'] === 'multi_city') {
             foreach ($state['segments'] as $i => $seg) {
                 $lines[] = 'Flight ' . ($i + 1) . ': ' . (($seg['from']['label'] ?? null) ?: '?') . ' → ' . (($seg['to']['label'] ?? null) ?: '?')
@@ -391,6 +428,9 @@ final class EnquirySlots
                     $lines[] = $d;
                 }
             }
+        }
+        foreach ($brief as $line) {
+            $lines[] = $line;
         }
         $p = self::paxLine($state);
         if ($p !== '' || $state['cabin']) {

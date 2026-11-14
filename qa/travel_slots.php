@@ -3,6 +3,7 @@
 // a customer says into the stored trip, with the real AirportDirectory. Framework-free.
 //   php qa/travel_slots.php
 require __DIR__ . '/../app/Services/Travel/Enquiry/AirportDirectory.php';
+require __DIR__ . '/../app/Services/Travel/Enquiry/EnquiryBrief.php';
 require __DIR__ . '/../app/Services/Travel/Enquiry/EnquirySlots.php';
 
 use App\Services\Travel\Enquiry\AirportDirectory;
@@ -174,8 +175,10 @@ $r = $apply($full, ['notes' => str_repeat('x', 900), 'baggage' => "  two   bags 
 chk('free text is trimmed and capped', [mb_strlen($r['state']['notes']), $r['state']['baggage']], [300, 'two bags']);
 $r = $apply($full, ['airlines' => ['Emirates', 'Emirates', '', 'A', 'B', 'C', 'D', 'E']]);
 chk('airline list is de-duplicated and capped', count($r['state']['airlines']), 5);
-chk('blank state has every key', array_keys(S::blank()), ['trip_type', 'segments', 'return_date', 'adults', 'children', 'infants', 'cabin', 'airlines', 'baggage', 'flexible_days', 'direct_only', 'notes', 'pending']);
-chk('partial stored state is tolerated', S::missing(['adults' => 1]), ['destination', 'origin', 'depart_date', 'trip_type']);
+chk('blank state has every key', array_keys(S::blank()), ['trip_type', 'segments', 'return_date', 'adults', 'children', 'infants', 'cabin', 'airlines', 'baggage', 'flexible_days', 'direct_only', 'notes', 'pending', 'brief']);
+// Nothing says this is a flight yet, so the flight questions are not assumed.
+chk('partial stored state is tolerated', S::missing(['adults' => 1]), ['service', 'destinations', 'travel_dates']);
+chk('a stored flight detail brings the flight questions', S::missing(['adults' => 1, 'trip_type' => 'return']), ['destination', 'origin', 'depart_date', 'return_date']);
 chk('nice date', S::niceDate('2027-01-04'), '4 Jan 2027');
 
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
