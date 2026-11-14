@@ -44,4 +44,14 @@ class TravelHarnessTest extends TestCase
     {
         $this->harness('travel_metrics.php');
     }
+
+    public function test_enquiry_brief_services_destinations_ages_budget_and_contact(): void
+    {
+        $this->harness('travel_brief.php');
+    }
+
+    public function test_staff_recipients_never_include_the_customer_facing_number(): void
+    {
+        $this->harness('travel_handoff.php');
+    }
 }

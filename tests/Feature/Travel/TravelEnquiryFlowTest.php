@@ -110,8 +110,9 @@ class TravelEnquiryFlowTest extends TestCase
         $this->assertSame('return', $e->trip_type);
         $this->assertStringContainsString('Your trip request', $reply, 'the summary is written by code, not the model');
         $this->assertStringContainsString('Entebbe (EBB), Uganda → Dubai, United Arab Emirates', $reply);
-        Bus::assertDispatched(NotifyOwner::class, fn ($job) => str_contains($job->text, 'Trip request ready to price'));
-        $this->assertStringStartsWith('Flights:', (string) Lead::find($e->lead_id)->interest);
+        $this->assertStringContainsString(TravelTurn::ASK_TO_CONFIRM, $reply, 'the customer is asked to confirm before anything is sent to staff');
+        $this->assertNull($e->submitted_at, 'nothing is submitted until the customer confirms');
+        $this->assertSame(0, \App\Models\TravelEnquiryNotification::withoutGlobalScopes()->count(), 'no staff alert before confirmation');
 
         // "make it two days later" — only the date changes.
         $reply = $this->say($t, $c, 'make it two days later', "Of course, updated.\n<<TRIP {\"depart_date\":\"$newOut\"}>>");
@@ -123,7 +124,8 @@ class TravelEnquiryFlowTest extends TestCase
         $this->assertSame('Dubai, United Arab Emirates', $e->destination);
         $this->assertSame(TravelPipeline::DETAILS_COLLECTED, $e->stage);
         $this->assertStringContainsString('Updated trip request', $reply);
-        Bus::assertDispatched(NotifyOwner::class, fn ($job) => str_contains($job->text, 'Trip request changed'));
+        $this->assertStringContainsString(TravelTurn::ASK_TO_CONFIRM, $reply, 'a changed summary is confirmed again');
+        $this->assertNull($e->submitted_at);
 
         // A change that leaves a gap moves it back and asks, without losing the rest.
         $this->say($t, $c, 'actually one way... no, return but later', "Sure.\n<<TRIP {\"depart_date\":\"" . $this->day(60) . "\"}>>");
