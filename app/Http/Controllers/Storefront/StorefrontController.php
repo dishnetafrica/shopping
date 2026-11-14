@@ -129,6 +129,7 @@ class StorefrontController extends Controller
     public function show(?string $shop = null)
     {
         [$tenant, $base] = $this->resolveShop($shop);
+        if ($this->travelEnabled($tenant)) { return $this->travel($tenant, $base); }   // TRAVEL: no retail shop to show
         return $this->renderShop($tenant, $base);
     }
 
@@ -438,6 +439,7 @@ class StorefrontController extends Controller
     public function landing(?string $shop = null)
     {
         [$tenant, $base] = $this->resolveShop($shop);
+        if ($this->travelEnabled($tenant)) { return $this->travel($tenant, $base); }                   // TRAVEL
         if ($this->technologyEnabled($tenant)) { return $this->technology($shop, $tenant, $base); }   // TECHNOLOGY
         if ($this->autoPartsEnabled($tenant)) { return $this->autoParts($shop, $tenant, $base); } // AUTO_PARTS
         return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant, $base) : $this->renderShop($tenant, $base);
@@ -455,6 +457,13 @@ class StorefrontController extends Controller
     public function chatLanding(Request $request, ?string $shop = null)
     {
         [$tenant, $base] = $this->resolveShop($shop);
+        if ($this->travelEnabled($tenant)) {                                                            // TRAVEL
+            return $this->travel($tenant, $base, [
+                'openChat' => true,
+                'source'   => $this->ctxWord($request->query('source', $request->query('utm_source', ''))),
+                'campaign' => $this->ctxWord($request->query('campaign', $request->query('utm_campaign', ''))),
+            ]);
+        }
 
         return $this->renderShop($tenant, $base, null, null, 0, [
             'chatOnly' => true,
@@ -501,6 +510,63 @@ class StorefrontController extends Controller
      * every tenant that has not opted in, so no existing shop's render can change — a
      * grocery/restaurant/manufacturer/solar/auto-parts tenant never reaches this template.
      */
+    /** A travel agency's website is an enquiry page: it has no catalogue, cart or checkout to show. */
+    private function travelEnabled($tenant): bool
+    {
+        return \App\Support\Vertical::of($tenant) === \App\Support\Vertical::TRAVEL;
+    }
+
+    /**
+     * Travel agency storefront (issue #145): what the agency offers and a chat that takes the
+     * enquiry through the same brain as WhatsApp. Nothing here is a price, a product or a cart.
+     */
+    private function travel($tenant, string $base, array $chat = [])
+    {
+        $theme    = $this->resolveTheme($tenant);
+        $services = array_values(array_filter(array_map(
+            fn ($s) => mb_substr(trim((string) $s), 0, 40),
+            preg_split('/[,;\n]+/', (string) $tenant->setting('travel_services', '')) ?: []
+        )));
+        $cfg = [
+            'name'           => (string) $tenant->name,
+            'slug'           => (string) $tenant->slug,
+            'base'           => $base,
+            'initials'       => $this->initials((string) $tenant->name),
+            'logo'           => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
+            'accent'         => (string) ($theme['accent'] ?? ''),
+            'accentDark'     => (string) ($theme['accentDark'] ?? ''),
+            'services'       => array_slice($services, 0, 12),
+            'note'           => mb_substr(trim((string) $tenant->setting('travel_profile_note', '')), 0, 900),
+            'waNumber'       => preg_replace('/[^0-9]/', '', (string) ($tenant->whatsapp_number ?? '')),
+            'webChat'        => (bool) $tenant->setting('web_chat', false),
+            'webChatContact' => (bool) $tenant->setting('web_chat_contact', true),
+            'openChat'       => (bool) ($chat['openChat'] ?? false),
+            'ctx'            => ['source' => (string) ($chat['source'] ?? ''), 'campaign' => (string) ($chat['campaign'] ?? '')],
+        ];
+
+        $path  = resource_path('storefront/travel.html');
+        $html  = is_file($path) ? file_get_contents($path) : '<h1>Unavailable</h1>';
+        $name  = e((string) $tenant->name);
+        $url   = $base === '' ? url('/') : url($base);
+        $desc  = e((string) $tenant->name . ' — tell us about your trip and our travel team will prepare a quotation.');
+        $meta  = '<meta name="description" content="' . $desc . '">' . "\n"
+               . '<link rel="canonical" href="' . e($url) . '">' . "\n"
+               . '<meta property="og:title" content="' . $name . '">' . "\n"
+               . '<meta property="og:description" content="' . $desc . '">';
+        // HEX_TAG so a tenant field cannot break out of the <script>; INVALID_UTF8_SUBSTITUTE so a
+        // pasted stray byte cannot make json_encode() return false and blank the page.
+        $jf    = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_INVALID_UTF8_SUBSTITUTE;
+        $html  = str_replace(
+            ['__TITLE__', '__META__', '__NAME__', '__TRAVEL_CFG__'],
+            [$name, $meta, $name, (string) json_encode($cfg, $jf)],
+            $html
+        );
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=utf-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
     private function technologyEnabled($tenant): bool
     {
         $flag = $tenant->setting('technology_site', null);
