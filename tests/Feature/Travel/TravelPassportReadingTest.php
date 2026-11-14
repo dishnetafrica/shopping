@@ -231,7 +231,7 @@ class TravelPassportReadingTest extends TestCase
 
         $this->actingAs($this->user($t, 'sales'));             // sales can open Customers, so sees the trip
         $j = $this->getJson($base)->assertOk()->json();
-        $text = json_encode($j['answers'] ?? []);
+        $text = json_encode($j['answers'] ?? [], JSON_UNESCAPED_UNICODE);
         $this->assertStringContainsString('ANNA MARIA ERIKSSON', $text);
         $this->assertStringContainsString('…02C3', $text);
         $this->assertStringContainsString('EXPIRED', $text);

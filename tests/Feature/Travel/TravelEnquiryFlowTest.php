@@ -332,7 +332,7 @@ class TravelEnquiryFlowTest extends TestCase
         $this->assertStringContainsString('TRAVEL CONSULTANT', $travelPrompt);
         $this->assertStringContainsString('<<TRIP', $travelPrompt);
         $this->assertStringContainsString('NEVER STATE A FARE', $travelPrompt);
-        $this->assertStringContainsString('NEVER ask for a passport', $travelPrompt);
+        $this->assertStringContainsString('NEVER ask the customer to type a passport number', $travelPrompt);
     }
 
     public function test_an_unpriced_trip_no_longer_pages_the_owner_as_a_spare_part_request(): void
