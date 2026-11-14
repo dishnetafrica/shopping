@@ -167,7 +167,7 @@ class TravelEnquiryHandoffTest extends TestCase
         $this->assertEqualsCanonicalizing([self::STAFF_A, self::STAFF_B], array_column($sends, 'number'));
         $this->assertNotContains(self::PUBLIC_NUMBER, array_column($sends, 'number'), 'never the number customers write to');
         $this->assertNotContains(self::CUSTOMER, array_column($sends, 'number'), 'the staff brief never goes to the customer');
-        $this->assertStringContainsString('New travel enquiry ' . $e->reference(), $sends[0]['text']);
+        $this->assertStringContainsString('*New travel enquiry* ' . $e->reference(), $sends[0]['text']);
         $this->assertStringContainsString('Destinations: Bwindi → Queen Elizabeth National Park', $sends[0]['text']);
         $this->assertStringContainsString('+' . self::CUSTOMER, $sends[0]['text']);
         $this->assertStringContainsString('https://panel.test/v3#/trip/' . $e->id, $sends[0]['text']);
@@ -335,12 +335,16 @@ class TravelEnquiryHandoffTest extends TestCase
         [$c] = $this->safari($t);
         $this->say($t, $c, 'Yes', "Thanks.\n<<TRIP {\"confirm\":true}>>");
         $e = TravelEnquiry::first();
-        $this->actingAs($this->user($t));
+        $staff = $this->user($t);
+        $this->actingAs($staff);
 
         $this->postJson('/api/v1/workspace/trip/' . $e->id . '/retry_handoff')->assertJson(['ok' => false, 'error' => 'no_recipient']);
 
         $t->settings = array_merge($t->settings, [StaffHandoff::SETTING => self::STAFF_B]);
         $t->save();
+        // A new request in production loads the business afresh; in a test the signed-in user object
+        // (and the business it has already loaded) is reused, so sign in again to read the saved setting.
+        $this->actingAs($staff->fresh());
         $this->postJson('/api/v1/workspace/trip/' . $e->id . '/retry_handoff')->assertJson(['ok' => true]);
         $this->assertSame([self::STAFF_B], array_column($this->sends(), 'number'));
         $this->assertSame('sent', $e->fresh()->handoff_status);

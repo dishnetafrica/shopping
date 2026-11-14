@@ -229,7 +229,26 @@ final class StaffHandoff
         $state = $enquiry->state();
         unset($state['pending']);
 
-        return sha1((string) json_encode($state));
+        return sha1((string) json_encode(self::canonical($state)));
+    }
+
+    /**
+     * PURE. The same content in one fixed shape: named fields sorted by name at every depth, lists left
+     * in their order (the order of destinations is content). PostgreSQL's jsonb does not keep the key
+     * order it was given, so without this the same enquiry could hash differently before and after it
+     * is read back, and a member of staff could be alerted twice about the same thing.
+     */
+    public static function canonical(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+        $value = array_map([self::class, 'canonical'], $value);
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return $value;
     }
 
     // ---------------------------------------------------------------------------------------------

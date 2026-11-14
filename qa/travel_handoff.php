@@ -44,5 +44,14 @@ $many = implode(',', array_map(fn ($i) => '2567010000' . str_pad((string) $i, 2,
 $x = $r($many);
 chk('at most ten recipients', [count($x['recipients']), count($x['rejected'])], [10, 3]);
 
+echo "== the same enquiry is the same enquiry however the database orders its fields\n";
+$a = ['brief' => ['budget' => ['amount' => 3000, 'currency' => 'USD', 'per' => 'person'], 'destinations' => ['Bwindi', 'Mara']], 'adults' => 2];
+$b = ['adults' => 2, 'brief' => ['destinations' => ['Bwindi', 'Mara'], 'budget' => ['per' => 'person', 'amount' => 3000, 'currency' => 'USD']]];
+chk('field order does not change the content', json_encode(H::canonical($a)), json_encode(H::canonical($b)));
+$c = $b; $c['brief']['destinations'] = ['Mara', 'Bwindi'];
+chk('the order of destinations is content', json_encode(H::canonical($a)) === json_encode(H::canonical($c)), false);
+$c = $b; $c['brief']['budget']['amount'] = 3500;
+chk('a changed value is a change', json_encode(H::canonical($a)) === json_encode(H::canonical($c)), false);
+
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
 exit($fail === 0 ? 0 : 1);

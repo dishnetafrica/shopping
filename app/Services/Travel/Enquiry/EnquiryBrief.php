@@ -74,6 +74,11 @@ final class EnquiryBrief
         foreach (['services', 'destinations', 'child_ages'] as $k) {
             $b[$k] = is_array($b[$k]) ? array_values($b[$k]) : [];
         }
+        // A fixed key order: PostgreSQL's jsonb returns object keys in its own order, and two briefs
+        // with the same content must compare (and hash) as the same brief.
+        $b['budget'] = is_array($b['budget']) && isset($b['budget']['amount'])
+            ? ['amount' => (int) $b['budget']['amount'], 'currency' => $b['budget']['currency'] ?? null, 'per' => $b['budget']['per'] ?? null]
+            : null;
 
         return $b;
     }

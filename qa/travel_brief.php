@@ -98,6 +98,8 @@ echo "== budget is the customer's figure, never ours\n";
 $r = $say(S::blank(), ['budget' => 3000, 'budget_currency' => 'usd', 'budget_per' => 'per person']);
 chk('budget stored', $r['state']['brief']['budget'], ['amount' => 3000, 'currency' => 'USD', 'per' => 'person']);
 chk('budget line', B::budgetLine($r['state']['brief']['budget']), 'USD 3,000 per person');
+$reordered = B::normalise(['budget' => ['per' => 'person', 'amount' => '3000', 'currency' => 'USD']]);
+chk('a budget read back in another field order is the same budget', $reordered['budget'] === $r['state']['brief']['budget'], true);
 $r = $say(S::blank(), ['budget' => 5000000]);
 chk('an amount with no currency is kept and the currency asked once', [$r['state']['brief']['budget'], B::softQuestions($r['state']), B::budgetLine($r['state']['brief']['budget'])], [['amount' => 5000000, 'currency' => null, 'per' => null], ['budget_currency'], '5,000,000 (currency not stated)']);
 chk('a missing currency never blocks the enquiry', in_array('budget_currency', S::missing($r['state']), true), false);
