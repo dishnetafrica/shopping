@@ -55,8 +55,12 @@ jobs:
         run: php artisan test tests/Unit/Kernel tests/Feature/Kernel
       # Travel Vertical (M1). A required check, like the money kernel above: this step has no
       # continue-on-error, so a failing travel test fails the job. It covers the trip record, the
-      # pipeline, the conversation guards (no invented fare, no passport request), tenant isolation
-      # of the travel tables, and that a business which is not a travel agency is untouched.
+      # pipeline, the conversation guards (no invented fare, no request to type a passport number),
+      # passports and ID cards read on the server with real OCR (never stored as files, number
+      # encrypted), tenant isolation of the travel tables, and that a business which is not a travel
+      # agency is untouched.
+      - name: OCR for travel documents (as in the Docker image)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends tesseract-ocr poppler-utils
       - name: Travel vertical tests (must pass)
         run: php artisan test tests/Unit/Travel tests/Feature/Travel
       - name: Full suite (informational only — shows what still needs work)
