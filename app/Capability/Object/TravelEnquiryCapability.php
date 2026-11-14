@@ -8,10 +8,13 @@ use App\Capability\Dto\TimelineEvent;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\TravelEnquiry;
 use App\Models\TravelEnquiryEvent;
+use App\Models\TravelEnquiryNotification;
 use App\Services\Travel\Conversation\TravelTurn;
+use App\Services\Travel\Enquiry\EnquiryBrief;
 use App\Services\Travel\Enquiry\EnquiryService;
 use App\Services\Travel\Enquiry\EnquirySlots;
 use App\Services\Travel\Enquiry\TravelPipeline;
+use App\Services\Travel\Handoff\StaffHandoff;
 use App\Services\Travel\Panel\TripBoard;
 
 /**
@@ -61,9 +64,15 @@ final class TravelEnquiryCapability implements ObjectCapability
         ];
 
         $answers = [
+            ['q' => 'Reference', 'value' => $e->reference(), 'sub' => 'Customer'],
             ['q' => 'Customer', 'value' => $who, 'sub' => 'Customer'],
             ['q' => 'Channel', 'value' => $e->channel === 'web' ? 'Website chat' : 'WhatsApp', 'sub' => 'Customer'],
         ];
+        if (($contact = EnquiryBrief::contactLine($state)) !== '') {
+            $answers[] = ['q' => 'Contact given', 'value' => $contact, 'sub' => 'Customer'];
+        }
+        $answers[] = ['q' => 'Confirmed by customer', 'sub' => 'Customer',
+            'value' => $e->submitted_at ? $e->submitted_at->format('j M Y, H:i') : 'Not yet — the customer has not confirmed the summary'];
         foreach (EnquirySlots::summaryLines($state) as $i => $line) {
             $answers[] = ['q' => $i === 0 ? 'Trip' : '', 'value' => $line, 'sub' => 'Trip'];
         }
@@ -81,6 +90,29 @@ final class TravelEnquiryCapability implements ObjectCapability
         }
         if ((string) $e->lost_reason !== '') {
             $answers[] = ['q' => 'Reason', 'value' => (string) $e->lost_reason, 'sub' => 'Outcome'];
+        }
+
+        // Staff handoff: who was alerted, and whether it arrived.
+        $handoff = app(StaffHandoff::class);
+        $hstatus = $handoff->status($ctx->tenant);
+        $alerts  = TravelEnquiryNotification::withoutGlobalScopes()->where('tenant_id', $ctx->tenantId())
+            ->where('enquiry_id', $e->id)->orderBy('id')->get();
+        if (! $hstatus['configured']) {
+            $answers[] = ['q' => 'Staff alert', 'sub' => 'Handoff', 'tone' => 'danger',
+                'value' => 'No staff WhatsApp number is set, so nobody was alerted. Add one in Settings → Travel desk, then press "Send to staff".'];
+        } elseif ($alerts->isEmpty()) {
+            $answers[] = ['q' => 'Staff alert', 'sub' => 'Handoff',
+                'value' => $e->submitted_at ? 'Not sent yet' : 'Sent when the customer confirms the summary'];
+        }
+        foreach ($alerts as $n) {
+            $answers[] = ['q' => 'Staff alert to ' . self::maskNumber((string) $n->recipient), 'sub' => 'Handoff',
+                'tone' => $n->status === 'sent' ? 'ok' : 'danger',
+                'value' => $n->status === 'sent'
+                    ? 'Delivered to WhatsApp ' . ($n->sent_at ? $n->sent_at->format('j M, H:i') : '')
+                    : 'NOT delivered after ' . (int) $n->attempts . ' attempt' . ((int) $n->attempts === 1 ? '' : 's') . ((string) $n->last_error !== '' ? ' — ' . $n->last_error : '')];
+        }
+        foreach ($hstatus['rejected'] as $r) {
+            $answers[] = ['q' => 'Number not used', 'sub' => 'Handoff', 'tone' => 'warn', 'value' => $r['number'] . ' — ' . $r['reason']];
         }
 
         $timeline = [];
@@ -112,6 +144,12 @@ final class TravelEnquiryCapability implements ObjectCapability
                 'actor' => 'human', 'submitLabel' => 'Assign',
                 'schema' => ['owner' => 'combo:' . $combo], 'labels' => ['owner' => 'Staff member']];
         }
+        $undelivered = $alerts->contains(fn ($n) => $n->status !== 'sent');
+        if ($hstatus['configured'] && ($undelivered || $alerts->isEmpty()) && EnquirySlots::summaryLines($state)) {
+            $actions[] = ['key' => 'retry_handoff', 'label' => $alerts->isEmpty() ? 'Send to staff' : 'Retry staff alert', 'method' => 'POST',
+                'endpoint' => $base . '/retry_handoff', 'actor' => 'human', 'tone' => 'warn',
+                'confirm' => 'Send this enquiry to the staff WhatsApp numbers set in Travel desk settings?'];
+        }
         $actions[] = ['key' => 'add_note', 'label' => 'Add note', 'method' => 'POST', 'endpoint' => $base . '/add_note',
             'actor' => 'human', 'submitLabel' => 'Save note',
             'schema' => ['note' => 'textarea'], 'labels' => ['note' => 'Note for the team']];
@@ -123,7 +161,7 @@ final class TravelEnquiryCapability implements ObjectCapability
         return (new WorkspacePayload)
             ->object([
                 'type' => 'trip', 'id' => (string) $e->id,
-                'title' => EnquirySlots::route($state) ?: 'New travel enquiry',
+                'title' => EnquirySlots::route($state) ?: (implode(' → ', $state['brief']['destinations']) ?: (EnquiryBrief::servicesLine($state['brief']) ?: 'New travel enquiry')),
                 'subtitle' => $who . ($e->depart_date ? ' · ' . EnquirySlots::niceDate($e->depart_date->format('Y-m-d')) : ''),
                 'status' => $stage,
             ])
@@ -195,6 +233,17 @@ final class TravelEnquiryCapability implements ObjectCapability
 
                 return ['ok' => true, 'message' => 'Note saved'];
 
+            case 'retry_handoff':
+                $r = app(StaffHandoff::class)->retry($ctx->tenant, $e);
+                if ($r['no_recipient']) {
+                    return ['ok' => false, 'error' => 'no_recipient', 'message' => 'No staff WhatsApp number is set. Add one in Settings → Travel desk.'];
+                }
+                $svc->log($e, 'handoff_retried', 'staff', ['sent' => $r['sent'], 'failed' => $r['failed']], $uid);
+
+                return $r['failed'] > 0 && $r['sent'] === 0
+                    ? ['ok' => false, 'error' => 'send_failed', 'message' => 'The alert could not be delivered. The reason is shown on the trip.']
+                    : ['ok' => true, 'message' => 'Sent to ' . $r['sent'] . ' staff number' . ($r['sent'] === 1 ? '' : 's') . ($r['failed'] > 0 ? '; ' . $r['failed'] . ' failed' : '')];
+
             case 'flag_ai':
                 $svc->flagAi($e, (string) ($input['category'] ?? 'other'), (string) ($input['note'] ?? ''), $uid);
 
@@ -205,6 +254,12 @@ final class TravelEnquiryCapability implements ObjectCapability
     }
 
     /** @param array<int,string> $staff */
+    /** "+2567••••1222": enough for staff to recognise a colleague's number without listing it in full. */
+    private static function maskNumber(string $digits): string
+    {
+        return strlen($digits) <= 8 ? '+' . $digits : '+' . substr($digits, 0, 4) . '••••' . substr($digits, -4);
+    }
+
     private function timelineEntry(TravelEnquiryEvent $ev, array $staff): array
     {
         $meta  = is_array($ev->meta) ? $ev->meta : [];
@@ -221,6 +276,11 @@ final class TravelEnquiryCapability implements ObjectCapability
             'ai_flagged'        => ['AI answer flagged: ' . (self::FLAG_LABELS[(string) ($meta['category'] ?? 'other')] ?? 'Other'), (string) ($meta['note'] ?? '')],
             'guard_hit'         => ['Guard corrected the AI', str_replace('_', ' ', (string) ($meta['guard'] ?? ''))],
             'validator_reject'  => ['A detail was not accepted', str_replace('_', ' ', (string) ($meta['code'] ?? '')) . ' (' . str_replace('_', ' ', (string) ($meta['field'] ?? '')) . ')'],
+            'submitted'            => ['Customer confirmed the request', (string) ($meta['reference'] ?? '')],
+            'handoff_sent'         => ['Sent to staff', (int) ($meta['sent'] ?? 0) . ' delivered' . ((int) ($meta['failed'] ?? 0) > 0 ? ', ' . (int) $meta['failed'] . ' failed' : '')],
+            'handoff_failed'       => ['Staff alert NOT delivered', (int) ($meta['failed'] ?? 0) . ' failed'],
+            'handoff_no_recipient' => ['No staff number set — nobody was alerted', ''],
+            'handoff_retried'      => ['Staff alert retried', (int) ($meta['sent'] ?? 0) . ' delivered, ' . (int) ($meta['failed'] ?? 0) . ' failed'],
             default             => [ucfirst(str_replace('_', ' ', (string) $ev->type)), ''],
         };
 

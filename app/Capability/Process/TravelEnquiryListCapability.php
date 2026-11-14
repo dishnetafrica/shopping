@@ -6,7 +6,9 @@ use App\Capability\Contracts\CapabilityContext;
 use App\Capability\Contracts\ProcessCapability;
 use App\Capability\Dto\WorkspacePayload;
 use App\Models\TravelEnquiry;
+use App\Services\Travel\Enquiry\EnquiryBrief;
 use App\Services\Travel\Enquiry\EnquiryService;
+use App\Services\Travel\Handoff\StaffHandoff;
 use App\Services\Travel\Enquiry\EnquirySlots;
 use App\Services\Travel\Enquiry\TravelPipeline;
 use App\Services\Travel\Panel\TripBoard;
@@ -38,6 +40,11 @@ final class TravelEnquiryListCapability implements ProcessCapability
         $rowsM     = $board->metricRows($enquiries);
         $m         = EnquiryMetrics::compute(array_values($rowsM), time(), $board->abandonHours());
 
+        // Staff alerts: are they set up, and did any fail?
+        $handoff   = app(StaffHandoff::class)->status($ctx->tenant);
+        $undelivered = $enquiries->filter(fn ($e) => in_array((string) $e->handoff_status, ['failed', 'partial', 'no_recipient'], true) && $e->submitted_at !== null)->count();
+        $handoffLabels = ['sent' => ['Staff alerted', 'ok'], 'partial' => ['Partly delivered', 'warn'], 'failed' => ['Alert failed', 'danger'], 'no_recipient' => ['Nobody alerted', 'danger']];
+
         $rows = [];
         foreach ($enquiries as $e) {
             $state = $e->state();
@@ -48,11 +55,15 @@ final class TravelEnquiryListCapability implements ProcessCapability
             }
             $abandoned = EnquiryMetrics::isAbandoned((string) $e->stage, $rowsM[$e->id]['last_customer_at'] ?? null, time(), $board->abandonHours());
             $rows[] = [
-                'trip'    => ['value' => self::shortRoute($state) ?: 'Details being collected', 'sub' => $who, 'avatar' => true],
+                'trip'    => ['value' => self::shortRoute($state) ?: 'Details being collected',
+                    'sub' => trim($who . ' · ' . $e->reference() . (EnquiryBrief::servicesLine($state['brief']) !== '' ? ' · ' . EnquiryBrief::servicesLine($state['brief']) : '')), 'avatar' => true],
                 'dates'   => ['value' => $dates !== '' ? $dates : '—', 'sort' => (string) ($e->depart_date?->format('Y-m-d') ?? '')],
                 'party'   => ['value' => EnquirySlots::paxLine($state) ?: '—'],
                 'stage'   => ['value' => TravelPipeline::label((string) $e->stage) . ($abandoned ? ' · no reply' : ''),
                     'badge' => $abandoned ? 'danger' : TravelPipeline::tone((string) $e->stage), 'sort' => (string) $e->stage],
+                'handoff' => $e->submitted_at === null
+                    ? ['value' => EnquirySlots::isComplete($state) ? 'Awaiting customer\'s confirmation' : 'Collecting details', 'badge' => 'default', 'sort' => '0']
+                    : ['value' => $handoffLabels[(string) $e->handoff_status][0] ?? 'Confirmed', 'badge' => $handoffLabels[(string) $e->handoff_status][1] ?? 'default', 'sort' => (string) $e->handoff_status],
                 'owner'   => ['value' => $e->owner_user_id ? ($staff[$e->owner_user_id] ?? '—') : 'Unassigned', 'sort' => (string) ($staff[$e->owner_user_id] ?? '')],
                 'updated' => ['value' => $e->updated_at ? $e->updated_at->diffForHumans() : '—', 'sort' => (string) ($e->updated_at?->getTimestamp() ?? 0)],
                 'link'    => '/api/v1/workspace/trip/' . $e->id,
@@ -64,9 +75,15 @@ final class TravelEnquiryListCapability implements ProcessCapability
         return (new WorkspacePayload)
             ->object([
                 'type' => 'process:trips', 'title' => 'Trips',
-                'subtitle' => $m['total'] . ' enquiries · ' . $m['open'] . ' open · ' . $m['ready_to_price'] . ' ready to price',
+                'subtitle' => $m['total'] . ' enquiries · ' . $m['open'] . ' open · ' . $m['ready_to_price'] . ' ready to price'
+                    . ($handoff['configured'] ? '' : ' · ⚠ no staff WhatsApp number is set, so nobody is alerted'),
             ])
-            ->financials([
+            ->financials(array_merge($handoff['configured'] ? [] : [
+                ['key' => 'handoff_setup', 'label' => 'Staff alerts', 'value' => 'Not set up', 'tone' => 'danger',
+                    'foot' => 'Enquiries are saved here but nobody is alerted. Add staff WhatsApp numbers in Settings → Travel desk.'],
+            ], $undelivered > 0 ? [
+                ['key' => 'handoff_failed', 'label' => 'Alerts not delivered', 'value' => (string) $undelivered, 'tone' => 'danger', 'foot' => 'open each one and press Retry staff alert'],
+            ] : [], [
                 ['key' => 'ready', 'label' => 'Ready to price', 'value' => (string) $m['ready_to_price'], 'tone' => $m['ready_to_price'] > 0 ? 'warn' : 'ok', 'foot' => 'all details collected'],
                 ['key' => 'open', 'label' => 'Open enquiries', 'value' => (string) $m['open']],
                 ['key' => 'abandoned', 'label' => 'No reply', 'value' => (string) $m['abandoned'], 'tone' => $m['abandoned'] > 0 ? 'danger' : 'ok', 'foot' => 'silent for ' . $board->abandonHours() . 'h+'],
@@ -74,13 +91,14 @@ final class TravelEnquiryListCapability implements ProcessCapability
                 ['key' => 'handover', 'label' => 'Needed a person', 'value' => $pct($m['human_handover_pct']), 'foot' => $m['human_handover'] . ' enquiries'],
                 ['key' => 'incorrect', 'label' => 'AI corrections', 'value' => (string) $m['incorrect_responses'], 'tone' => $m['flagged_answers'] > 0 ? 'warn' : 'default',
                     'foot' => $m['flagged_answers'] . ' flagged by staff · ' . $m['guard_hits'] . ' caught by guards'],
-            ])
+            ]))
             ->table(
                 [
                     ['key' => 'trip', 'label' => 'Trip', 'type' => 'avatar', 'sortable' => true],
                     ['key' => 'dates', 'label' => 'Dates', 'sortable' => true],
                     ['key' => 'party', 'label' => 'Travellers'],
                     ['key' => 'stage', 'label' => 'Stage', 'type' => 'badge', 'sortable' => true],
+                    ['key' => 'handoff', 'label' => 'Handoff', 'type' => 'badge', 'sortable' => true],
                     ['key' => 'owner', 'label' => 'Owner', 'sortable' => true],
                     ['key' => 'updated', 'label' => 'Updated', 'sortable' => true],
                 ],
@@ -120,6 +138,12 @@ final class TravelEnquiryListCapability implements ProcessCapability
                 continue;
             }
             $legs[] = ($from !== '' ? $from : '?') . ' → ' . ($to !== '' ? $to : '?');
+        }
+
+        if (! $legs) {
+            $places = $state['brief']['destinations'] ?? [];
+
+            return $places ? implode(' → ', $places) : '';
         }
 
         return implode(' · ', $legs);
