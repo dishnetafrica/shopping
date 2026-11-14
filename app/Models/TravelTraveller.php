@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * A traveller on a trip, read from the passport or ID card the customer sent (machine-readable zone).
- * Written only by App\Services\Travel\Passport\PassportIntake.
+ * Written only by App\Services\Travel\Passport\PassportIntake; the document number is deleted only by
+ * App\Services\Travel\Passport\TravellerRetention (the agency's retention period after the trip closes).
  *
  * The document number is encrypted at rest and hidden from arrays and JSON; read it only through
  * App\Capability\Object\TravelEnquiryCapability's "reveal" command, which checks the role and logs
@@ -56,6 +57,13 @@ class TravelTraveller extends Model
             'sex'             => (string) $this->sex,
             'expiry_date'     => $this->expiry_date?->format('Y-m-d'),
             'last4'           => (string) $this->document_last4,
+            'number_deleted'  => $this->numberDeleted(),
         ];
+    }
+
+    /** True once the retention rule has deleted the number. Checked without decrypting anything. */
+    public function numberDeleted(): bool
+    {
+        return $this->exists && $this->getRawOriginal('document_number') === null;
     }
 }

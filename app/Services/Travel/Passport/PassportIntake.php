@@ -133,7 +133,8 @@ class PassportIntake
         $state = $enquiry->state();
         $on = Travellers::travelDate($state, $today);
         $facts = $traveller->facts();
-        $lines = [Travellers::customerLine($facts, $on, Travellers::validity($facts, $today, $on, Travellers::returnDate($state)), $duplicate)];
+        $lines = [Travellers::customerLine($facts, $on, Travellers::validity($facts, $today, $on, Travellers::returnDate($state)), $duplicate,
+            Travellers::retentionDays($tenant->setting(TravellerRetention::SETTING, null)))];
 
         if (! $duplicate && Travellers::exceedsParty($state, $count)) {
             $lines[] = "I now have {$count} travel documents, but the trip is for " . EnquirySlots::paxLine($state) . '. Is someone else travelling?';
