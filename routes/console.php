@@ -7,6 +7,8 @@ Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlappin
 
 // Smart-bot (n8n) shared, tenant-keyed schedules
 Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+// Travel enquiries (#145): retry staff alerts that were not delivered. A no-op when there are none.
+Schedule::command('travel:retry-handoffs')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:learn')->dailyAt('02:30')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('demand:digest')->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();

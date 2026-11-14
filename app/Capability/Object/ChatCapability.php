@@ -195,6 +195,23 @@ final class ChatCapability implements ObjectCapability
                     'endpoint' => '/papi/chats/takeover', 'actor' => 'human', 'tone' => 'warn',
                     'body' => ['phone' => $phone, 'active' => 1],
                     'confirm' => 'Pause the bot and handle '.$name.' yourself?'];
+
+            // Travel Vertical (M1): TRAVEL TENANTS ONLY. A takeover records its reason on the trip, and
+            // the chat links to the customer's open trip. Other business types see no change.
+            if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($ctx->tenant)) {
+                $last = count($actions) - 1;
+                if (($actions[$last]['key'] ?? '') === 'takeover') {
+                    unset($actions[$last]['confirm']);
+                    $actions[$last]['submitLabel'] = 'Take over';
+                    $actions[$last]['schema'] = ['reason' => 'enum:Complaint,Payment issue,Unusual request,Group booking,Change or refund,Customer asked for a person,Other'];
+                    $actions[$last]['labels'] = ['reason' => 'Why are you taking over?'];
+                }
+                $trip = app(\App\Services\Travel\Enquiry\EnquiryService::class)->current($ctx->tenant, $phone, str_starts_with($phone, 'web:') ? 'web' : 'whatsapp');
+                if ($trip) {
+                    $actions[] = ['key' => 'open_trip', 'label' => 'Open trip', 'method' => 'GET',
+                        'endpoint' => '/api/v1/workspace/trip/'.$trip->id, 'actor' => 'human'];
+                }
+            }
         }
 
         $related = [];

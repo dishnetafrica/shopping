@@ -90,6 +90,11 @@ class ChatController extends Controller
             // The inbox sees every web message, exactly like WhatsApp — even when the bot is
             // off, capped, or a person has taken over. A message nobody can find is worse than
             // any of those.
+            // Travel Vertical (M1): TRAVEL TENANTS ONLY — a typed passport number is masked before it
+            // is stored or shown to the model. Passport data is never collected over chat.
+            if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
+                $text = \App\Services\Travel\Privacy\PassportGuard::mask((string) $text)['text'];
+            }
             MessageLog::record($tenant->id, $from, WebChatPolicy::INSTANCE, 'in', 'customer', $text);
             $convo->last_message_at = now();
             $convo->last_inbound_at = now();

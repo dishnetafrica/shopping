@@ -64,6 +64,18 @@ class AiBrain
         // as facts so the AI writes the reply but never picks the product or the price.
         $photoMatch = is_array($media['photoMatch'] ?? null) ? $media['photoMatch'] : null;
 
+        // Travel Vertical (M1): TRAVEL TENANTS ONLY. A customer photo is never shown to the model on a
+        // travel agency — it could be a passport. The message job already declines to download it;
+        // this is the second lock, for any caller that hands an image in anyway.
+        $isTravel = \App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant);
+        if ($isTravel) {
+            $imageB64 = '';
+            $photoMatch = null;
+            // Also the last lock on typed passport numbers: text reaches here from WhatsApp, website
+            // chat and voice-note transcription, and none of it may carry one to the model.
+            $text = \App\Services\Travel\Privacy\PassportGuard::mask($text)['text'];
+        }
+
         // Nothing we can read (sticker / contact / empty) → ask politely instead of feeding junk to the AI.
         if (trim($text) === '' && $imageB64 === '') {
             $ask = (string) $tenant->setting('bot_unreadable_text', "Sorry, I couldn't read that 🙏 Please type your question and I'll help you right away.");
@@ -109,6 +121,8 @@ class AiBrain
             : '';
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant, $channel)
             .\App\Services\Relationship\ProfileContext::block($tenant, $from)
+            // Travel Vertical (M1): TRAVEL TENANTS ONLY — the customer's stored trip and earlier trips.
+            .($isTravel ? app(\App\Services\Travel\Conversation\TravelTurn::class)->contextBlock($tenant, $convo, $from, $channel) : '')
             .$this->outstandingQuoteBlock($tenant, $from)
             .($planning ? \App\Services\Relationship\PlanParser::instructions() : '')
             // Retrieval: products matching THIS message, pulled from the whole catalogue so nothing is
@@ -215,16 +229,34 @@ class AiBrain
             $reply = trim(substr($reply, 0, $srp));   // truncated block — never leaks
         }
 
+        // Travel Vertical (M1): TRAVEL TENANTS ONLY. Read the hidden <<TRIP {json}>> line, store the
+        // change on the customer's trip record, and guard the model's wording (no invented fare, no
+        // request for passport data). The line is always stripped, so it can never reach a customer.
+        if ($isTravel) {
+            $reply = app(\App\Services\Travel\Conversation\TravelTurn::class)->afterReply($tenant, $convo, $from, $channel, $text, $reply);
+        }
+
         // 3a-quote. Customer ACCEPTED their outstanding quotation — the model emits a hidden
         //     <<ACCEPT_QUOTE>> line. Convert that quote into a real order through the one authoritative
         //     converter (idempotent), instead of the bot re-asking what items they want.
+        // Travel Vertical (#145): TRAVEL TENANTS ONLY. A travel agency never uses the retail pipeline —
+        // no SKU matching, no cart, no order, no computed quotation, no price list, no product photos.
+        // Any such marker the model emits is removed; the enquiry lives on the TRIP record alone.
+        $retail = ! $isTravel;
+        if (! $retail) {
+            $reply = \App\Services\Travel\Conversation\TravelTurn::stripRetailMarkers($reply);
+        }
+        if ($retail) {
         $reply = $this->acceptQuote($tenant, $from, $reply);
+        }
 
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
         //     The machine block is always stripped so the customer never sees it.
+        if ($retail) {
         $reply = $this->captureOrder($tenant, $convo, $from, $reply, $channel, $gateway);
+        }
 
         // 3b. PDF quotation — driven by an explicit <<QUOTE {json}>> line the model emits ONLY once
         //     it has the specific item(s) + quantity (mirrors the ORDER flow). This replaces the old
@@ -235,12 +267,15 @@ class AiBrain
         // those matched nothing and vanished.
         $reply = $this->captureFollowUp($tenant, $from, $reply);
 
+        $quoteSent = false;
+        if ($retail) {
         $cap       = $this->captureQuote($tenant, $convo, $from, $text, $reply, $gateway);
         $reply     = $cap['reply'];
         $quoteSent = $cap['sent'];
+        }
 
         // text total fallback for "how much / total" asks (no PDF, only when no quote was sent)
-        if (! $quoteSent && $this->wantsTotal($text)) {
+        if ($retail && ! $quoteSent && $this->wantsTotal($text)) {
             $calc = $this->orderTotalBlock($tenant, $from, $text);
             if ($calc !== '') $reply = trim($reply) . "\n\n" . $calc;
         }
@@ -252,20 +287,20 @@ class AiBrain
         }
 
         // 4b. menu files (restaurant) — send the food/drinks menu image or PDF on request.
-        $menuSent = $this->maybeSendMenu($tenant, $from, $text, $gateway);
+        $menuSent = $retail ? $this->maybeSendMenu($tenant, $from, $text, $gateway) : false;
 
         // 4b-ii. price list (catalogue-style tenants) — when the customer asks about price/rates,
         //        send a freshly generated price-list PDF from live products (never the price-less
         //        brochure). Skipped if a quotation was already sent this turn.
-        $priceListSent = (! $quoteSent) ? $this->maybeSendPriceList($tenant, $from, $text, $gateway) : false;
+        $priceListSent = ($retail && ! $quoteSent) ? $this->maybeSendPriceList($tenant, $from, $text, $gateway) : false;
 
         // 4b-iii. catalogue/brochure files — product photos / brochure on request. Not for price
         //         questions (the price-list step handles those); skip if a price list went out.
-        $catalogSent = $priceListSent ? false : $this->maybeSendCatalog($tenant, $from, $text, $gateway);
+        $catalogSent = (! $retail || $priceListSent) ? false : $this->maybeSendCatalog($tenant, $from, $text, $gateway);
 
         // 4c. product photos — same behaviour as the inbuilt bot. Self-gating: the responder only
         //     returns images for a confident product match, so greetings/general Qs send nothing.
-        if (! $quoteSent && ! $menuSent && ! $catalogSent && ! $priceListSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
+        if ($retail && ! $quoteSent && ! $menuSent && ! $catalogSent && ! $priceListSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
             try {
                 $responder = app(\App\Services\Bot\ProductImageResponder::class);
                 $imgs = $responder->imagesFor($tenant, $convo, $text);
@@ -1539,7 +1574,11 @@ class AiBrain
             // items with a focused, single-purpose extraction call and re-run the REAL pipeline via a
             // synthesised marker. The downstream "must match a priced product" guard still protects
             // against wrong items, so this cannot send a hallucinated quote.
-            if (preg_match('/\b(quotation|quote|proforma)\b/i', $reply)) {
+            // Travel Vertical (M1): NOT for travel agencies. A travel reply says "our team will send your
+            // quotation" on almost every completed enquiry; a trip has no catalogue price, so "recovering"
+            // a quote from it could only fail — and it replaced the consultant's reply with "Sure —
+            // sending your quotation now" while sending nothing.
+            if (preg_match('/\b(quotation|quote|proforma)\b/i', $reply) && ! \App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant)) {
                 $recovered = $this->recoverQuoteMarker($tenant, $from, $text, $reply);
                 if ($recovered !== '') {
                     \App\Support\QuotationPipeline::stage($tenant->id, $from, 'marker_recovered', true, '', 'marker missing — items recovered by extraction, re-running pipeline');
@@ -2106,12 +2145,8 @@ class AiBrain
         // like a consultant: discover the trip, never invent a price, capture the enquiry and route
         // it to a quotation + the human team. Gated to the TRAVEL vertical — no other shop sees this.
         if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::TRAVEL) {
-            $p .= "YOU ARE A TRAVEL CONSULTANT (this business is a travel agency / tour operator — sell trips like an experienced consultant, never like a call centre or a system). A trip is PRICED PER ENQUIRY (destination, dates, number of travellers, season, hotel level) — there is NO fixed shelf price for a package:\n";
-            $p .= "- DISCOVER BEFORE QUOTING: for any trip enquiry, warmly gather the essentials in one or two SHORT questions — DESTINATION(S), TRAVEL DATES (or month), NUMBER OF TRAVELLERS (adults/children), trip type (gorilla trekking, wildlife safari, business travel, honeymoon, group tour) and budget if offered. Do NOT quote a package price before you have at least destination, dates and traveller count.\n";
-            $p .= "- NEVER INVENT A TRIP PRICE. Package, safari, tour, flight and hotel prices are confirmed PER ENQUIRY by our team — never state, estimate, or say 'from' a price you were not given in PRODUCTS, and never promise availability or specific dates you cannot confirm. For an item that DOES carry a fixed fee in PRODUCTS (e.g. visa service, airport transfer), quote that fixed fee normally.\n";
-            $p .= "- CAPTURE THE ENQUIRY, THEN HAND OVER: once you have destination + dates + travellers, repeat them back to confirm, tell the customer our travel team will prepare a tailored quotation / itinerary, and emit the <<QUOTE>> line so the system records it and alerts the team. Also append, as the VERY LAST thing in that reply, a hidden <<FOLLOWUP trip for <pax> to <destination> on <dates> | enquiry details>> line so nothing is lost. Keep your visible reply short and warm.\n";
-            $p .= "- BE A CONSULTANT, NOT A PITCH: suggest at most ONE relevant add-on when it genuinely helps (airport transfer with a safari, a visa service with an international trip) — never pad the enquiry. Answer destination / season / what-to-expect questions from COMPANY KNOWLEDGE and FAQ; you may use general real-world travel knowledge to explain, but never contradict COMPANY KNOWLEDGE.\n";
-            $p .= "- BOOKING & PAYMENT: when the customer wants to proceed, explain our booking terms and deposit from COMPANY KNOWLEDGE / the delivery & pricing policy (e.g. a deposit confirms the booking, balance before travel) — never invent amounts; the team confirms the quotation and sends the deposit invoice.\n";
+            // Travel Vertical (M1): the consultant rules live with the rest of the travel code.
+            $p .= \App\Services\Travel\Conversation\TravelTurn::promptBlock($tenant);
         }
         $p .= "AD LEADS (messages starting with [NEW AD LEAD] clicked our advert - highest-value first contact):\n";
         $p .= "- They came from an ad showing WHOLESALE PRICES and expect prices, not policy. Never say 'the price is as listed' - they have not seen any list yet.\n";

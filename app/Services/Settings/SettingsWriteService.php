@@ -102,6 +102,8 @@ final class SettingsWriteService
         'model_image_tvshlx125',
         'model_image_hero', 'model_image_boxer100', 'model_image_boxer125hd', 'model_image_boxer150',   // v4.15
         'model_image_boxer125x', 'model_image_ct125hd', 'model_image_boxer150x',                        // v4.15
+        'travel_home_airport', 'travel_services', 'travel_booking_terms', 'travel_cancellation_policy', // Travel Vertical (M1)
+        'travel_staff_whatsapp', 'travel_profile_note', 'travel_profile_status',                          // Travel enquiry (#145)
     ];
 
     /** Numeric settings: [key => ['int'|'float', min]]. */
@@ -133,6 +135,7 @@ final class SettingsWriteService
         // v4.26 — director loan: rate is a FRACTION per month (0.03 = 3%); stock is a USD value.
         'books.loan_rate' => ['float', 0.0],
         'books.stock_usd' => ['float', 0.0],
+        'travel_abandon_hours' => ['int', 1],                // Travel Vertical (M1) — hours of silence before "no reply"
     ];
 
     /** On/off toggle settings (stored as booleans). */
@@ -169,6 +172,7 @@ final class SettingsWriteService
         'research_enabled', 'research_descriptions',         // v4.29 — AI product research
         'campaign_exclude_staff',                            // v4.32 — never message my own team
         'custom_domain_live',  // owner confirms the custom domain serves CloudBSS → use it in sent links (v4.6.1)
+        'travel_use_history',  // Travel Vertical (M1) — recognise returning customers from earlier trip requests
     ];
 
     /** Enum settings: [key => allowed values]. Document PDF page setup (read by the PDF renderers). */

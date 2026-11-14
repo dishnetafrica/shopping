@@ -53,6 +53,16 @@ jobs:
         run: php artisan migrate --force
       - name: Money kernel tests (the important ones)
         run: php artisan test tests/Unit/Kernel tests/Feature/Kernel
+      # Travel Vertical (M1). A required check, like the money kernel above: this step has no
+      # continue-on-error, so a failing travel test fails the job. It covers the trip record, the
+      # pipeline, the conversation guards (no invented fare, no request to type a passport number),
+      # passports and ID cards read on the server with real OCR (never stored as files, number
+      # encrypted), tenant isolation of the travel tables, and that a business which is not a travel
+      # agency is untouched.
+      - name: OCR for travel documents (as in the Docker image)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends tesseract-ocr poppler-utils
+      - name: Travel vertical tests (must pass)
+        run: php artisan test tests/Unit/Travel tests/Feature/Travel
       - name: Full suite (informational only — shows what still needs work)
         continue-on-error: true
         run: |
@@ -85,3 +95,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: resources/v3 == public/assets/v3
         run: bash scripts/v3-assets-sync-check.sh
+      # Travel Vertical (M1): runs the real navigation code from shell.js and fails if the Trips
+      # menu entry would show for any business type other than a travel agency.
+      - name: Trips menu shows only for travel agencies
+        run: node tests/render-sim/trips_nav_gate.js

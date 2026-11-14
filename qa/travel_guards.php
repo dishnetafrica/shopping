@@ -1,0 +1,186 @@
+<?php declare(strict_types=1);
+// Pure test of the Travel Vertical's conversation guards: the hidden trip marker, the reply guard
+// (no invented fares, no asking for passport data) and the passport-number mask. Framework-free.
+//   php qa/travel_guards.php
+require __DIR__ . '/../app/Services/Travel/Conversation/TripMarker.php';
+require __DIR__ . '/../app/Services/Travel/Conversation/ReplyGuard.php';
+require __DIR__ . '/../app/Services/Travel/Conversation/Confirmation.php';
+require __DIR__ . '/../app/Services/Travel/Privacy/PassportGuard.php';
+
+use App\Services\Travel\Conversation\ReplyGuard as G;
+use App\Services\Travel\Conversation\TripMarker as M;
+use App\Services\Travel\Privacy\PassportGuard as P;
+
+$pass = 0; $fail = 0;
+function chk(string $l, $g, $w): void {
+    global $pass, $fail;
+    if ($g === $w) { $pass++; echo "  [PASS] $l\n"; }
+    else { $fail++; echo "  [FAIL] $l — got " . json_encode($g) . " want " . json_encode($w) . "\n"; }
+}
+
+echo "== trip marker\n";
+$r = M::extract("Lovely, Dubai it is! When would you like to travel?\n<<TRIP {\"to\":\"Dubai\",\"adults\":2}>>");
+chk('marker is removed from the customer text', $r['reply'], 'Lovely, Dubai it is! When would you like to travel?');
+chk('fields are read', $r['patch'], ['to' => 'Dubai', 'adults' => 2]);
+chk('well-formed is not malformed', [$r['malformed'], $r['new_trip']], [false, false]);
+$r = M::extract('Noted. <<TRIP {"trip_type":"multi_city","segments":[{"from":"Entebbe","to":"Nairobi","date":"2026-12-01"},{"from":"Nairobi","to":"Dubai"}]}>>');
+chk('nested flights are read whole', count($r['patch']['segments']), 2);
+chk('nested: text is clean', $r['reply'], 'Noted.');
+$r = M::extract('Sure. <<TRIP {"segment":{"index":2,"to":"Doha"}}>> Anything else?');
+chk('marker in the middle of a reply', [$r['reply'], $r['patch']['segment']['to']], ['Sure.  Anything else?', 'Doha']);
+$r = M::extract('A new trip then! <<TRIP {"new_trip":true,"to":"London"}>>');
+chk('new trip flag is read and not stored as a field', [$r['new_trip'], $r['patch']], [true, ['to' => 'London']]);
+$r = M::extract('Ok <<TRIP {"to":"Dubai"}>> and <<TRIP {"adults":3,"to":"Doha"}>>');
+chk('two markers merge, later wins', $r['patch'], ['to' => 'Doha', 'adults' => 3]);
+$r = M::extract('Just a normal reply with no marker.');
+chk('no marker: text untouched, nothing reported', [$r['reply'], $r['patch'], $r['malformed']], ['Just a normal reply with no marker.', null, false]);
+$r = M::extract("Got it.\n<<TRIP {\"to\":\"Dubai\", \"adults\":");
+chk('cut-off marker never leaks', [$r['reply'], $r['patch'], $r['malformed']], ['Got it.', null, true]);
+$r = M::extract('Got it. <<TRIP {to: Dubai}>>');
+chk('broken JSON is stripped and reported', [$r['reply'], $r['patch'], $r['malformed']], ['Got it.', null, true]);
+$r = M::extract('Fine <<TRIP {"to":"Dubai"}>> <<QUOTE {"items":[{"name":"Visa service","qty":1}]}>>');
+chk('other markers are left for the brain', str_contains($r['reply'], '<<QUOTE {"items"'), true);
+$r = M::extract('');
+chk('empty reply', [$r['reply'], $r['patch']], ['', null]);
+
+echo "== reply guard: fares\n";
+$r = G::clean('A return ticket to Dubai is about USD 480 per person. Which dates suit you?');
+chk('an invented fare sentence is removed', $r['reply'], "Which dates suit you?\n\n" . G::FARE_NOTE);
+chk('fare hit counted', $r['fare_hits'], 1);
+foreach (['Flights start from $450.', 'It costs 1,750,000 UGX.', 'Around 480 dollars each.', 'Roughly UGX 1.8m return.', 'Fares are from 450k shillings.', 'Expect about US$ 500.', 'Price: 650 USD', 'It is 2,500,000/= for two.'] as $s) {
+    $r = G::clean($s);
+    chk("fare removed: $s", [$r['fare_hits'] >= 1, str_contains($r['reply'], G::FARE_NOTE)], [true, true]);
+}
+foreach (['Checked baggage is usually 23kg per person.', 'You are travelling on 20 Dec 2026 with 2 adults.', 'A 30% deposit confirms the booking.', 'Our office is open 8:00am to 5:00pm.', 'Call us on +256 788 611 242.', 'That is flight 1 of 3.', 'Emirates flies EK730 daily.'] as $s) {
+    $r = G::clean($s);
+    chk("not a fare, untouched: $s", [$r['reply'], $r['fare_hits']], [$s, 0]);
+}
+$r = G::clean('Our visa service is UGX 350,000. Shall I add it?', [350000.0]);
+chk('a real catalogue price is allowed', [$r['reply'], $r['fare_hits']], ['Our visa service is UGX 350,000. Shall I add it?', 0]);
+$r = G::clean('Our visa service is UGX 350,000 and the flight is about UGX 1,800,000.', [350000.0]);
+chk('a sentence mixing a real price with an invented one is removed', $r['fare_hits'], 1);
+$r = G::clean('Understood, your budget is USD 500 per person.', G::amounts('my budget is 500 usd each'));
+chk('the customer\'s own figure may be repeated', [$r['fare_hits'], str_contains($r['reply'], 'USD 500')], [0, true]);
+chk('amount parser', G::amounts('USD 480, 1,750,000 UGX, $45.50, 450k shillings and UGX 1.8m'), [480.0, 1750000.0, 45.5, 450000.0, 1800000.0]);
+chk('no amounts in plain text', G::amounts('2 adults on 20 Dec 2026, 23kg bags'), []);
+$r = G::clean("Here you go.\n<<QUOTE {\"items\":[{\"name\":\"Visa service\",\"qty\":1,\"price\":\"USD 90\"}]}>>");
+chk('hidden marker lines are never altered', [str_contains($r['reply'], '"price":"USD 90"'), $r['fare_hits']], [true, 0]);
+$r = G::clean("1. Emirates, non-stop, USD 612\n2. flydubai, non-stop, USD 498\nWhich one?");
+chk('an invented fare list is removed line by line', [$r['fare_hits'], str_contains($r['reply'], '612'), str_contains($r['reply'], 'Which one?')], [2, false, true]);
+$r = G::clean('It costs USD 480.');
+chk('a reply that was only a fare becomes the team note', $r['reply'], G::FARE_NOTE);
+
+echo "== reply guard: availability the model cannot know\n";
+foreach ([
+    'Rooms are available in July.', 'Yes, seats are still available on that date.', 'The lodge is fully booked that week.',
+    'Only the last few permits are left.', 'That flight is sold out.', 'We have availability for your dates.',
+] as $s) {
+    chk("removed: $s", G::clean($s)['availability_hits'], 1);
+}
+foreach ([
+    'Our team will confirm availability and send your quotation.', 'Availability is subject to confirmation by the lodge.',
+    'I cannot see what is available, so our team will check.', 'Are you available to travel in July?',
+    'Gorilla permits depend on availability on the day you choose.', 'Lovely, a safari in July!',
+] as $s) {
+    chk("left alone: $s", G::clean($s), ['reply' => $s, 'fare_hits' => 0, 'passport_hits' => 0, 'availability_hits' => 0]);
+}
+chk('the customer is told who confirms it', G::clean('Rooms are available in July.')['reply'], G::AVAILABILITY_NOTE);
+chk('one note when a price and an availability claim are both removed', G::clean('The lodge is USD 350 a night. Rooms are available.')['reply'], G::FARE_NOTE);
+
+echo "== did the customer agree to the summary? (strict: a change or a doubt is never a yes)\n";
+foreach (['Yes', 'yes please', 'YES!', 'ok', 'Okay, thanks', "that's correct", 'confirm', 'I confirm', 'sawa', 'correct 👍', 'go ahead'] as $s) {
+    chk("yes: $s", \App\Services\Travel\Conversation\Confirmation::isYes($s), true);
+}
+foreach (['yes but make it 4', 'no', 'yes, change the date', 'ok but', 'not yet', '👍', '', 'yes that is right please go ahead and also add a hotel for us', 'maybe', 'yes only 2 adults', 'what does it cost?'] as $s) {
+    chk("not a yes: '$s'", \App\Services\Travel\Conversation\Confirmation::isYes($s), false);
+}
+
+echo "== reply guard: passport\n";
+// The number typed into the chat is never wanted; a photo of the document is (it is read on the server, not kept).
+foreach (['Kindly share your passport number so I can book.', 'What is your passport number?', 'Please type your passport number here.', 'Send me your passport details please.', 'Could you tell me the passport numbers for each traveller?'] as $s) {
+    $r = G::clean($s);
+    chk("request removed: $s", [$r['passport_hits'], $r['reply']], [1, G::PASSPORT_NOTE]);
+}
+foreach (['Please send me a photo of your passport.', 'Could you upload the passport copy here?', 'Can I have a picture of the passport page?', 'Please WhatsApp us your passport.', 'You can send a clear photo of each passport photo page and I will read the names.',
+    'Please do not send your passport here.', 'Our team will collect passport details securely when you book.', 'Make sure your passport is valid for six months.', 'Names must match the passport exactly.', "You don't need to send a passport photo now."] as $s) {
+    $r = G::clean($s);
+    chk("allowed: $s", [$r['passport_hits'], $r['reply']], [0, $s]);
+}
+$r = G::clean('Great, two adults to Dubai. Please send your passport numbers. When do you fly?');
+chk('only the request sentence goes', $r['reply'], "Great, two adults to Dubai. When do you fly?\n\n" . G::PASSPORT_NOTE);
+
+echo "== passport number mask\n";
+$r = P::mask('My passport number is A1234567, please book');
+chk('typed number is masked', [$r['text'], $r['masked']], ['My passport number is ' . P::MASK . ', please book', true]);
+foreach (['passport B0123456', 'Passport no: AB1234567', 'passport 123456789', 'here is the passport: P12345678X'] as $s) {
+    chk("masked: $s", [P::mask($s)['masked'], str_contains(P::mask($s)['text'], P::MASK)], [true, true]);
+}
+foreach ([
+    'My booking reference is ABC123',                         // no word "passport"
+    'Call me on 0788611242',                                  // no word "passport"
+    'My passport expires 20 Dec 2027',                        // a date, not a number
+    'Is my passport ok? I travel 20261220',                   // compact date
+    'Passport is ready. My number is +256788611242',          // long phone with +
+    'Passport ready, 2 adults 1 child',                       // small numbers
+    'Do I need a passport for Kenya?',
+    'passport ok, ticket ref XK7P2Q',                         // too few digits
+] as $s) {
+    chk("left alone: $s", P::mask($s), ['text' => $s, 'masked' => false]);
+}
+chk('empty text', P::mask(''), ['text' => '', 'masked' => false]);
+// A number spelt out one character at a time, as a voice note is often transcribed.
+chk('dictated with spaces', P::mask('my passport number is A 1 2 3 4 5 6 7 thanks'), ['text' => 'my passport number is ' . P::MASK . ' thanks', 'masked' => true]);
+chk('dictated with dashes', P::mask('Passport 1-2-3-4-5-6-7-8-9'), ['text' => 'Passport ' . P::MASK, 'masked' => true]);
+foreach ([
+    'passport ok, travelling 20 12 2026',                      // a date in groups
+    'passport ready, call 0772 123 456',                       // a grouped phone number
+    'passport ok, we are 2 adults 1 child 1 infant',           // small numbers between words
+    'passport ready. I need a b c options',                    // single letters, no digits
+] as $s) {
+    chk("left alone: $s", P::mask($s), ['text' => $s, 'masked' => false]);
+}
+chk('every attachment kind except a voice note is withheld', [P::withholds('image'), P::withholds('document'), P::withholds('file'), P::withholds('video'), P::withholds('audio'), P::withholds('location')], [true, true, true, true, false, false]);
+
+echo "== incoming message scrub (what the webhook and the message job apply on a travel tenant)\n";
+$in = ['from' => '256700111222', 'text' => '', 'has_image' => true, 'image_b64' => 'QUJDRA==', 'media_key' => ['id' => 'ABC123'],
+    'image_caption' => 'my passport A1234567', 'instance' => 'main', 'raw' => ['data' => ['message' => ['base64' => 'QUJDRA==']]]];
+$r = P::scrubInbound($in);
+chk('a photo is reported', $r['withheld'], 'image');
+chk('the image bytes are removed', array_key_exists('image_b64', $r['incoming']), false);
+chk('the key that could fetch the photo later is removed', array_key_exists('media_key', $r['incoming']), false);
+chk('the raw provider body is removed', array_key_exists('raw', $r['incoming']), false);
+chk('no copy of the bytes is left anywhere', str_contains(json_encode($r['incoming']), 'QUJDRA'), false);
+chk('the caption is masked', $r['incoming']['image_caption'], 'my passport ' . P::MASK);
+chk('the caller still knows a photo arrived', $r['incoming']['has_image'], true);
+chk('other fields are untouched', [$r['incoming']['from'], $r['incoming']['instance']], ['256700111222', 'main']);
+chk('scrubbing twice changes nothing more', P::scrubInbound($r['incoming']), $r);
+
+$pdf = ['from' => '256700111222', 'text' => '', 'has_document' => true, 'doc_name' => 'John passport.pdf', 'media_mime' => 'application/pdf',
+    'media_caption' => 'passport N1234567', 'media_key' => ['id' => 'DOC1'], 'raw' => ['data' => ['message' => ['base64' => 'UERG']]]];
+$r = P::scrubInbound($pdf);
+chk('a PDF is reported as a document', $r['withheld'], 'document');
+chk('the PDF key, file name and raw body are removed', [array_key_exists('media_key', $r['incoming']), array_key_exists('doc_name', $r['incoming']), array_key_exists('raw', $r['incoming'])], [false, false, false]);
+chk('the PDF caption is masked', $r['incoming']['media_caption'], 'passport ' . P::MASK);
+chk('the caller still knows a document arrived', $r['incoming']['has_document'], true);
+chk('scrubbing a PDF twice changes nothing more', P::scrubInbound($r['incoming']), $r);
+chk('a Word file is a document too', P::scrubInbound(['has_document' => true, 'media_mime' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'media_key' => ['id' => 'D2']])['withheld'], 'document');
+chk('a video is withheld', P::scrubInbound(['has_video' => true, 'media_key' => ['id' => 'V9']]), ['incoming' => ['has_video' => true], 'withheld' => 'video']);
+chk('an attachment of an unknown type is withheld as a document', P::scrubInbound(['media_mime' => 'application/zip', 'media_key' => ['id' => 'Z1']]), ['incoming' => ['media_mime' => 'application/zip'], 'withheld' => 'document']);
+chk('an unflagged image by mime is withheld', P::attachmentKind(['media_mime' => 'image/png', 'media_key' => ['id' => 'I1']]), 'image');
+
+$r = P::scrubInbound(['text' => 'Passport no B7654321, flying 20 Dec', 'media_caption' => 'passport N1234567', 'quoted_text' => 'your passport A1234567 noted']);
+chk('typed number masked in text', $r['incoming']['text'], 'Passport no ' . P::MASK . ', flying 20 Dec');
+chk('typed number masked in a media caption', $r['incoming']['media_caption'], 'passport ' . P::MASK);
+chk('typed number masked in a quoted message', $r['incoming']['quoted_text'], 'your passport ' . P::MASK . ' noted');
+chk('nothing withheld for a text message', $r['withheld'], null);
+$voice = ['text' => '', 'has_audio' => true, 'audio_b64' => 'T0dH', 'media_mime' => 'audio/ogg; codecs=opus', 'media_key' => ['id' => 'V1']];
+chk('a voice note keeps its bytes and key', P::scrubInbound($voice + ['raw' => ['x' => 1]]), ['incoming' => $voice, 'withheld' => null]);
+$plain = ['text' => 'Ticket to Dubai for 2', 'from' => '256700111222'];
+chk('an ordinary message loses only its raw body', P::scrubInbound($plain + ['raw' => ['text' => 'Ticket to Dubai for 2']]), ['incoming' => $plain, 'withheld' => null]);
+chk('a location pin is not an attachment', P::scrubInbound(['text' => '📍 location', 'lat' => 0.3, 'lng' => 32.5, 'media_key' => null])['withheld'], null);
+chk('non-text values do not break it', P::scrubInbound(['text' => ['x'], 'has_image' => 0])['withheld'], null);
+chk('placeholders by kind', [P::placeholder('image'), P::placeholder('document'), P::placeholder('video')], [P::PHOTO_PLACEHOLDER, P::DOCUMENT_PLACEHOLDER, P::VIDEO_PLACEHOLDER]);
+chk('the staff alert names what was sent', [str_contains(P::staffAlert('document', '256700111222'), '+256700111222 sent a document'), str_contains(P::staffAlert('image', '1'), 'sent a photo')], [true, true]);
+
+echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
+exit($fail === 0 ? 0 : 1);

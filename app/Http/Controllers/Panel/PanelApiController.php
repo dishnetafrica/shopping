@@ -4189,6 +4189,13 @@ class PanelApiController extends Controller
             }
             $c->save();
         }
+        // Travel Vertical (M1): TRAVEL TENANTS ONLY. Record who took over (or handed back) and why on
+        // the customer's trip timeline. `reason` is optional, so every existing caller is unchanged;
+        // for any other business type this is a no-op.
+        try {
+            app(\App\Services\Travel\Enquiry\EnquiryService::class)->recordHandover(
+                $r->user()?->tenant, $phone, $active, (string) $r->input('reason', ''), $r->user()?->id ? (int) $r->user()->id : null);
+        } catch (\Throwable $e) { /* the takeover itself must never fail on bookkeeping */ }
         return response()->json(['ok' => true, 'agent_active' => $active]);
     }
 

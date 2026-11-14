@@ -54,6 +54,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         # primary PDF reader) and pdftoppm (renders pages to JPEG so scanned tender notices can be
         # OCR'd by the vision model). ~15MB; without it scanned tenders stay unreadable.
         poppler-utils \
+        # Travel (issue #145): tesseract-ocr reads the machine-readable lines of a passport or ID card
+        # a travel customer sends, ON THIS SERVER (App\\Services\\Travel\\Passport\\MrzReader) — the
+        # image is never sent to an outside service. ~25MB with its English data. Without it the bot
+        # simply asks the customer to type names and dates of birth.
+        tesseract-ocr \
     # GD must be configured BEFORE install or it builds PNG-only (no imagejpeg() —
     # exactly the fatal that broke catalogue thumbnails in production).
     && docker-php-ext-configure gd --with-jpeg --with-webp --with-freetype \
