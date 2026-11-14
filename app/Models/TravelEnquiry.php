@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use App\Services\Travel\Enquiry\EnquiryBrief;
 use App\Services\Travel\Enquiry\EnquirySlots;
 use App\Services\Travel\Enquiry\TravelPipeline;
 use Illuminate\Database\Eloquent\Model;
@@ -22,12 +23,16 @@ class TravelEnquiry extends Model
         'stage', 'trip_type', 'segments', 'origin', 'destination', 'depart_date', 'return_date',
         'adults', 'children', 'infants', 'cabin', 'airlines', 'baggage', 'flexible_days', 'direct_only',
         'notes', 'pending', 'is_group', 'lost_reason', 'details_completed_at', 'last_customer_at', 'closed_at',
+        'brief', 'summary_shown_at', 'submitted_at', 'handoff_status',
     ];
 
     protected $casts = [
         'segments'             => 'array',
         'airlines'             => 'array',
         'pending'              => 'array',
+        'brief'                => 'array',
+        'summary_shown_at'     => 'datetime',
+        'submitted_at'         => 'datetime',
         'depart_date'          => 'date:Y-m-d',
         'return_date'          => 'date:Y-m-d',
         'direct_only'          => 'boolean',
@@ -40,6 +45,22 @@ class TravelEnquiry extends Model
     public function events(): HasMany
     {
         return $this->hasMany(TravelEnquiryEvent::class, 'enquiry_id');
+    }
+
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(TravelEnquiryNotification::class, 'enquiry_id');
+    }
+
+    /** The reference staff and customers quote: "TE-1042". */
+    public function reference(): string
+    {
+        return 'TE-' . (int) $this->id;
+    }
+
+    public function isSubmitted(): bool
+    {
+        return $this->submitted_at !== null;
     }
 
     public function isOpen(): bool
@@ -64,6 +85,7 @@ class TravelEnquiry extends Model
             'direct_only'   => $this->direct_only,
             'notes'         => $this->notes,
             'pending'       => is_array($this->pending) ? $this->pending : [],
+            'brief'         => EnquiryBrief::normalise($this->brief),
         ]);
     }
 
@@ -72,15 +94,20 @@ class TravelEnquiry extends Model
     {
         $first = $state['segments'][0] ?? null;
         $last  = $state['segments'] ? $state['segments'][count($state['segments']) - 1] : null;
+        $brief = EnquiryBrief::normalise($state['brief'] ?? null);
+        // The list columns show the flight when there is one, otherwise the trip itself.
+        $flightTo = $state['trip_type'] === 'multi_city' ? ($last['to']['label'] ?? null) : ($first['to']['label'] ?? null);
+        $places   = $brief['destinations'] ? mb_substr(implode(' → ', $brief['destinations']), 0, 250) : null;
 
         return $this->fill([
             'trip_type'     => $state['trip_type'],
             'segments'      => $state['segments'],
-            'origin'        => $first['from']['label'] ?? null,
+            'origin'        => ($first['from']['label'] ?? null) ?: $brief['departure'],
             // For a multi-city trip the list shows where the journey ends up.
-            'destination'   => ($state['trip_type'] === 'multi_city' ? ($last['to']['label'] ?? null) : ($first['to']['label'] ?? null)),
-            'depart_date'   => $first['date'] ?? null,
-            'return_date'   => $state['return_date'],
+            'destination'   => $flightTo ?: $places,
+            'depart_date'   => ($first['date'] ?? null) ?: $brief['start_date'],
+            'return_date'   => $state['return_date'] ?: $brief['end_date'],
+            'brief'         => $brief,
             'adults'        => $state['adults'],
             'children'      => $state['children'],
             'infants'       => $state['infants'],

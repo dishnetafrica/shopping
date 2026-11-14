@@ -2,7 +2,6 @@
 
 namespace App\Services\Travel\Enquiry;
 
-use App\Jobs\NotifyOwner;
 use App\Models\Lead;
 use App\Models\Tenant;
 use App\Models\TravelEnquiry;
@@ -210,25 +209,44 @@ final class EnquiryService
         ]);
     }
 
-    /** Tell the team a trip is ready to be priced, and put the trip on the lead. Best-effort. */
+    /**
+     * The customer confirmed the summary: this is the one submission of the enquiry. Hands it to the
+     * agency's staff and reports honestly whether anyone was told. Calling it again for an enquiry
+     * already submitted sends only what has changed, to people who have not had that content.
+     *
+     * @return array{first:bool,recipients:int,sent:int,failed:int,no_recipient:bool,already:int}
+     */
+    public function submit(Tenant $tenant, TravelEnquiry $enquiry): array
+    {
+        $first = $enquiry->submitted_at === null;
+        if ($first) {
+            $enquiry->submitted_at = now();
+            $enquiry->save();
+            $this->log($enquiry, 'submitted', 'customer', ['reference' => $enquiry->reference()]);
+        }
+        $this->announceReady($tenant, $enquiry, ! $first);
+
+        return ['first' => $first] + app(\App\Services\Travel\Handoff\StaffHandoff::class)->notify($tenant, $enquiry, $first ? 'new' : 'updated');
+    }
+
+    /** The customer has been shown the summary and asked to confirm it. */
+    public function markSummaryShown(TravelEnquiry $enquiry): void
+    {
+        $enquiry->summary_shown_at = now();
+        $enquiry->save();
+    }
+
+    /** Put the trip on the linked lead, so the lead list shows what the enquiry is about. Best-effort. */
     public function announceReady(Tenant $tenant, TravelEnquiry $enquiry, bool $updated = false): void
     {
         $lines = EnquirySlots::summaryLines($enquiry->state());
         try {
             if ($enquiry->lead_id) {
                 Lead::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('id', $enquiry->lead_id)
-                    ->update(['interest' => mb_substr('Flights: ' . implode(' | ', array_slice($lines, 0, 3)), 0, 200)]);
+                    ->update(['interest' => mb_substr('Travel: ' . implode(' | ', array_slice($lines, 0, 3)), 0, 200)]);
             }
         } catch (\Throwable $e) {
             Log::warning('travel: lead update failed: ' . $e->getMessage());
-        }
-        try {
-            $who = $enquiry->channel === 'web' ? 'a website visitor' : '+' . $enquiry->customer_phone;
-            $head = $updated ? "✈️ *Trip request changed* — {$who}" : "✈️ *Trip request ready to price* — {$who}";
-            $tail = $enquiry->is_group ? "\nGroup booking (10+ seats): please handle personally." : '';
-            NotifyOwner::dispatch((int) $tenant->id, $head . "\n" . implode("\n", $lines) . $tail . "\nOpen *Trips* in your panel to prepare the quotation.");
-        } catch (\Throwable $e) {
-            Log::warning('travel: staff alert failed: ' . $e->getMessage());
         }
     }
 
