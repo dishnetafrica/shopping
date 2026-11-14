@@ -18,6 +18,8 @@ namespace App\Services\Travel\Conversation;
 final class ReplyGuard
 {
     public const FARE_NOTE     = 'Our travel team will confirm the fare for you.';
+
+    public const AVAILABILITY_NOTE = 'Our travel team will confirm availability for you.';
     public const PASSPORT_NOTE = 'Please do not send passport details or photos here. Our team will collect them securely when you book.';
 
     private const CURRENCY = '(?:US\$|USD|UGX|UGSHS?|SHS|KSHS?|KES|TZS|RWF|SSP|EUR|GBP|AED|ZAR|\$|€|£)';
@@ -26,12 +28,13 @@ final class ReplyGuard
 
     /**
      * @param  float[] $allowedAmounts  catalogue prices and amounts the customer wrote
-     * @return array{reply:string,fare_hits:int,passport_hits:int}
+     * @return array{reply:string,fare_hits:int,passport_hits:int,availability_hits:int}
      */
     public static function clean(string $reply, array $allowedAmounts = []): array
     {
         $fare = 0;
         $passport = 0;
+        $availability = 0;
 
         // Keep hidden marker lines exactly as they are; guard only the visible text between them.
         $parts = preg_split('/(<<[A-Z_]+.*?>>)/s', $reply, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$reply];
@@ -51,6 +54,10 @@ final class ReplyGuard
                         $fare++;
                         continue;
                     }
+                    if (self::claimsAvailability($sentence)) {
+                        $availability++;
+                        continue;
+                    }
                     $kept[] = $sentence;
                 }
                 $lines[$li] = implode(' ', $kept);
@@ -62,11 +69,14 @@ final class ReplyGuard
         if ($fare > 0) {
             $out = trim($out . "\n\n" . self::FARE_NOTE);
         }
+        if ($availability > 0 && $fare === 0) {
+            $out = trim($out . "\n\n" . self::AVAILABILITY_NOTE);
+        }
         if ($passport > 0) {
             $out = trim($out . "\n\n" . self::PASSPORT_NOTE);
         }
 
-        return ['reply' => $out, 'fare_hits' => $fare, 'passport_hits' => $passport];
+        return ['reply' => $out, 'fare_hits' => $fare, 'passport_hits' => $passport, 'availability_hits' => $availability];
     }
 
     /** Every money amount written in a text, as numbers. Used for the customer's own message too. */
@@ -85,6 +95,27 @@ final class ReplyGuard
         }
 
         return $out;
+    }
+
+    /**
+     * The model does not know what is available: seats, rooms, permits or dates. A sentence that
+     * states it as fact is removed. Saying the team will check or confirm availability is what we
+     * want said, and a question to the customer is left alone.
+     */
+    public static function claimsAvailability(string $sentence): bool
+    {
+        $s = mb_strtolower($sentence);
+        if (! preg_match('/\b(availab\w*|sold out|fully booked|booked out|last (few |remaining )?(seats?|rooms?|permits?|spaces?|spots?)|(seats?|rooms?|permits?|spaces?) (are |is )?(left|remaining))\b/u', $s)) {
+            return false;
+        }
+        if (str_ends_with(rtrim($s), '?')) {
+            return false;
+        }
+        if (preg_match('/\b(confirm|check|checking|subject to|depend|depends|will let you know|get back|our team|the team|cannot|can\'t|unable|do not know|don\'t know|not sure|once|after)\b/u', $s)) {
+            return false;
+        }
+
+        return true;
     }
 
     public static function asksForPassport(string $sentence): bool

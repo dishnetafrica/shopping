@@ -239,13 +239,24 @@ class AiBrain
         // 3a-quote. Customer ACCEPTED their outstanding quotation — the model emits a hidden
         //     <<ACCEPT_QUOTE>> line. Convert that quote into a real order through the one authoritative
         //     converter (idempotent), instead of the bot re-asking what items they want.
+        // Travel Vertical (#145): TRAVEL TENANTS ONLY. A travel agency never uses the retail pipeline —
+        // no SKU matching, no cart, no order, no computed quotation, no price list, no product photos.
+        // Any such marker the model emits is removed; the enquiry lives on the TRIP record alone.
+        $retail = ! $isTravel;
+        if (! $retail) {
+            $reply = \App\Services\Travel\Conversation\TravelTurn::stripRetailMarkers($reply);
+        }
+        if ($retail) {
         $reply = $this->acceptQuote($tenant, $from, $reply);
+        }
 
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
         //     The machine block is always stripped so the customer never sees it.
+        if ($retail) {
         $reply = $this->captureOrder($tenant, $convo, $from, $reply, $channel, $gateway);
+        }
 
         // 3b. PDF quotation — driven by an explicit <<QUOTE {json}>> line the model emits ONLY once
         //     it has the specific item(s) + quantity (mirrors the ORDER flow). This replaces the old
@@ -256,12 +267,15 @@ class AiBrain
         // those matched nothing and vanished.
         $reply = $this->captureFollowUp($tenant, $from, $reply);
 
+        $quoteSent = false;
+        if ($retail) {
         $cap       = $this->captureQuote($tenant, $convo, $from, $text, $reply, $gateway);
         $reply     = $cap['reply'];
         $quoteSent = $cap['sent'];
+        }
 
         // text total fallback for "how much / total" asks (no PDF, only when no quote was sent)
-        if (! $quoteSent && $this->wantsTotal($text)) {
+        if ($retail && ! $quoteSent && $this->wantsTotal($text)) {
             $calc = $this->orderTotalBlock($tenant, $from, $text);
             if ($calc !== '') $reply = trim($reply) . "\n\n" . $calc;
         }
@@ -273,20 +287,20 @@ class AiBrain
         }
 
         // 4b. menu files (restaurant) — send the food/drinks menu image or PDF on request.
-        $menuSent = $this->maybeSendMenu($tenant, $from, $text, $gateway);
+        $menuSent = $retail ? $this->maybeSendMenu($tenant, $from, $text, $gateway) : false;
 
         // 4b-ii. price list (catalogue-style tenants) — when the customer asks about price/rates,
         //        send a freshly generated price-list PDF from live products (never the price-less
         //        brochure). Skipped if a quotation was already sent this turn.
-        $priceListSent = (! $quoteSent) ? $this->maybeSendPriceList($tenant, $from, $text, $gateway) : false;
+        $priceListSent = ($retail && ! $quoteSent) ? $this->maybeSendPriceList($tenant, $from, $text, $gateway) : false;
 
         // 4b-iii. catalogue/brochure files — product photos / brochure on request. Not for price
         //         questions (the price-list step handles those); skip if a price list went out.
-        $catalogSent = $priceListSent ? false : $this->maybeSendCatalog($tenant, $from, $text, $gateway);
+        $catalogSent = (! $retail || $priceListSent) ? false : $this->maybeSendCatalog($tenant, $from, $text, $gateway);
 
         // 4c. product photos — same behaviour as the inbuilt bot. Self-gating: the responder only
         //     returns images for a confident product match, so greetings/general Qs send nothing.
-        if (! $quoteSent && ! $menuSent && ! $catalogSent && ! $priceListSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
+        if ($retail && ! $quoteSent && ! $menuSent && ! $catalogSent && ! $priceListSent && $imageB64 === '' && $tenant->setting('send_product_images', true)) {
             try {
                 $responder = app(\App\Services\Bot\ProductImageResponder::class);
                 $imgs = $responder->imagesFor($tenant, $convo, $text);

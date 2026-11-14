@@ -4,6 +4,7 @@
 //   php qa/travel_guards.php
 require __DIR__ . '/../app/Services/Travel/Conversation/TripMarker.php';
 require __DIR__ . '/../app/Services/Travel/Conversation/ReplyGuard.php';
+require __DIR__ . '/../app/Services/Travel/Conversation/Confirmation.php';
 require __DIR__ . '/../app/Services/Travel/Privacy/PassportGuard.php';
 
 use App\Services\Travel\Conversation\ReplyGuard as G;
@@ -68,6 +69,31 @@ $r = G::clean("1. Emirates, non-stop, USD 612\n2. flydubai, non-stop, USD 498\nW
 chk('an invented fare list is removed line by line', [$r['fare_hits'], str_contains($r['reply'], '612'), str_contains($r['reply'], 'Which one?')], [2, false, true]);
 $r = G::clean('It costs USD 480.');
 chk('a reply that was only a fare becomes the team note', $r['reply'], G::FARE_NOTE);
+
+echo "== reply guard: availability the model cannot know\n";
+foreach ([
+    'Rooms are available in July.', 'Yes, seats are still available on that date.', 'The lodge is fully booked that week.',
+    'Only the last few permits are left.', 'That flight is sold out.', 'We have availability for your dates.',
+] as $s) {
+    chk("removed: $s", G::clean($s)['availability_hits'], 1);
+}
+foreach ([
+    'Our team will confirm availability and send your quotation.', 'Availability is subject to confirmation by the lodge.',
+    'I cannot see what is available, so our team will check.', 'Are you available to travel in July?',
+    'Gorilla permits depend on availability on the day you choose.', 'Lovely, a safari in July!',
+] as $s) {
+    chk("left alone: $s", G::clean($s), ['reply' => $s, 'fare_hits' => 0, 'passport_hits' => 0, 'availability_hits' => 0]);
+}
+chk('the customer is told who confirms it', G::clean('Rooms are available in July.')['reply'], G::AVAILABILITY_NOTE);
+chk('one note when a price and an availability claim are both removed', G::clean('The lodge is USD 350 a night. Rooms are available.')['reply'], G::FARE_NOTE);
+
+echo "== did the customer agree to the summary? (strict: a change or a doubt is never a yes)\n";
+foreach (['Yes', 'yes please', 'YES!', 'ok', 'Okay, thanks', "that's correct", 'confirm', 'I confirm', 'sawa', 'correct 👍', 'go ahead'] as $s) {
+    chk("yes: $s", \App\Services\Travel\Conversation\Confirmation::isYes($s), true);
+}
+foreach (['yes but make it 4', 'no', 'yes, change the date', 'ok but', 'not yet', '👍', '', 'yes that is right please go ahead and also add a hotel for us', 'maybe', 'yes only 2 adults', 'what does it cost?'] as $s) {
+    chk("not a yes: '$s'", \App\Services\Travel\Conversation\Confirmation::isYes($s), false);
+}
 
 echo "== reply guard: passport\n";
 foreach (['Please send me a photo of your passport.', 'Kindly share your passport number so I can book.', 'Could you upload the passport copy here?', 'What is your passport number?', 'Can I have a picture of the passport page?', 'Please WhatsApp us your passport.'] as $s) {

@@ -6,6 +6,7 @@ use App\Models\Conversation;
 use App\Models\Product;
 use App\Models\Tenant;
 use App\Services\Travel\Enquiry\AirportDirectory;
+use App\Services\Travel\Enquiry\EnquiryBrief;
 use App\Services\Travel\Enquiry\EnquiryService;
 use App\Services\Travel\Enquiry\EnquirySlots;
 use App\Services\Travel\Insight\CustomerTripHistory;
@@ -27,7 +28,10 @@ use Illuminate\Support\Facades\Log;
 final class TravelTurn
 {
     /** Changing one of these re-sends the trip to the team. */
-    private const CORE = ['origin', 'destination', 'depart_date', 'return_date', 'trip_type', 'segments', 'adults', 'children', 'infants'];
+    private const CORE = ['origin', 'destination', 'depart_date', 'return_date', 'trip_type', 'segments', 'adults', 'children', 'infants',
+        'services', 'destinations', 'start_date', 'end_date', 'date_text', 'child_ages'];
+
+    public const ASK_TO_CONFIRM = 'Please check these details. Reply *YES* if they are correct and I will pass your request to our travel team — or tell me what to change.';
 
     private const NEEDED = [
         'destination' => 'where they are flying to',
@@ -37,6 +41,11 @@ final class TravelTurn
         'return_date' => 'the return date',
         'passengers'  => 'how many adults, children (2–11) and infants (under 2)',
         'segments'    => 'the list of flights (from, to and date for each)',
+        'service'         => 'what they need (flights, a safari or tour, a hotel, a visa, a transfer, insurance…)',
+        'destinations'    => 'where they want to go',
+        'travel_dates'    => 'when they want to travel (exact dates, or the month if it is not fixed)',
+        'child_ages'      => 'the age of each child',
+        'request_details' => 'what exactly they need done',
     ];
 
     public function __construct(private EnquiryService $enquiries) {}
@@ -48,6 +57,7 @@ final class TravelTurn
         $svc    = trim((string) $tenant->setting('travel_services', ''));
         $terms  = trim((string) $tenant->setting('travel_booking_terms', ''));
         $cancel = trim((string) $tenant->setting('travel_cancellation_policy', ''));
+        $facts  = trim((string) $tenant->setting('travel_profile_note', ''));
 
         $p  = "YOU ARE A TRAVEL CONSULTANT (this business is a travel agency — help like an experienced consultant, never like a call centre or a system).\n";
         $p .= "FLIGHT ENQUIRIES:\n";
@@ -63,14 +73,22 @@ final class TravelTurn
         $p .= "  Multi-city: {\"trip_type\":\"multi_city\",\"segments\":[{\"from\":\"Entebbe\",\"to\":\"Nairobi\",\"date\":\"2026-12-01\"},{\"from\":\"Nairobi\",\"to\":\"Dubai\",\"date\":\"2026-12-05\"}]}. To change one flight: {\"segment\":{\"index\":2,\"to\":\"Doha\"}}. To remove an optional detail: {\"clear\":[\"return_date\"]}. If the customer clearly starts a DIFFERENT trip or asks to start over, add \"new_trip\":true.\n";
         $p .= "  The system checks and stores the line and adds the trip summary to your message ITSELF. So do NOT write your own recap list of the trip, and do not say a detail is saved unless you put it in the line.\n";
         $p .= "- NEVER STATE A FARE. You do not know flight prices: never state, estimate, or say 'from' an amount for a flight, and never promise a seat is available. Fares are confirmed by our team in a written quotation. If asked the price before the record is complete, say you will get the best fares as soon as you have the details, and ask the next missing detail.\n";
-        $p .= "- WHEN NOTHING IS STILL NEEDED: tell the customer our travel team is checking the best fares and will send a quotation. Do not promise a time you were not given.\n";
+        $p .= "- WHEN NOTHING IS STILL NEEDED: do not ask for more. The system shows the summary and asks the customer to confirm it; after they confirm, our travel team prepares the quotation. Do not promise a time you were not given.\n";
         $p .= "- PASSPORTS AND PHOTOS: NEVER ask for a passport number, a passport photo or any identity document in this chat, and tell the customer not to send them — our team collects them securely at booking. You cannot open photos here; if the customer sends one, ask them to type the details instead. For a quotation you only need the trip details above.\n";
         $p .= "- A PERSON, NOT YOU: a group of 10 or more travellers, a child travelling alone, medical or special-assistance needs, a complaint, a payment problem, or a change or refund on an existing ticket — tell the customer a member of our team will assist them personally, and do not try to resolve it yourself.\n";
         $p .= "OTHER TRAVEL SERVICES (safaris, tours, holiday packages, hotels, visas, transfers, car hire, insurance)" . ($svc !== '' ? " — we offer: {$svc}" : '') . ":\n";
-        $p .= "- These are PRICED PER ENQUIRY. Discover the essentials in one or two short questions (destination, dates or month, number of travellers, style or budget if offered), repeat them back, tell the customer our team will prepare a tailored quotation, and append the hidden follow-up line so the team is alerted, e.g. <<FOLLOWUP safari for 4 to Bwindi in July | enquiry details>>. Do NOT use the TRIP line for these.\n";
-        $p .= "- NEVER INVENT A PRICE for a safari, tour, package or hotel. Only an item that carries a fixed fee in PRODUCTS (for example a visa service or an airport transfer) may be quoted, at that fee. Never emit <<QUOTE>> for a trip that has no price in PRODUCTS.\n";
+        $p .= "- These use the SAME hidden TRIP line, with these fields (only what is new or changed in the customer's latest message):\n";
+        $p .= "  <<TRIP {\"services\":[\"safari\",\"hotel\"],\"destinations\":[\"Bwindi\",\"Queen Elizabeth National Park\"],\"departure\":\"Kampala\",\"start_date\":\"2027-07-12\",\"end_date\":\"2027-07-19\",\"date_text\":\"July 2027\",\"nights\":7,\"adults\":2,\"children\":2,\"child_ages\":[6,9],\"purpose\":\"family holiday\",\"accommodation\":\"mid-range lodges\",\"budget\":3000,\"budget_currency\":\"USD\",\"budget_per\":\"person\",\"contact_name\":\"Sarah\",\"contact_email\":\"sarah@example.com\",\"notes\":\"vegetarian meals\"}>>\n";
+        $p .= "  services: any of flights, hotel, safari, tour, transfer, car_hire, visa, insurance, courier, ticket_change, other — name each one the customer asks for (it is added; use \"remove_services\" only if they drop one). destinations: the FULL list of places in visiting order, as the customer named them (a park, a town or a country is fine). Use start_date / end_date when the customer gives exact dates and date_text when they only know roughly (\"July\", \"Easter week\"). child_ages: the age of each child. budget is ONLY what the CUSTOMER says they can spend, with budget_currency if they said one — never a figure from you. Flights still use from / to / depart_date / return_date.\n";
+        $p .= "- Discover the essentials one or two short questions at a time: what they need, where, when (or which month), how many adults and children and the children's ages. Purpose, accommodation style and budget are OPTIONAL — note them when offered, and you may ask about style or budget ONCE, never press.\n";
+        $p .= "- NEVER INVENT A PRICE, A PACKAGE, AVAILABILITY, A DEPOSIT OR A DEADLINE for a flight, safari, tour, hotel, permit, transfer or visa. You do not know them. Our team prepares every quotation from confirmed supplier rates. Only a fee that appears in PRODUCTS (for example a fixed visa service fee) may be mentioned, exactly as listed.\n";
+        $p .= "- THIS BUSINESS DOES NOT TAKE ORDERS FROM A PRODUCT LIST: never emit <<ORDER>>, <<QUOTE>> or <<ACCEPT_QUOTE>>, never build a cart, never send a price list. Everything goes on the TRIP line.\n";
+        $p .= "- CONFIRMATION: when nothing is STILL NEEDED the system shows the customer a summary and asks them to confirm. When the customer then says it is correct, add \"confirm\":true to the TRIP line. Do NOT say the request has been sent or that the team has been told — the system adds that line itself, and only when it is true.\n";
         $p .= "- BE A CONSULTANT, NOT A PITCH: suggest at most ONE relevant add-on when it genuinely helps (an airport transfer with a flight, travel insurance with an international trip). Answer destination, season and what-to-expect questions helpfully and honestly from what you know; if unsure, say the team will confirm.\n";
         $p .= "- BOOKING & PAYMENT: when the customer wants to proceed, explain our terms from the lines below and COMPANY KNOWLEDGE — never invent an amount or a deadline; the team confirms the quotation and the payment instructions.\n";
+        if ($facts !== '') {
+            $p .= "ABOUT US (confirmed by the agency — state these as written, add nothing): " . mb_substr(preg_replace('/\s+/', ' ', $facts) ?? '', 0, 900) . "\n";
+        }
         if ($terms !== '') {
             $p .= "  Booking terms: " . mb_substr(preg_replace('/\s+/', ' ', $terms) ?? '', 0, 600) . "\n";
         }
@@ -101,7 +119,17 @@ final class TravelTurn
             $b .= $lines ? '- ' . implode("\n- ", $lines) . "\n" : "- (no details stored yet)\n";
             $missing = EnquirySlots::missing($state);
             $b .= 'STILL NEEDED: ' . ($missing ? implode('; ', array_map([self::class, 'neededLabel'], $missing)) . '. Ask for at most two of these in one message.'
-                : 'nothing — the record is complete. Do not ask for more; our team is preparing the fares.') . "\n";
+                : 'nothing — the record is complete. Do not ask for more.') . "\n";
+            if (! $missing) {
+                $b .= $enquiry->isSubmitted()
+                    ? 'STATUS: this request (' . $enquiry->reference() . ") has ALREADY been passed to our travel team. Do not ask the customer to confirm again. Changes are still welcome: report them on the TRIP line.\n"
+                    : "STATUS: the customer has been shown the summary and asked to confirm. If they say it is correct, add \"confirm\":true to the TRIP line. If they change something, report the change instead.\n";
+            }
+            foreach (EnquiryBrief::softQuestions($state) as $soft) {
+                if ($soft === 'budget_currency') {
+                    $b .= "OPTIONAL: the customer gave a budget with no currency. Ask once which currency they mean.\n";
+                }
+            }
             foreach ($state['pending'] as $q) {
                 if (($q['kind'] ?? '') === 'ambiguous_place') {
                     $b .= 'OPEN QUESTION — the customer said "' . ($q['input'] ?? '') . '" and we need to know which one: ' . implode(' / ', (array) ($q['options'] ?? []))
@@ -130,10 +158,31 @@ final class TravelTurn
             $enquiry = $this->enquiries->current($tenant, $from, $channel);
             $append  = [];
 
+            // "confirm" is a signal about the conversation, not a trip detail.
+            $confirm = false;
+            if (is_array($marker['patch']) && array_key_exists('confirm', $marker['patch'])) {
+                $confirm = filter_var($marker['patch']['confirm'], FILTER_VALIDATE_BOOLEAN);
+                unset($marker['patch']['confirm']);
+                if ($marker['patch'] === []) {
+                    $marker['patch'] = null;
+                }
+            }
+
+            $coreChanged = false;
+            $becameComplete = false;
             if ($marker['patch'] !== null || $marker['new_trip']) {
                 $state = is_array($convo->state) ? $convo->state : [];
+                $patch = $marker['patch'] ?? [];
+                // Website chat already collected a name and a number before the first message.
+                if ($channel === 'web') {
+                    foreach (['contact_name' => 'contact_name', 'contact_phone' => 'contact_phone'] as $key => $from_state) {
+                        if (! array_key_exists($key, $patch) && trim((string) ($state[$from_state] ?? '')) !== '') {
+                            $patch[$key] = (string) $state[$from_state];
+                        }
+                    }
+                }
                 $res = $this->enquiries->applyPatch(
-                    $tenant, $from, $channel, $marker['patch'] ?? [], $marker['new_trip'], $convo->id ? (int) $convo->id : null, $customerText,
+                    $tenant, $from, $channel, $patch, $marker['new_trip'], $convo->id ? (int) $convo->id : null, $customerText,
                     $channel === 'web' ? (trim((string) ($state['contact_name'] ?? '')) ?: null) : null,
                     $channel === 'web' ? (string) ($state['contact_phone'] ?? '') : $from,
                 );
@@ -142,14 +191,30 @@ final class TravelTurn
                 foreach (array_slice(self::issueLines($res['issues']), 0, 2) as $line) {
                     $append[] = $line;
                 }
-                $coreChanged = (bool) array_intersect(self::CORE, $res['changed']);
-                if ($res['complete'] && ($res['became_complete'] || $coreChanged)) {
-                    $append[] = self::summaryForCustomer($enquiry->state(), ! $res['became_complete']);
-                    $this->enquiries->announceReady($tenant, $enquiry, ! $res['became_complete']);
-                }
+                $coreChanged    = (bool) array_intersect(self::CORE, $res['changed']);
+                $becameComplete = (bool) $res['became_complete'];
             } elseif ($enquiry) {
                 $enquiry->last_customer_at = now();
                 $enquiry->save();
+            }
+
+            // One submission per enquiry, and only after the customer has seen the summary built by
+            // code and agreed to it. The model's "confirm" is accepted; so is a plain "yes" if the
+            // model forgot to report it. A change in the same message is never a confirmation.
+            if ($enquiry && EnquirySlots::isComplete($enquiry->state())) {
+                if (! $enquiry->isSubmitted()) {
+                    $agreed = ! $coreChanged && $enquiry->summary_shown_at !== null && ($confirm || Confirmation::isYes($customerText));
+                    if ($agreed) {
+                        $append[] = self::submittedLine($enquiry, $this->enquiries->submit($tenant, $enquiry));
+                    } elseif ($becameComplete || $coreChanged || $enquiry->summary_shown_at === null) {
+                        $append[] = self::summaryForCustomer($enquiry->state(), ! $becameComplete && $enquiry->summary_shown_at !== null);
+                        $this->enquiries->markSummaryShown($enquiry);
+                    }
+                } elseif ($coreChanged) {
+                    $result = $this->enquiries->submit($tenant, $enquiry);
+                    $append[] = self::summaryForCustomer($enquiry->state(), true, false) . "\n\n"
+                        . ($result['sent'] + $result['already'] > 0 ? 'Our travel team has been sent the updated details.' : 'The updated details are recorded for our travel team.');
+                }
             }
 
             if ($marker['malformed']) {
@@ -167,7 +232,7 @@ final class TravelTurn
             // Guard the model's own words. Real catalogue prices and the customer's own figures are allowed.
             $g = ReplyGuard::clean($clean, array_merge($this->cataloguePrices($tenant), ReplyGuard::amounts($customerText)));
             $clean = $g['reply'];
-            foreach (['fare_stripped' => $g['fare_hits'], 'passport_request_stripped' => $g['passport_hits']] as $guard => $n) {
+            foreach (['fare_stripped' => $g['fare_hits'], 'passport_request_stripped' => $g['passport_hits'], 'availability_stripped' => $g['availability_hits'] ?? 0] as $guard => $n) {
                 if ($n > 0) {
                     $enquiry ? $this->enquiries->guardHit($enquiry, $guard, $n) : BotTrace::log($tenant->id, 'travel', $from, 'travel_guard', $guard . ' x' . $n);   // stage is 24 chars max
                 }
@@ -184,16 +249,44 @@ final class TravelTurn
         return $clean;
     }
 
-    /** The trip as the customer sees it, built by code from the stored record. */
-    public static function summaryForCustomer(array $state, bool $updated = false): string
+    /** The enquiry as the customer sees it, built by code from the stored record. */
+    public static function summaryForCustomer(array $state, bool $updated = false, bool $ask = true): string
     {
         $out = ($updated ? "✈️ *Updated trip request*\n" : "✈️ *Your trip request*\n") . implode("\n", EnquirySlots::summaryLines($state));
         if (EnquirySlots::isGroup($state)) {
-            return $out . "\n\nAs this is a group booking, a member of our team will assist you personally.";
+            $out .= "\n\nAs this is a group booking, a member of our team will assist you personally.";
         }
 
-        return $out . "\n\n" . ($updated ? 'Our travel team will use these details for your quotation.'
-            : 'Our travel team is checking the best fares and will send your quotation shortly.');
+        return $ask ? $out . "\n\n" . self::ASK_TO_CONFIRM : $out;
+    }
+
+    /**
+     * What the customer is told once they have confirmed. It says the team has been told ONLY when a
+     * staff alert was actually delivered; otherwise it says, truthfully, that the request is recorded.
+     *
+     * @param array{sent:int,already:int} $result
+     */
+    public static function submittedLine(\App\Models\TravelEnquiry $enquiry, array $result): string
+    {
+        $told = ((int) ($result['sent'] ?? 0) + (int) ($result['already'] ?? 0)) > 0;
+
+        return $told
+            ? '✅ Thank you. Your request *' . $enquiry->reference() . '* has been passed to our travel team. They will prepare your quotation from confirmed rates and contact you.'
+            : '✅ Thank you. Your request *' . $enquiry->reference() . '* is recorded. Our travel team will review it, prepare your quotation from confirmed rates and contact you.';
+    }
+
+    /** Remove retail markers a model might emit. A travel agency never runs the order or quotation pipeline. */
+    public static function stripRetailMarkers(string $reply): string
+    {
+        foreach (['<<ORDER', '<<QUOTE', '<<ACCEPT_QUOTE'] as $m) {
+            $pos = stripos($reply, $m);
+            if ($pos !== false) {
+                $end = strpos($reply, '>>', $pos);
+                $reply = $end === false ? substr($reply, 0, $pos) : substr($reply, 0, $pos) . substr($reply, $end + 2);
+            }
+        }
+
+        return trim(preg_replace("/\n{3,}/", "\n\n", $reply) ?? $reply);
     }
 
     /**
@@ -222,6 +315,14 @@ final class TravelTurn
                 'minor_alone'             => "Children can't be booked to travel on their own in this chat. Will an adult travel with them? A member of our team can also advise on children travelling alone.",
                 'no_adult'                => 'At least one adult must travel. How many adults will there be?',
                 'bad_segment'             => "I couldn't tell which flight to change. Which flight number is it?",
+                'end_before_start'        => 'The end date needs to be after the start date. When would you like the trip to end?',
+                'bad_child_age'           => "I didn't catch one of the children's ages. How old is each child?",
+                'child_ages_mismatch'     => 'The number of ages does not match the number of children. How many children are travelling, and how old is each?',
+                'bad_currency'            => 'Which currency is that budget in — for example US dollars or Uganda shillings?',
+                'bad_budget'              => "I didn't catch the budget figure. Roughly how much would you like to spend, and in which currency?",
+                'bad_phone'               => "That phone number doesn't look complete. Could you send it with the country code?",
+                'bad_email'               => "That email address doesn't look right. Could you check it?",
+                'too_many_destinations'   => 'I can note up to eight places for one trip; our team can add more when they prepare your itinerary.',
                 default                   => null,     // group_booking is covered in the trip summary
             };
             if ($line !== null && ! in_array($line, $out, true)) {
