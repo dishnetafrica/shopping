@@ -22,10 +22,13 @@ function chk(string $l, $g, $w): void {
 }
 $dir = __DIR__ . '/fixtures/mrz/';
 $reader = new MrzReader();
-$read = function (string $file, string $mime) use ($reader, $dir): array {
+$slowest = 0.0;
+$read = function (string $file, string $mime) use ($reader, $dir, &$slowest): array {
     $t = microtime(true);
     $r = $reader->read((string) file_get_contents($dir . $file), $mime, '2026-11-14');
-    printf("     %-26s %-10s %d attempt(s) %.1fs\n", $file, $r['status'], $r['attempts'], microtime(true) - $t);
+    $took = microtime(true) - $t;
+    $slowest = max($slowest, $took);
+    printf("     %-26s %-10s %d attempt(s) %.1fs\n", $file, $r['status'], $r['attempts'], $took);
 
     return $r;
 };
@@ -45,6 +48,10 @@ $b = $read('passport-blurred.jpg', 'image/jpeg');
 chk('a blurred photo is either refused or read correctly — never read wrongly', $b['mrz'] === null || $key($b) === $want, true);
 chk('a photo that is not a passport', $read('not-a-passport.jpg', 'image/jpeg')['status'], 'unreadable');
 chk('bytes that are not an image', $reader->read('hello', 'image/jpeg', '2026-11-14')['status'], 'unsupported');
+
+echo "== time: a reading must end well inside the message job's 30 s lock and 60 s worker limit\n";
+chk('no reading took longer than the budget plus one second', $slowest <= MrzReader::TOTAL_BUDGET + 1, true);
+chk('the budget leaves room inside the 30 s conversation lock', MrzReader::TOTAL_BUDGET + MrzReader::RUN_TIMEOUT <= 30, true);
 
 echo "== temporary files are always removed\n";
 $tmp = rtrim(sys_get_temp_dir(), '/') . '/cbss-mrz';

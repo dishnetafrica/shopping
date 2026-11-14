@@ -20,14 +20,22 @@ class MrzReader
 {
     public const MAX_BYTES = 12_000_000;
 
-    public const MAX_PIXELS = 40_000_000;
+    /** About 100MB once decoded by GD; rotations make copies, and PHP has 512MB (docker/php.ini). */
+    public const MAX_PIXELS = 25_000_000;
+
+    /** Above this, OCR on the image as sent is slow; it goes straight to a scaled-down copy. */
+    private const AS_SENT_MAX_PIXELS = 8_000_000;
 
     public const MAX_PDF_PAGES = 2;
 
-    /** Seconds allowed for one OCR run, and for one whole reading. */
-    private const RUN_TIMEOUT = 20;
+    /**
+     * Seconds allowed for one OCR run, and for one whole reading. A reading runs inside the message
+     * job, which holds the conversation lock for 30 s (ProcessIncomingMessage::middleware) and is
+     * killed by the worker after 60 s: no run starts unless it can finish within the budget.
+     */
+    public const RUN_TIMEOUT = 8;
 
-    private const TOTAL_BUDGET = 45;
+    public const TOTAL_BUDGET = 18;
 
     private const WHITELIST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<';
 
@@ -105,7 +113,7 @@ class MrzReader
 
             foreach ($pages as $page) {
                 foreach ($this->plans() as $plan) {
-                    if (microtime(true) - $started > self::TOTAL_BUDGET) {
+                    if (microtime(true) - $started + self::RUN_TIMEOUT > self::TOTAL_BUDGET) {
                         break 2;
                     }
                     $png = $this->prepare($page, $plan, $dir, $files);
@@ -152,6 +160,9 @@ class MrzReader
     {
         if ($plan === 'as-sent') {
             $info = @getimagesizefromstring($bytes);
+            if (! $info || (int) $info[0] * (int) $info[1] > self::AS_SENT_MAX_PIXELS) {
+                return null;
+            }
             $ext = match ($info[2] ?? 0) { IMAGETYPE_JPEG => '.jpg', IMAGETYPE_PNG => '.png', IMAGETYPE_WEBP => '.webp', default => null };
             if ($ext === null) {
                 return null;
