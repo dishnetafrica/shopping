@@ -2,6 +2,7 @@
 
 namespace App\Services\Travel\Handoff;
 
+use App\Services\Travel\Passport\Travellers;
 use App\Models\Tenant;
 use App\Models\TravelEnquiry;
 use App\Models\TravelEnquiryNotification;
@@ -124,6 +125,13 @@ final class StaffHandoff
         }
         if (EnquirySlots::isGroup($state)) {
             $lines[] = 'Group (10 or more travellers): please handle personally.';
+        }
+        // Travellers read from their documents: details for the quotation, the number masked.
+        $today = now()->format('Y-m-d');
+        $on = Travellers::travelDate($state, $today);
+        foreach ($enquiry->travellers()->get() as $tv) {
+            $facts = $tv->facts();
+            $lines[] = '• ' . Travellers::staffLine($facts, $on, Travellers::validity($facts, $today, $on, Travellers::returnDate($state)));
         }
         $lines[] = 'No price has been given to the customer. Please prepare the quotation from confirmed rates.';
         if ($panelUrl !== '') {

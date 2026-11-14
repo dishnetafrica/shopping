@@ -208,16 +208,36 @@ class ProcessIncomingMessage implements ShouldQueue
         // message was queued; this is the second lock. Every other tenant skips this block entirely.
         $travelWithheld = null;   // image | document | video | null
         $travelTenant   = \App\Services\Travel\Enquiry\EnquiryService::isTravel($tenant);
+        $travelRead     = null;   // PassportIntake::handle() result for a photo or PDF
         if ($travelTenant) {
+            $travelMedia = null;
             try {
+                // A photo or PDF that may be a passport or ID card: how to reach it, taken BEFORE the
+                // scrub (the bytes, when this job got them inline, stay in this local variable only).
+                $travelMedia = \App\Services\Travel\Privacy\PassportGuard::readable($this->incoming);
                 $scrub = \App\Services\Travel\Privacy\PassportGuard::scrubInbound($this->incoming);
                 $this->incoming = $scrub['incoming'];
+                unset($this->incoming['travel_media']);
                 $travelWithheld = $scrub['withheld'];
             } catch (\Throwable $e) {
                 // Fail closed: if the scrub itself breaks, no attachment is ever fetched.
+                $travelMedia = null;
                 $travelWithheld = ! empty($this->incoming['has_image']) ? 'image' : (! empty($this->incoming['media_key']) ? 'document' : null);
-                unset($this->incoming['image_b64'], $this->incoming['media_key'], $this->incoming['doc_name'], $this->incoming['raw']);
+                unset($this->incoming['image_b64'], $this->incoming['media_key'], $this->incoming['doc_name'], $this->incoming['raw'], $this->incoming['travel_media']);
             }
+            // Read it now — before the human-takeover check below, so a passport sent while a person
+            // is handling the chat still reaches the trip. Replying is decided later.
+            if ($travelMedia !== null && $travelWithheld !== null) {
+                try {
+                    $travelRead = app(\App\Services\Travel\Passport\PassportIntake::class)->handle(
+                        $tenant, $convo, (string) $this->incoming['from'], (string) ($this->incoming['messageId'] ?? ''), $travelMedia, $gateway);
+                } catch (\Throwable $e) {
+                    Log::warning('travel: reading a document failed: ' . $e->getMessage());
+                    $travelRead = ['status' => 'error', 'reply' => null];
+                }
+                BotTrace::log($this->tenantId, (string) ($this->incoming['trace'] ?? $mid), (string) $this->incoming['from'], 'travel_document', (string) $travelRead['status']);
+            }
+            unset($travelMedia);
         }
 
         // Always log what the customer said — even if the bot is off or a human
@@ -265,9 +285,11 @@ class ProcessIncomingMessage implements ShouldQueue
         }
         if ($travelWithheld !== null) {
             // Travel: the inbox shows that a photo or document arrived, and any caption, but not the
-            // attachment itself.
+            // attachment itself — and, when it was read, not what was read either (that is on the trip).
             $tpCap   = trim((string) (($this->incoming['image_caption'] ?? '') ?: ($this->incoming['media_caption'] ?? '')));
-            $logText = trim(\App\Services\Travel\Privacy\PassportGuard::placeholder($travelWithheld) . ' ' . (trim((string) $logText) !== '' ? $logText : $tpCap));
+            $tpRead  = in_array($travelRead['status'] ?? null, ['read', 'duplicate'], true);
+            $logText = trim(($tpRead ? \App\Services\Travel\Privacy\PassportGuard::READ_PLACEHOLDER : \App\Services\Travel\Privacy\PassportGuard::placeholder($travelWithheld))
+                . ' ' . (trim((string) $logText) !== '' ? $logText : $tpCap));
         }
         $inMsg = MessageLog::record(
             $this->tenantId, $this->incoming['from'], $this->incoming['instance'],
@@ -500,17 +522,30 @@ class ProcessIncomingMessage implements ShouldQueue
         if ($travelWithheld !== null) {
             $twMuted = in_array($from, array_map(fn ($p) => preg_replace('/[^0-9]/', '', (string) $p), (array) $tenant->setting('bot_muted', [])), true);
             $twBotOn = in_array($botMode, ['ai', 'n8n', 'auto', 'inbuilt'], true);
+            $twRead  = in_array($travelRead['status'] ?? null, ['read', 'duplicate'], true);
             try {
-                if (\Illuminate\Support\Facades\Cache::add('travelphoto:' . $this->tenantId . ':' . $from, 1, now()->addSeconds(120))) {
+                if ($twRead) {
+                    // Read on this server: tell the customer what was read (so a misread name can be
+                    // corrected) and, if the trip is now complete, show the summary to confirm.
+                    if ($twBotOn && ! $twMuted && (string) ($travelRead['reply'] ?? '') !== '') {
+                        $gateway->sendText($tenant->whatsapp_instance, $from, (string) $travelRead['reply']);
+                        MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', (string) $travelRead['reply']);
+                    }
+                } elseif (\Illuminate\Support\Facades\Cache::add('travelphoto:' . $this->tenantId . ':' . $from, 1, now()->addSeconds(120))) {
                     if ($twBotOn && ! $twMuted) {
-                        $notice = \App\Services\Travel\Privacy\PassportGuard::NOTICE;
+                        // A photo or PDF we tried to read, or a file we cannot open at all.
+                        $notice = $travelRead !== null && ($travelRead['status'] ?? '') !== 'unavailable'
+                            ? \App\Services\Travel\Privacy\PassportGuard::NOTICE_UNREADABLE
+                            : \App\Services\Travel\Privacy\PassportGuard::NOTICE;
                         $gateway->sendText($tenant->whatsapp_instance, $from, $notice);
                         MessageLog::record($this->tenantId, $from, $this->incoming['instance'], 'out', 'bot', $notice);
                     }
                     NotifyOwner::dispatch($this->tenantId, \App\Services\Travel\Privacy\PassportGuard::staffAlert($travelWithheld, $from));
                 }
             } catch (\Throwable $e) { /* the notice and the alert are best-effort; the attachment stays withheld */ }
-            BotTrace::log($this->tenantId, $trace, $from, 'travel_media_withheld', $travelWithheld);   // stage is 24 chars max
+            if (! $twRead) {
+                BotTrace::log($this->tenantId, $trace, $from, 'travel_media_withheld', $travelWithheld);   // stage is 24 chars max
+            }
             if (trim((string) $this->incoming['text']) === '') {
                 $this->incoming['text'] = trim((string) (($this->incoming['image_caption'] ?? '') ?: ($this->incoming['media_caption'] ?? '')));
             }

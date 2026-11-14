@@ -15,6 +15,7 @@ use App\Services\Travel\Enquiry\EnquiryService;
 use App\Services\Travel\Enquiry\EnquirySlots;
 use App\Services\Travel\Enquiry\TravelPipeline;
 use App\Services\Travel\Handoff\StaffHandoff;
+use App\Services\Travel\Passport\Travellers;
 use App\Services\Travel\Panel\TripBoard;
 
 /**
@@ -88,6 +89,22 @@ final class TravelEnquiryCapability implements ObjectCapability
         if ($e->is_group) {
             $answers[] = ['q' => 'Group booking', 'value' => '10 or more seats — handle personally', 'sub' => 'Trip'];
         }
+
+        // Travellers read from the passports and ID cards the customer sent. Numbers are masked;
+        // owners and managers can reveal one (logged).
+        $travellers = $e->travellers()->get();
+        $tToday = now()->format('Y-m-d');
+        $tOn = Travellers::travelDate($state, $tToday);
+        foreach ($travellers as $tv) {
+            $facts = $tv->facts();
+            $validity = Travellers::validity($facts, $tToday, $tOn, Travellers::returnDate($state));
+            $answers[] = ['q' => 'Traveller', 'sub' => 'Travellers (from documents)', 'tone' => $validity ? 'warn' : 'default',
+                'value' => Travellers::staffLine($facts, $tOn, $validity)];
+        }
+        if ($travellers->isNotEmpty()) {
+            $answers[] = ['q' => '', 'sub' => 'Travellers (from documents)',
+                'value' => 'Read from the machine-readable lines. Names have no check digit: compare them with the document before ticketing.'];
+        }
         if ((string) $e->lost_reason !== '') {
             $answers[] = ['q' => 'Reason', 'value' => (string) $e->lost_reason, 'sub' => 'Outcome'];
         }
@@ -149,6 +166,13 @@ final class TravelEnquiryCapability implements ObjectCapability
             $actions[] = ['key' => 'retry_handoff', 'label' => $alerts->isEmpty() ? 'Send to staff' : 'Retry staff alert', 'method' => 'POST',
                 'endpoint' => $base . '/retry_handoff', 'actor' => 'human', 'tone' => 'warn',
                 'confirm' => 'Send this enquiry to the staff WhatsApp numbers set in Travel desk settings?'];
+        }
+        if ($travellers->isNotEmpty() && self::mayReveal($ctx)) {
+            $actions[] = ['key' => 'reveal_document', 'label' => 'Show a document number', 'method' => 'POST', 'endpoint' => $base . '/reveal_document',
+                'actor' => 'human', 'submitLabel' => 'Show',
+                'confirm' => 'The full document number will be shown and your name recorded on the trip timeline.',
+                'schema' => ['traveller' => 'combo:' . implode('|', $travellers->map(fn ($tv) => $tv->id . ' — ' . $tv->fullName())->all())],
+                'labels' => ['traveller' => 'Traveller']];
         }
         $actions[] = ['key' => 'add_note', 'label' => 'Add note', 'method' => 'POST', 'endpoint' => $base . '/add_note',
             'actor' => 'human', 'submitLabel' => 'Save note',
@@ -233,6 +257,25 @@ final class TravelEnquiryCapability implements ObjectCapability
 
                 return ['ok' => true, 'message' => 'Note saved'];
 
+            case 'reveal_document':
+                if (! self::mayReveal($ctx)) {
+                    return ['ok' => false, 'error' => 'forbidden', 'message' => 'Only an owner or a manager can see full document numbers.'];
+                }
+                $tid = (int) preg_replace('/\D.*$/s', '', trim((string) ($input['traveller'] ?? '')));   // "12 — Name" → 12
+                $tv = $e->travellers()->where('id', $tid)->first();
+                if (! $tv) {
+                    return ['ok' => false, 'error' => 'unknown_traveller'];
+                }
+                try {
+                    $number = (string) $tv->document_number;
+                } catch (\Throwable $ex) {
+                    return ['ok' => false, 'error' => 'unreadable', 'message' => 'The number cannot be decrypted (the application key has changed). Ask the customer for the document again.'];
+                }
+                // Who looked, and at whose document — never the number itself.
+                $svc->log($e, 'document_revealed', 'staff', ['traveller_id' => (int) $tv->id], $uid);
+
+                return ['ok' => true, 'message' => ucfirst(Travellers::documentLabel((string) $tv->document_type)) . ' number for ' . $tv->fullName() . ': ' . $number];
+
             case 'retry_handoff':
                 $r = app(StaffHandoff::class)->retry($ctx->tenant, $e);
                 if ($r['no_recipient']) {
@@ -260,6 +303,14 @@ final class TravelEnquiryCapability implements ObjectCapability
         return strlen($digits) <= 8 ? '+' . $digits : '+' . substr($digits, 0, 4) . '••••' . substr($digits, -4);
     }
 
+    /** Full document numbers: owners (and admins) and managers only. */
+    private static function mayReveal(CapabilityContext $ctx): bool
+    {
+        $user = $ctx->user;
+
+        return (method_exists($user, 'isOwnerLike') && $user->isOwnerLike()) || (string) ($user->role ?? '') === 'manager';
+    }
+
     private function timelineEntry(TravelEnquiryEvent $ev, array $staff): array
     {
         $meta  = is_array($ev->meta) ? $ev->meta : [];
@@ -280,6 +331,9 @@ final class TravelEnquiryCapability implements ObjectCapability
             'handoff_sent'         => ['Sent to staff', (int) ($meta['sent'] ?? 0) . ' delivered' . ((int) ($meta['failed'] ?? 0) > 0 ? ', ' . (int) $meta['failed'] . ' failed' : '')],
             'handoff_failed'       => ['Staff alert NOT delivered', (int) ($meta['failed'] ?? 0) . ' failed'],
             'handoff_no_recipient' => ['No staff number set — nobody was alerted', ''],
+            'passport_read'        => [($meta['duplicate'] ?? false) ? 'Same travel document sent again' : 'Travel document read: ' . (string) ($meta['document'] ?? 'document'),
+                ($meta['party_filled'] ?? []) ? 'party updated from it: ' . implode(', ', array_map(fn ($f) => str_replace('_', ' ', (string) $f), (array) $meta['party_filled'])) : ''],
+            'document_revealed'    => ['Full document number viewed', 'traveller #' . (int) ($meta['traveller_id'] ?? 0)],
             'handoff_retried'      => ['Staff alert retried', (int) ($meta['sent'] ?? 0) . ' delivered, ' . (int) ($meta['failed'] ?? 0) . ' failed'],
             default             => [ucfirst(str_replace('_', ' ', (string) $ev->type)), ''],
         };

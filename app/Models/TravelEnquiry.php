@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use App\Services\Travel\Passport\Travellers;
 use App\Services\Travel\Enquiry\EnquiryBrief;
 use App\Services\Travel\Enquiry\EnquirySlots;
 use App\Services\Travel\Enquiry\TravelPipeline;
@@ -52,6 +53,13 @@ class TravelEnquiry extends Model
         return $this->hasMany(TravelEnquiryNotification::class, 'enquiry_id');
     }
 
+    /** Travellers read from the passports and ID cards the customer sent (App\Services\Travel\Passport\PassportIntake). */
+    public function travellers(): HasMany
+    {
+        // Keyed by the enquiry (itself tenant-scoped); no tenant filter here, so eager loading works too.
+        return $this->hasMany(TravelTraveller::class, 'enquiry_id')->withoutGlobalScopes()->orderBy('id');
+    }
+
     /** The reference staff and customers quote: "TE-1042". */
     public function reference(): string
     {
@@ -86,7 +94,25 @@ class TravelEnquiry extends Model
             'notes'         => $this->notes,
             'pending'       => is_array($this->pending) ? $this->pending : [],
             'brief'         => EnquiryBrief::normalise($this->brief),
+            'travellers'    => $this->travellerEntries(),
         ]);
+    }
+
+    /** Names and ages of the travellers on record, as the trip state carries them. No document details. */
+    private function travellerEntries(): array
+    {
+        if (! $this->exists) {
+            return [];
+        }
+        $rows = $this->relationLoaded('travellers') ? $this->getRelation('travellers') : $this->travellers()->get();
+        if ($rows->isEmpty()) {
+            return [];
+        }
+        $today = now()->format('Y-m-d');
+        $first = $this->depart_date ? $this->depart_date->format('Y-m-d') : null;
+        $on = $first !== null && $first > $today ? $first : $today;
+
+        return Travellers::stateEntries($rows->map(fn (TravelTraveller $t) => $t->facts())->all(), $on);
     }
 
     /** Write an EnquirySlots state back onto the row (does not save). */

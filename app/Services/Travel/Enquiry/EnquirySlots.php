@@ -54,6 +54,8 @@ final class EnquirySlots
             'flexible_days' => null, 'direct_only' => null, 'notes' => null,
             'pending' => [],
             'brief' => EnquiryBrief::blank(),
+            // Names and ages read from the travellers' documents (TravelEnquiry::state()); never set by a patch.
+            'travellers' => [],
         ];
     }
 
@@ -435,6 +437,9 @@ final class EnquirySlots
         $p = self::paxLine($state);
         if ($p !== '' || $state['cabin']) {
             $lines[] = trim($p . ($p !== '' && $state['cabin'] ? ' · ' : '') . self::cabinLabel($state['cabin']));
+        }
+        if (is_array($state['travellers']) && $state['travellers'] !== []) {
+            $lines[] = 'Travellers: ' . \App\Services\Travel\Passport\Travellers::namesLine($state['travellers']);
         }
         $prefs = [];
         if ($state['airlines']) {

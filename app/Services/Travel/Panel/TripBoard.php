@@ -28,7 +28,7 @@ final class TripBoard
     /** @return Collection<int,TravelEnquiry> newest activity first */
     public function enquiries(): Collection
     {
-        return TravelEnquiry::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)
+        return TravelEnquiry::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->with('travellers')
             ->orderByDesc('updated_at')->orderByDesc('id')->limit(self::LIST_LIMIT)->get();
     }
 

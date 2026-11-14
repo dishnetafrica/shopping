@@ -3,15 +3,18 @@
 namespace App\Services\Travel\Privacy;
 
 /**
- * Passport data is never collected over chat on a travel tenant. Two rules, both PURE decisions:
+ * Passport privacy on a travel tenant. The rules, all PURE decisions:
  *
- *   1. A passport number a customer types anyway is masked BEFORE the message is stored or shown to
- *      the AI model. Deliberately narrow: the message must contain the word "passport", and only a
+ *   1. A passport number a customer TYPES is masked BEFORE the message is stored or shown to the AI
+ *      model. Deliberately narrow: the message must contain the word "passport", and only a
  *      document-shaped token is masked, so booking references, dates and long phone numbers survive.
- *   2. A photo, a PDF or other document, or a video sent to a travel tenant is not downloaded, not
- *      stored and not shown to the AI model. The platform cannot tell a passport from any other
- *      attachment without reading it, so it reads none of them. Staff still see the attachment in
- *      WhatsApp itself on the business phone. Voice notes are not affected.
+ *   2. No attachment is ever stored in the chat records or shown to the AI model, and the provider's
+ *      raw body is dropped before queueing.
+ *   3. A photo or a PDF may be a passport or ID card: readable() says how to reach it (its message key,
+ *      and any bytes that arrived inline) so App\Services\Travel\Passport\PassportIntake can read its
+ *      machine-readable zone ON THIS SERVER, in memory, and save the traveller's details to the trip.
+ *      The file itself is never kept. A video or any other file is withheld unread, as before.
+ *      Voice notes are not affected.
  *
  * The bot's own side of the rule (never ASK for passport data) is App\Services\Travel\Conversation\ReplyGuard.
  */
@@ -19,8 +22,14 @@ final class PassportGuard
 {
     public const MASK = '[passport number removed]';
 
-    /** Said once to a customer who sends a photo, a document or a video. */
-    public const NOTICE = "Thank you. For your privacy I can't open photos or documents sent here, so please type the details instead. Please do not send passport photos, scans or numbers in this chat — our team will collect them securely when you book.";
+    /** Said once to a customer who sends a file that cannot be read here (a video, a Word file…). */
+    public const NOTICE = "Thank you. I can't open this kind of file here, so please type the details instead. For a passport or ID card, you can send a clear photo of the page with the photo (for an ID card, the back) and I will read the names and dates of birth.";
+
+    /** Said once to a customer whose photo or PDF could not be read as a passport or ID card. */
+    public const NOTICE_UNREADABLE = "Thank you. I couldn't read the details from that file. If it is a passport or ID card, please send a clear photo of the page with the photo (for an ID card, the back), flat and in good light, with the lines of letters and <<< at the bottom fully visible. Or simply type each traveller's full name and date of birth. The file itself has not been kept.";
+
+    /** What the chat log shows for a photo or PDF that was read. The details are on the trip, not in the chat. */
+    public const READ_PLACEHOLDER = '[travel document read — details saved to the trip; file not kept]';
 
     public const PHOTO_PLACEHOLDER = '[photo not stored — travel privacy rule]';
 
@@ -129,6 +138,43 @@ final class PassportGuard
         return str_starts_with($mime, 'image/') ? 'image' : (str_starts_with($mime, 'video/') ? 'video' : 'document');
     }
 
+    /**
+     * A photo or PDF from the customer that may be a passport or ID card, and how to reach it: the
+     * provider's message key, the bytes if they arrived inline (an image's base64, or a document's
+     * base64 inside the provider's raw body), or the reference the webhook left for the job
+     * (`travel_media`, with `stashed` = the bytes wait in PassportInbox). Null for anything else,
+     * including the business's own messages.
+     *
+     * @return array{ref:?array,mime:string,inline:?string,stashed:bool}|null
+     */
+    public static function readable(array $incoming): ?array
+    {
+        if (! empty($incoming['from_me'])) {
+            return null;
+        }
+        $kind = self::attachmentKind($incoming);
+        $tm   = is_array($incoming['travel_media'] ?? null) ? $incoming['travel_media'] : null;
+        $mime = strtolower(is_string($incoming['media_mime'] ?? null) && $incoming['media_mime'] !== '' ? $incoming['media_mime'] : (string) ($tm['mime'] ?? ''));
+        $readable = $kind === 'image' || ($kind === 'document' && (str_contains($mime, 'pdf') || str_starts_with($mime, 'image/')));
+        if (! $readable) {
+            return null;
+        }
+        $inline = null;
+        foreach ([$incoming['image_b64'] ?? null, $incoming['raw']['data']['message']['base64'] ?? null, $incoming['raw']['data']['base64'] ?? null] as $b64) {
+            if (is_string($b64) && $b64 !== '') {
+                $inline = $b64;
+                break;
+            }
+        }
+        $ref = is_array($incoming['media_key'] ?? null) ? $incoming['media_key'] : (is_array($tm['ref'] ?? null) ? $tm['ref'] : null);
+        $stashed = (bool) ($tm['stashed'] ?? false);
+        if ($ref === null && $inline === null && ! $stashed) {
+            return null;
+        }
+
+        return ['ref' => $ref, 'mime' => $mime !== '' ? $mime : ($kind === 'image' ? 'image/jpeg' : ''), 'inline' => $inline, 'stashed' => $stashed];
+    }
+
     /** What the chat log shows in place of a withheld attachment. */
     public static function placeholder(string $kind): string
     {
@@ -148,7 +194,7 @@ final class PassportGuard
             default => 'a document',
         };
 
-        return "📎 +{$from} sent {$what}. On a travel account photos and documents are not stored or read (passport privacy rule). Open WhatsApp on the business phone if you need to see it.";
+        return "📎 +{$from} sent {$what} that could not be read as a passport or ID card. It has not been stored (passport privacy rule). Open WhatsApp on the business phone if you need to see it.";
     }
 
     /** Whether an attachment kind is withheld on a travel tenant: everything except a voice note. */
