@@ -15,17 +15,19 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Travel Vertical · M1 — the passport rule for attachments, through the real webhook and the real
+ * Travel Vertical — the passport rule for attachments, through the real webhook and the real
  * message job.
  *
  * Two questions, each asked of a PDF, a photo and a voice note, with a grocery shop as the control:
  *   1. What is put on the queue?   (the real webhook endpoint; the job is captured, not run)
- *   2. What is downloaded, stored and said?   (the real job; the WhatsApp provider is a recorder)
+ *   2. What is fetched, stored and said?   (the real job; the WhatsApp provider is a recorder)
  *
- * On a travel agency the attachment's bytes, the key that could fetch it later, its file name and
- * the provider's raw body must be gone before queueing; the job must not ask the provider for the
- * file; the chat log must hold a placeholder, not a media reference. A grocery shop must be exactly
- * as before: its photo is queued with its bytes and stored with its key, and its PDF is still dropped.
+ * On a travel agency the attachment's bytes, its file name and the provider's raw body must be gone
+ * before queueing; a photo or PDF travels only as a reference (`travel_media`), its inline bytes set
+ * aside encrypted for the job that reads it as a passport or ID card (TravelPassportReadingTest). The
+ * chat log holds a placeholder, never a media reference. A file that is not a passport is not stored
+ * and the customer is asked to resend or type. A grocery shop must be exactly as before: its photo is
+ * queued with its bytes and stored with its key, and its PDF is still dropped.
  */
 class TravelAttachmentRuleTest extends TestCase
 {
@@ -50,6 +52,8 @@ class TravelAttachmentRuleTest extends TestCase
             'api.openai.com/v1/audio/*' => Http::response(['text' => self::SPOKEN], 200),   // voice transcription
             '*' => Http::response(['key' => ['id' => 'OUT1']], 200),                         // the WhatsApp provider
         ]);
+        // The OCR program is replaced by one that finds nothing: these attachments are not passports.
+        $this->app->instance(\App\Services\Travel\Passport\MrzReader::class, new \App\Services\Travel\Passport\MrzReader(fn (string $path) => ''));
     }
 
     protected function tearDown(): void
@@ -58,10 +62,15 @@ class TravelAttachmentRuleTest extends TestCase
         parent::tearDown();
     }
 
+    private int $businessId = 0;
+
     private function business(string $vertical, string $botMode = 'ai'): Tenant
     {
-        return Tenant::factory()->create(['whatsapp_instance' => 'inst_' . $vertical, 'whatsapp_driver' => 'evolution',
+        $t = Tenant::factory()->create(['whatsapp_instance' => 'inst_' . $vertical, 'whatsapp_driver' => 'evolution',
             'settings' => ['vertical' => $vertical, 'bot_mode' => $botMode, 'timezone' => 'Africa/Kampala']]);
+        $this->businessId = (int) $t->id;
+
+        return $t;
     }
 
     /** A provider webhook body, as Evolution sends it. */
@@ -143,6 +152,11 @@ class TravelAttachmentRuleTest extends TestCase
         $this->assertNotSame('', $this->stored);
         $this->assertFalse(self::leaksText($this->stored), 'nor in the job as the queue (and the failed-jobs table) would store it');
         $this->assertSame('my passport ' . PassportGuard::MASK, $in['media_caption']);
+        // Only a reference to the message travels, for the job that reads the document on the server.
+        $this->assertSame(['id', 'remoteJid', 'participant', 'fromMe'], array_keys($in['travel_media']['ref']));
+        $this->assertTrue($in['travel_media']['stashed'], 'the inline bytes wait encrypted, off the queue');
+        $this->assertSame(self::BYTES, \App\Services\Travel\Passport\PassportInbox::take($this->businessId, 'MSG1'));
+        $this->assertNull(\App\Services\Travel\Passport\PassportInbox::take($this->businessId, 'MSG1'), 'and can be taken only once');
     }
 
     public function test_a_photo_sent_to_a_travel_agency_is_queued_without_its_bytes_or_its_key(): void
@@ -193,13 +207,14 @@ class TravelAttachmentRuleTest extends TestCase
 
     // ---- 2. what is downloaded, stored and said --------------------------------------------------
 
-    public function test_the_job_never_fetches_or_stores_a_travel_pdf_and_tells_the_customer_once(): void
+    public function test_a_travel_pdf_that_is_not_a_passport_is_never_stored_and_the_customer_is_told_once(): void
     {
         $t = $this->business('travel');
 
         $this->process($t, self::pdf());
 
-        $this->assertFalse(self::askedProviderForTheFile(), 'the provider is never asked for the file');
+        $this->assertFalse(self::askedProviderForTheFile(), 'the bytes came with the message; the provider is not asked again');
+        $this->assertSame(0, \App\Models\TravelTraveller::withoutGlobalScopes()->count());
 
         $in = Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('direction', 'in')->get();
         $this->assertCount(1, $in);
@@ -207,11 +222,22 @@ class TravelAttachmentRuleTest extends TestCase
         $this->assertEmpty($in[0]->meta, 'no media reference is stored with the chat message');
 
         $out = Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('direction', 'out')->pluck('body')->all();
-        $this->assertSame([PassportGuard::NOTICE], $out);
+        $this->assertSame([PassportGuard::NOTICE_UNREADABLE], $out);
         Bus::assertDispatched(NotifyOwner::class, fn ($job) => str_contains($job->text, 'sent a document'));
     }
 
-    public function test_the_job_never_fetches_or_stores_a_travel_photo(): void
+    public function test_a_travel_video_is_withheld_unread_as_before(): void
+    {
+        $t = $this->business('travel');
+
+        $this->process($t, ['videoMessage' => ['mimetype' => 'video/mp4', 'caption' => ''], 'base64' => self::BYTES]);
+
+        $this->assertFalse(self::askedProviderForTheFile());
+        $this->assertSame(PassportGuard::VIDEO_PLACEHOLDER, Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('direction', 'in')->value('body'));
+        $this->assertSame([PassportGuard::NOTICE], Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('direction', 'out')->pluck('body')->all());
+    }
+
+    public function test_a_travel_photo_that_is_not_a_passport_is_never_stored(): void
     {
         $t = $this->business('travel');
 

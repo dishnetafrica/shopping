@@ -25,6 +25,28 @@ class TravelHarnessTest extends TestCase
         $this->assertStringContainsString('ALL PASS', implode("\n", $out));
     }
 
+    public function test_passport_and_id_card_machine_readable_lines_and_check_digits(): void
+    {
+        $this->harness('travel_mrz.php');
+    }
+
+    public function test_travellers_from_documents_fill_the_party_only_as_allowed(): void
+    {
+        $this->harness('travel_travellers.php');
+    }
+
+    /** The real OCR program on test images. Installed in CI exactly as in the Docker image, so required there. */
+    public function test_real_ocr_reads_passports_and_id_cards_and_never_misreads(): void
+    {
+        $out = [];
+        $code = 1;
+        exec('command -v tesseract 2>/dev/null', $out, $code);
+        if ($code !== 0 && getenv('CI') !== 'true') {
+            $this->markTestSkipped('tesseract is not installed here (it is in CI and in the Docker image)');
+        }
+        $this->harness('travel_mrz_ocr.php');
+    }
+
     public function test_trip_record_merges_changes_without_losing_details(): void
     {
         $this->harness('travel_slots.php');

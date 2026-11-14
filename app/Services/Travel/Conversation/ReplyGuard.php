@@ -11,7 +11,9 @@ namespace App\Services\Travel\Conversation;
  *      (later milestones); until code supplies one, any amount the model writes is an invention.
  *      Amounts that are a real catalogue price (a fixed-fee visa service, an airport transfer) or
  *      that the customer wrote themselves (their budget) are allowed.
- *   2. Ask for passport data. Passport numbers and photos are never collected over chat.
+ *   2. Ask the customer to TYPE passport data (a number, "passport details"). A typed number would sit
+ *      in the chat and be masked anyway. Asking for a PHOTO or scan of the passport or ID card is
+ *      allowed: it is read on this server (App\Services\Travel\Passport\PassportIntake) and not kept.
  *
  * Works a sentence at a time and never touches the brain's hidden `<<…>>` marker lines.
  */
@@ -20,7 +22,7 @@ final class ReplyGuard
     public const FARE_NOTE     = 'Our travel team will confirm the fare for you.';
 
     public const AVAILABILITY_NOTE = 'Our travel team will confirm availability for you.';
-    public const PASSPORT_NOTE = 'Please do not send passport details or photos here. Our team will collect them securely when you book.';
+    public const PASSPORT_NOTE = "Please don't type passport numbers here. You can send a clear photo of the passport's photo page instead and I'll read the details.";
 
     private const CURRENCY = '(?:US\$|USD|UGX|UGSHS?|SHS|KSHS?|KES|TZS|RWF|SSP|EUR|GBP|AED|ZAR|\$|€|£)';
     private const UNIT     = '(?:USD|UGX|KES|TZS|RWF|SSP|EUR|GBP|AED|ZAR|dollars?|shillings?|euros?|pounds?|dirhams?|bob|\/=)';
@@ -127,11 +129,21 @@ final class ReplyGuard
         if (preg_match('/\b(do not|don\'t|dont|no need|never|not need|needn\'t|without|will collect|collect (it|them)|later|securely)\b/i', $sentence)) {
             return false;
         }
-        if (preg_match('/\b(send|share|provide|upload|attach|forward|give|type|enter|tell|submit|drop|snap|whatsapp)\b[^.?!]{0,80}\bpassport/i', $sentence)) {
+        // A photo, scan or copy of the document is read on this server and not kept: asking for it is fine.
+        if (preg_match('/\b(photos?|pictures?|pics?|scans?|scanned|images?|copy|copies|page)\b/i', $sentence)) {
+            return false;
+        }
+        // What is never wanted: the number, or "details", typed into the chat.
+        $number = preg_match('/passport[^.?!]{0,30}\b(numbers?|no\.?|nos\.?|details|digits)(?![a-z])/i', $sentence)
+            || preg_match('/\b(numbers?|details|digits)\b[^.?!]{0,30}passport/i', $sentence);
+        if (! $number) {
+            return false;
+        }
+        if (preg_match('/\b(send|share|provide|give|type|enter|tell|submit|write|forward|whatsapp|need|require)\b/i', $sentence)) {
             return true;
         }
 
-        return (bool) preg_match('/passport[^.?!]{0,60}\b(numbers?|no\.?|photo|picture|pic|copy|copies|scan|image|page|details)\b[^.!]*\?/i', $sentence);
+        return str_contains($sentence, '?');
     }
 
     private static function statesUnknownFare(string $sentence, array $allowed): bool

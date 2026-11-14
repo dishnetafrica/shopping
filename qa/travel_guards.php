@@ -96,15 +96,17 @@ foreach (['yes but make it 4', 'no', 'yes, change the date', 'ok but', 'not yet'
 }
 
 echo "== reply guard: passport\n";
-foreach (['Please send me a photo of your passport.', 'Kindly share your passport number so I can book.', 'Could you upload the passport copy here?', 'What is your passport number?', 'Can I have a picture of the passport page?', 'Please WhatsApp us your passport.'] as $s) {
+// The number typed into the chat is never wanted; a photo of the document is (it is read on the server, not kept).
+foreach (['Kindly share your passport number so I can book.', 'What is your passport number?', 'Please type your passport number here.', 'Send me your passport details please.', 'Could you tell me the passport numbers for each traveller?'] as $s) {
     $r = G::clean($s);
     chk("request removed: $s", [$r['passport_hits'], $r['reply']], [1, G::PASSPORT_NOTE]);
 }
-foreach (['Please do not send your passport here.', 'Our team will collect passport details securely when you book.', 'Make sure your passport is valid for six months.', 'Names must match the passport exactly.', "You don't need to send a passport photo now."] as $s) {
+foreach (['Please send me a photo of your passport.', 'Could you upload the passport copy here?', 'Can I have a picture of the passport page?', 'Please WhatsApp us your passport.', 'You can send a clear photo of each passport photo page and I will read the names.',
+    'Please do not send your passport here.', 'Our team will collect passport details securely when you book.', 'Make sure your passport is valid for six months.', 'Names must match the passport exactly.', "You don't need to send a passport photo now."] as $s) {
     $r = G::clean($s);
     chk("allowed: $s", [$r['passport_hits'], $r['reply']], [0, $s]);
 }
-$r = G::clean('Great, two adults to Dubai. Please send your passport copies. When do you fly?');
+$r = G::clean('Great, two adults to Dubai. Please send your passport numbers. When do you fly?');
 chk('only the request sentence goes', $r['reply'], "Great, two adults to Dubai. When do you fly?\n\n" . G::PASSPORT_NOTE);
 
 echo "== passport number mask\n";

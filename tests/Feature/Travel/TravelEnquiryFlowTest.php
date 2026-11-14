@@ -186,21 +186,32 @@ class TravelEnquiryFlowTest extends TestCase
         $this->assertSame(1, (int) $new->adults);
     }
 
-    public function test_an_invented_fare_and_a_passport_request_never_reach_the_customer(): void
+    public function test_an_invented_fare_and_a_request_to_type_a_passport_number_never_reach_the_customer(): void
     {
         $t = $this->agency();
         $c = $this->convo($t);
         $this->say($t, $c, 'to Dubai', "Ok\n<<TRIP {\"to\":\"Dubai\"}>>");
 
-        $reply = $this->say($t, $c, 'how much?', 'A return ticket is about USD 480 per person. Please send a photo of your passport. Which dates suit you?');
+        $reply = $this->say($t, $c, 'how much?', 'A return ticket is about USD 480 per person. Please type your passport number. Which dates suit you?');
 
         $this->assertStringNotContainsString('480', $reply);
-        $this->assertStringNotContainsString('send a photo of your passport', $reply);
+        $this->assertStringNotContainsString('type your passport number', $reply);
         $this->assertStringContainsString('Which dates suit you?', $reply);
         $this->assertStringContainsString('Our travel team will confirm the fare', $reply);
-        $this->assertStringContainsString('do not send passport', $reply);
+        $this->assertStringContainsString("don't type passport numbers", $reply);
         $guards = TravelEnquiryEvent::where('type', 'guard_hit')->get()->map(fn ($e) => $e->meta['guard'])->sort()->values()->all();
         $this->assertSame(['fare_stripped', 'passport_request_stripped'], $guards);
+    }
+
+    public function test_inviting_a_photo_of_the_passport_is_allowed_because_it_is_read_on_the_server_and_not_kept(): void
+    {
+        $t = $this->agency();
+        $c = $this->convo($t);
+
+        $reply = $this->say($t, $c, 'to Dubai', "Lovely. You can send a clear photo of each traveller's passport photo page and I will read the names.\n<<TRIP {\"to\":\"Dubai\"}>>");
+
+        $this->assertStringContainsString('send a clear photo of each traveller', $reply);
+        $this->assertSame(0, TravelEnquiryEvent::where('type', 'guard_hit')->count());
     }
 
     public function test_a_real_fixed_fee_from_the_catalogue_may_be_quoted(): void
