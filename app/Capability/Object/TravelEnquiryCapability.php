@@ -167,11 +167,12 @@ final class TravelEnquiryCapability implements ObjectCapability
                 'endpoint' => $base . '/retry_handoff', 'actor' => 'human', 'tone' => 'warn',
                 'confirm' => 'Send this enquiry to the staff WhatsApp numbers set in Travel desk settings?'];
         }
-        if ($travellers->isNotEmpty() && self::mayReveal($ctx)) {
+        $withNumber = $travellers->reject(fn ($tv) => $tv->numberDeleted());
+        if ($withNumber->isNotEmpty() && self::mayReveal($ctx)) {
             $actions[] = ['key' => 'reveal_document', 'label' => 'Show a document number', 'method' => 'POST', 'endpoint' => $base . '/reveal_document',
                 'actor' => 'human', 'submitLabel' => 'Show',
                 'confirm' => 'The full document number will be shown and your name recorded on the trip timeline.',
-                'schema' => ['traveller' => 'combo:' . implode('|', $travellers->map(fn ($tv) => $tv->id . ' — ' . $tv->fullName())->all())],
+                'schema' => ['traveller' => 'combo:' . implode('|', $withNumber->map(fn ($tv) => $tv->id . ' — ' . $tv->fullName())->all())],
                 'labels' => ['traveller' => 'Traveller']];
         }
         $actions[] = ['key' => 'add_note', 'label' => 'Add note', 'method' => 'POST', 'endpoint' => $base . '/add_note',
@@ -266,6 +267,9 @@ final class TravelEnquiryCapability implements ObjectCapability
                 if (! $tv) {
                     return ['ok' => false, 'error' => 'unknown_traveller'];
                 }
+                if ($tv->numberDeleted()) {
+                    return ['ok' => false, 'error' => 'deleted', 'message' => 'This number was deleted under the retention rule. Ask the customer for the document again if it is needed.'];
+                }
                 try {
                     $number = (string) $tv->document_number;
                 } catch (\Throwable $ex) {
@@ -334,6 +338,8 @@ final class TravelEnquiryCapability implements ObjectCapability
             'passport_read'        => [($meta['duplicate'] ?? false) ? 'Same travel document sent again' : 'Travel document read: ' . (string) ($meta['document'] ?? 'document'),
                 ($meta['party_filled'] ?? []) ? 'party updated from it: ' . implode(', ', array_map(fn ($f) => str_replace('_', ' ', (string) $f), (array) $meta['party_filled'])) : ''],
             'document_revealed'    => ['Full document number viewed', 'traveller #' . (int) ($meta['traveller_id'] ?? 0)],
+            'document_numbers_deleted' => ['Document numbers deleted (retention)', (int) ($meta['count'] ?? 0) . ' deleted — '
+                . (($meta['rule'] ?? '') === 'inactive' ? 'no activity for ' . Travellers::INACTIVE_DAYS . ' days' : (int) ($meta['days'] ?? 0) . ' days after the trip closed')],
             'handoff_retried'      => ['Staff alert retried', (int) ($meta['sent'] ?? 0) . ' delivered, ' . (int) ($meta['failed'] ?? 0) . ' failed'],
             default             => [ucfirst(str_replace('_', ' ', (string) $ev->type)), ''],
         };

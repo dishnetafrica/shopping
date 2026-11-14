@@ -154,6 +154,7 @@ class TravelPassportReadingTest extends TestCase
         $this->assertStringContainsString('has not been kept', $sends[0]['text']);
         $this->assertStringContainsString('which has passed', $sends[0]['text'], 'the specimen expired in 2012');
         $this->assertStringContainsString('To prepare your quotation I still need', $sends[0]['text']);
+        $this->assertStringContainsString('the passport number is deleted 90 days after the booking is closed', $sends[0]['text'], 'the customer is told how long it is kept');
         $this->assertStringNotContainsString('L898902C3', $sends[0]['text']);
 
         // The file and the number are nowhere else: not in the chat, the trace, the timeline, the AI.
@@ -281,6 +282,88 @@ class TravelPassportReadingTest extends TestCase
         $this->actingAs($this->user($b, 'owner'));
         $this->assertStringNotContainsString('ERIKSSON', json_encode($this->getJson('/api/v1/workspace/trip/' . $e->id)->json()));
         $this->postJson('/api/v1/workspace/trip/' . $e->id . '/reveal_document', ['traveller' => $tv->id . ' — x'])->assertJson(['ok' => false, 'error' => 'not_found']);
+    }
+
+    // ---- retention -------------------------------------------------------------------------------
+
+    private function closeTrip(Tenant $t): TravelEnquiry
+    {
+        $e = TravelEnquiry::withoutGlobalScopes()->where('tenant_id', $t->id)->sole();
+        $this->assertTrue(app(\App\Services\Travel\Enquiry\EnquiryService::class)->changeStage($e, \App\Services\Travel\Enquiry\TravelPipeline::LOST, 'staff', null, 'Booked elsewhere'));
+
+        return $e->fresh();
+    }
+
+    private function rawNumber(): ?string
+    {
+        return DB::table('travel_travellers')->value('document_number');
+    }
+
+    public function test_a_closed_trips_document_numbers_are_deleted_after_90_days_and_not_before(): void
+    {
+        $t = $this->agency();
+        $this->sendPhoto($t);
+        $e = $this->closeTrip($t);                                  // closed 14 Nov 2026 (Kampala)
+
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2027-02-11 10:00:00', 'UTC'));   // day 89
+        $this->artisan('travel:purge-documents')->assertExitCode(0);
+        $this->assertNotNull($this->rawNumber(), 'kept until the 90th day');
+
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2027-02-12 10:00:00', 'UTC'));   // day 90
+        $this->artisan('travel:purge-documents --dry-run')->assertExitCode(0);
+        $this->assertNotNull($this->rawNumber(), 'a dry run changes nothing');
+        $this->artisan('travel:purge-documents')->assertExitCode(0);
+
+        $tv = TravelTraveller::withoutGlobalScopes()->sole();
+        $this->assertNull($this->rawNumber(), 'the number is gone from the database');
+        $this->assertTrue($tv->numberDeleted());
+        $this->assertSame('deleted:' . $tv->id, DB::table('travel_travellers')->value('fingerprint'), 'and the fingerprint derived from it');
+        $this->assertSame(['ERIKSSON', 'ANNA MARIA', '02C3'], [$tv->surname, $tv->given_names, $tv->document_last4], 'the booking history stays');
+
+        app(TenantContext::class)->set($t->id);
+        $ev = TravelEnquiryEvent::where('enquiry_id', $e->id)->where('type', 'document_numbers_deleted')->sole();
+        $this->assertEquals(['count' => 1, 'rule' => 'closed', 'days' => 90], $ev->meta);   // jsonb reorders keys
+
+        // Staff see that it was deleted, and cannot reveal it.
+        $this->actingAs($this->user($t, 'owner'));
+        $j = $this->getJson('/api/v1/workspace/trip/' . $e->id)->assertOk()->json();
+        $this->assertStringContainsString('(number deleted)', json_encode($j['answers'] ?? [], JSON_UNESCAPED_UNICODE));
+        $this->assertFalse(collect($j['actions'] ?? [])->contains(fn ($a) => $a['key'] === 'reveal_document'));
+        $this->postJson('/api/v1/workspace/trip/' . $e->id . '/reveal_document', ['traveller' => $tv->id . ' — x'])->assertJson(['ok' => false, 'error' => 'deleted']);
+
+        // Running again deletes nothing more and writes no second timeline entry.
+        $this->artisan('travel:purge-documents')->assertExitCode(0);
+        app(TenantContext::class)->set($t->id);
+        $this->assertSame(1, TravelEnquiryEvent::where('enquiry_id', $e->id)->where('type', 'document_numbers_deleted')->count());
+    }
+
+    public function test_an_agency_can_set_a_shorter_period_and_the_customer_is_told_it(): void
+    {
+        $t = $this->agency('travel', ['travel_document_retention_days' => 30]);
+        $this->sendPhoto($t);
+        $this->assertStringContainsString('deleted 30 days after the booking is closed', $this->sends()[0]['text']);
+        $this->closeTrip($t);
+
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-12-14 10:00:00', 'UTC'));   // day 30
+        $this->artisan('travel:purge-documents')->assertExitCode(0);
+
+        $this->assertNull($this->rawNumber());
+    }
+
+    public function test_an_open_trip_keeps_its_numbers_until_180_days_without_activity(): void
+    {
+        $t = $this->agency();
+        $this->sendPhoto($t);                                       // the trip stays open
+
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2027-05-12 10:00:00', 'UTC'));   // day 179
+        $this->artisan('travel:purge-documents')->assertExitCode(0);
+        $this->assertNotNull($this->rawNumber());
+
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2027-05-13 10:00:00', 'UTC'));   // day 180
+        $this->artisan('travel:purge-documents')->assertExitCode(0);
+        $this->assertNull($this->rawNumber());
+        app(TenantContext::class)->set($t->id);
+        $this->assertSame('inactive', TravelEnquiryEvent::where('type', 'document_numbers_deleted')->sole()->meta['rule']);
     }
 
     public function test_a_grocery_shop_photo_is_handled_exactly_as_before(): void

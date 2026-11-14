@@ -136,6 +136,7 @@ final class SettingsWriteService
         'books.loan_rate' => ['float', 0.0],
         'books.stock_usd' => ['float', 0.0],
         'travel_abandon_hours' => ['int', 1],                // Travel Vertical (M1) — hours of silence before "no reply"
+        'travel_document_retention_days' => ['int', 7],      // Travel (#145) — days document numbers are kept after a trip closes (capped 730 at read)
     ];
 
     /** On/off toggle settings (stored as booleans). */

@@ -17,6 +17,49 @@ final class Travellers
     /** ICAO: a passport should be valid six months beyond the stay; many countries enforce it. */
     public const VALIDITY_MONTHS = 6;
 
+    /** Days after a trip is closed that its travellers' document numbers are deleted (agency setting). */
+    public const RETENTION_DEFAULT_DAYS = 90;
+
+    public const RETENTION_MIN_DAYS = 7;
+
+    public const RETENTION_MAX_DAYS = 730;
+
+    /** A trip that never closes is treated as finished after this long without activity. */
+    public const INACTIVE_DAYS = 180;
+
+    /** The agency's retention setting, defaulted and kept within sensible bounds. */
+    public static function retentionDays(mixed $setting): int
+    {
+        if ($setting === null || $setting === '' || ! is_numeric($setting)) {
+            return self::RETENTION_DEFAULT_DAYS;
+        }
+
+        return max(self::RETENTION_MIN_DAYS, min(self::RETENTION_MAX_DAYS, (int) $setting));
+    }
+
+    /**
+     * Should this trip's document numbers be deleted today? Returns why ('closed' | 'inactive') or null.
+     *
+     * @param  ?string $closedOn      Y-m-d the trip was closed (completed, cancelled, lost), null if open
+     * @param  ?string $lastActiveOn  Y-m-d of the latest activity on the trip
+     */
+    public static function deletionDue(?string $closedOn, ?string $lastActiveOn, string $today, int $retentionDays): ?string
+    {
+        $plus = fn (string $d, int $days) => ($x = \DateTimeImmutable::createFromFormat('!Y-m-d', $d)) ? $x->modify('+' . $days . ' days')->format('Y-m-d') : null;
+        if ($closedOn !== null && $closedOn !== '') {
+            $due = $plus($closedOn, $retentionDays);
+
+            return $due !== null && $due <= $today ? 'closed' : null;
+        }
+        if ($lastActiveOn !== null && $lastActiveOn !== '') {
+            $due = $plus($lastActiveOn, self::INACTIVE_DAYS);
+
+            return $due !== null && $due <= $today ? 'inactive' : null;
+        }
+
+        return null;
+    }
+
     public static function fullName(string $given, string $surname): string
     {
         return trim(preg_replace('/\s+/', ' ', trim($given) . ' ' . trim($surname)) ?? '');
@@ -175,7 +218,7 @@ final class Travellers
     }
 
     /** The message the customer receives once their document has been read. */
-    public static function customerLine(array $t, string $on, ?string $validity, bool $duplicate): string
+    public static function customerLine(array $t, string $on, ?string $validity, bool $duplicate, int $retentionDays = self::RETENTION_DEFAULT_DAYS): string
     {
         $doc = self::documentLabel((string) ($t['document_type'] ?? ''));
         $age = self::age($t, $on);
@@ -183,6 +226,7 @@ final class Travellers
             ? "I already have this {$doc}: *{$t['name']}*."
             : '✅ ' . ucfirst($doc) . " read: *{$t['name']}*" . ($age !== null ? ", age {$age}" : '') . '.';
         $out .= "\nThe file itself has not been kept. If the name is not spelt exactly as on the {$doc}, please tell me.";
+        $out .= "\n" . self::privacyNote($doc, $retentionDays);
         $exp = self::niceDate((string) ($t['expiry_date'] ?? ''));
         if ($validity === 'expired') {
             $out .= "\nPlease note: this {$doc} shows an expiry date of {$exp}, which has passed. Our team will advise you.";
@@ -191,6 +235,12 @@ final class Travellers
         }
 
         return $out;
+    }
+
+    /** What the customer is told about keeping their document details. */
+    public static function privacyNote(string $doc, int $retentionDays): string
+    {
+        return "The {$doc} details are kept securely for this booking only and the {$doc} number is deleted {$retentionDays} days after the booking is closed.";
     }
 
     /** One line per traveller for staff. The document number appears masked only. */
@@ -203,7 +253,8 @@ final class Travellers
             ! empty($t['date_of_birth']) ? 'born ' . self::niceDate((string) $t['date_of_birth']) : null,
             ($t['sex'] ?? '') !== '' && ($t['sex'] ?? '') !== 'X' ? $t['sex'] : null,
             ($t['nationality'] ?? '') !== '' ? $t['nationality'] : null,
-            self::documentLabel((string) ($t['document_type'] ?? '')) . ' ' . self::mask((string) ($t['last4'] ?? '')),
+            self::documentLabel((string) ($t['document_type'] ?? '')) . ' ' . self::mask((string) ($t['last4'] ?? ''))
+                . (! empty($t['number_deleted']) ? ' (number deleted)' : ''),
             ! empty($t['expiry_date']) ? 'expires ' . self::niceDate((string) $t['expiry_date']) : null,
         ];
         $line = implode(' · ', array_filter($parts, fn ($p) => $p !== null && $p !== ''));
