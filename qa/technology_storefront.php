@@ -85,7 +85,7 @@ ok(technologyEnabled(new FakeTenant(['vertical' => 'technology', 'technology_sit
 echo "\n=== 2. Vertical registry is additive ===\n";
 ok(in_array('technology', Vertical::ALL, true), 'technology is a registered vertical');
 ok(Vertical::isValid('technology'), 'technology passes isValid()');
-ok(count(Vertical::ALL) === 7, 'ALL has 7 verticals', 'got ' . count(Vertical::ALL));
+ok(array_keys(Vertical::LABELS) == Vertical::ALL, 'every vertical has a label (no hard-coded count)', implode(',', array_diff(Vertical::ALL, array_keys(Vertical::LABELS))));
 foreach (['grocery', 'restaurant', 'snacks', 'manufacturer', 'solar', 'auto_parts'] as $v) {
     ok(in_array($v, Vertical::ALL, true), "pre-existing vertical still registered: $v");
 }
