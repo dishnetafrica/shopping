@@ -103,3 +103,6 @@ jobs:
       # menu entry would show for any business type other than a travel agency.
       - name: Trips menu shows only for travel agencies
         run: node tests/render-sim/trips_nav_gate.js
+      # Sales Brain (DishNet plan, Phase 3): the menu entry shows only for Internet providers.
+      - name: Sales Brain menu shows only for Internet providers
+        run: node tests/render-sim/sales_brain_nav_gate.js

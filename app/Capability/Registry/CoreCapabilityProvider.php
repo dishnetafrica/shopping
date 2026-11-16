@@ -46,6 +46,8 @@ use App\Capability\Process\GuideCapability;
 use App\Capability\Process\ScheduledOrdersCapability;
 use App\Capability\Process\LeadListCapability;
 use App\Capability\Process\TravelEnquiryListCapability;
+use App\Capability\Process\SalesBrainListCapability;
+use App\Capability\Object\SalesKnowledgeCapability;
 use App\Capability\Object\TravelEnquiryCapability;
 use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
@@ -130,6 +132,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // Travel Vertical (M1) — travel enquiries. Same permission as Leads; the screen is empty for non-travel tenants.
         $r->register(new TravelEnquiryListCapability(), new CapabilityManifest(key: 'trips', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trips'));
         $r->register(new TravelEnquiryCapability(), new CapabilityManifest(key: 'trip', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trip/{id}'));
+        // Sales Brain (Internet providers): governed sales knowledge — list + one entry.
+        $r->register(new SalesBrainListCapability(), new CapabilityManifest(key: 'salesBrain', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesBrain'));
+        $r->register(new SalesKnowledgeCapability(), new CapabilityManifest(key: 'salesKnowledge', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesKnowledge/{id}'));
         // Migration plan G1 — the WhatsApp inbox in v3 (list + single-conversation object).
         $r->register(new ChatListCapability(), new CapabilityManifest(key: 'chats', type: 'process', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chats'));
         $r->register(new ChatCapability(), new CapabilityManifest(key: 'chat', type: 'object', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chat/{id}'));

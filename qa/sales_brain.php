@@ -67,6 +67,17 @@ $tie = [['name' => 'X1', 'service_line' => 'fiber', 'status' => 'covered', 'keyw
 chk('two areas claim the same name → the cautious answer', C::check($tie, 'fiber', 'same place')['status'], 'survey');
 chk('nothing published at all → survey', C::check([], 'fiber', 'Test Town')['status'], 'survey');
 
+echo "== the screen's text-box forms\n";
+$items = K::parseTermsLines("1. Payment: Due on the 1st\n- Contract: 6 months\nNo label line\n\n");
+chk('terms lines: numbering and bullets stripped, label split at the colon', $items, [['label' => 'Payment', 'text' => 'Due on the 1st'], ['label' => 'Contract', 'text' => '6 months'], ['label' => '', 'text' => 'No label line']]);
+chk('terms round-trip', K::parseTermsLines(K::termsLines(['items' => $items])), $items);
+$tpl = T::all()['starlink'];
+chk('the template terms round-trip through the text box unchanged', K::parseTermsLines(K::termsLines($tpl)), $tpl['items']);
+$c = K::validate('coverage', null, ['areas' => K::parseCoverageLines("Test Town | Fiber | Covered | test town, test market | Main road only\nTest Circle | starlink | survey | | | 4.85,31.6,5000")]);
+chk('coverage lines parse and validate', [$c['ok'], $c['data']['areas'][0]['keywords'], $c['data']['areas'][1]['radius_m']], [true, ['test town', 'test market'], 5000]);
+chk('coverage round-trip', K::validate('coverage', null, ['areas' => K::parseCoverageLines(K::coverageLines($c['data']))])['data'], $c['data']);
+chk('a typo in the status is refused, not guessed', K::validate('coverage', null, ['areas' => K::parseCoverageLines('Test Town | fiber | coverd | test town')])['error'], 'coverage_area_invalid');
+
 echo "== the template terms (imported as drafts only)\n";
 $all = T::all();
 chk('Starlink 14, Fiber 13, general 12 terms, as in the template', [count($all['starlink']['items']), count($all['fiber']['items']), count($all['general']['items'])], [14, 13, 12]);

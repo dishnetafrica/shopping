@@ -152,6 +152,87 @@ final class Knowledge
         return implode("\n", $out);
     }
 
+    // ── the text-box forms used on the screen (one item per line) ─────────
+
+    /** "Label: text" per line → terms items. A line without a colon is a term with no label. */
+    public static function parseTermsLines(string $text): array
+    {
+        $items = [];
+        foreach (preg_split('/\R/', $text) ?: [] as $line) {
+            $line = trim(preg_replace('/^\s*(\d+[.)]|[-*•])\s*/u', '', $line) ?? '');
+            if ($line === '') {
+                continue;
+            }
+            $p = mb_strpos($line, ':');
+            $items[] = ($p !== false && $p > 0 && $p <= 40)
+                ? ['label' => trim(mb_substr($line, 0, $p)), 'text' => trim(mb_substr($line, $p + 1))]
+                : ['label' => '', 'text' => $line];
+        }
+
+        return $items;
+    }
+
+    public static function termsLines(array $data): string
+    {
+        return implode("\n", array_map(fn ($it) => ($it['label'] !== '' ? $it['label'] . ': ' : '') . $it['text'], (array) ($data['items'] ?? [])));
+    }
+
+    /**
+     * Coverage, one area per line:  Name | starlink or fiber | covered, survey or none | place names, comma separated | note | lat,lng,radius_m
+     * The last two parts are optional.
+     */
+    public static function parseCoverageLines(string $text): array
+    {
+        $areas = [];
+        foreach (preg_split('/\R/', $text) ?: [] as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+            $p = array_map('trim', explode('|', $line));
+            $circle = array_map('trim', explode(',', $p[5] ?? ''));
+            $areas[] = [
+                'name' => $p[0] ?? '', 'service_line' => mb_strtolower($p[1] ?? ''), 'status' => mb_strtolower($p[2] ?? ''),
+                'keywords' => array_values(array_filter(array_map('trim', explode(',', $p[3] ?? '')), fn ($k) => $k !== '')),
+                'note' => $p[4] ?? '',
+                'lat' => count($circle) === 3 ? $circle[0] : null, 'lng' => count($circle) === 3 ? $circle[1] : null, 'radius_m' => count($circle) === 3 ? $circle[2] : null,
+            ];
+        }
+
+        return $areas;
+    }
+
+    public static function coverageLines(array $data): string
+    {
+        return implode("\n", array_map(function ($a) {
+            $parts = [$a['name'], $a['service_line'], $a['status'], implode(', ', (array) $a['keywords']), (string) ($a['note'] ?? '')];
+            if (($a['lat'] ?? null) !== null && ($a['lng'] ?? null) !== null && ($a['radius_m'] ?? null) !== null) {
+                $parts[] = $a['lat'] . ',' . $a['lng'] . ',' . $a['radius_m'];
+            }
+
+            return rtrim(implode(' | ', $parts), ' |');
+        }, (array) ($data['areas'] ?? [])));
+    }
+
+    /** Screen text → [body, data] for a topic (terms and coverage are typed as lines; others are prose). */
+    public static function fromText(string $topic, string $text, string $title = ''): array
+    {
+        return match ($topic) {
+            'terms'    => [null, ['title' => $title, 'items' => self::parseTermsLines($text)]],
+            'coverage' => [null, ['areas' => self::parseCoverageLines($text)]],
+            default    => [$text, null],
+        };
+    }
+
+    /** Version → the text shown in the screen's text box. */
+    public static function toText(string $topic, ?string $body, ?array $data): string
+    {
+        return match ($topic) {
+            'terms'    => self::termsLines((array) $data),
+            'coverage' => self::coverageLines((array) $data),
+            default    => (string) $body,
+        };
+    }
+
     /**
      * Which published terms print on an Internet-provider quotation, following the UISP template's
      * switch: Starlink only → the "starlink" terms; Fiber only → the "fiber" terms; anything else
