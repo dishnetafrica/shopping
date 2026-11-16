@@ -88,16 +88,16 @@ class SalesBrainWorkspaceTest extends TestCase
         $base = '/api/v1/workspace/salesKnowledge/' . $this->entryId($t, 'terms', 'starlink');
 
         $j = $this->getJson($base)->assertOk()->json();
-        $this->assertSame('4', collect($j['stats'])->firstWhere('key', 'questions')['value']);
+        $this->assertSame('5', collect($j['stats'])->firstWhere('key', 'questions')['value']);
         $this->assertSame(['answer_question', 'edit_draft', 'reject'], collect($j['actions'])->pluck('key')->all(), 'no approve while questions are open');
         $this->postJson($base . '/approve')->assertOk()->assertJson(['ok' => false, 'error' => 'open_questions']);
 
-        for ($i = 4; $i >= 1; $i--) {
+        for ($i = 5; $i >= 1; $i--) {
             $this->postJson($base . '/answer_question', ['question' => '1 — x', 'answer' => 'Test answer ' . $i])->assertOk()->assertJson(['ok' => true]);
         }
         $this->postJson($base . '/approve')->assertOk()->assertJson(['ok' => true]);
         $v = SalesKnowledgeVersion::withoutGlobalScopes()->where('tenant_id', $t->id)->where('status', 'approved')->sole();
-        $this->assertCount(4, $v->resolved_questions);
+        $this->assertCount(5, $v->resolved_questions);
     }
 
     public function test_a_salesperson_sees_published_knowledge_only_and_cannot_change_it(): void

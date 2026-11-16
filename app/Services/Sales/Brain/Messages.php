@@ -19,6 +19,7 @@ final class Messages
             'coverage_area_needs_place' => 'Area "' . ($r['area'] ?? '') . '": give at least one place name (3+ letters) to recognise it by.',
             'version_in_progress'       => 'This entry already has a version waiting. Finish or reject it first.',
             'open_questions'            => 'Answer every open question before approving.',
+            'unanswered'                => 'Some questions still say [TO ANSWER]. Write those answers (or delete the questions) first.',
             'reason_required'           => 'Please give a reason.',
             'answer_required'           => 'Please write the answer.',
             'not_a_draft'               => 'Only a draft can be changed.',

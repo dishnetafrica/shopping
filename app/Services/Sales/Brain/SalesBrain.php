@@ -132,6 +132,9 @@ class SalesBrain
             if ($ver->status === 'draft' && ! empty($ver->open_questions)) {
                 return ['ok' => false, 'error' => 'open_questions', 'message' => 'Settle every open question before approving.', 'open' => count($ver->open_questions)];
             }
+            if ($ver->status === 'draft' && Knowledge::hasPlaceholder($ver->body, $ver->data)) {
+                return ['ok' => false, 'error' => 'unanswered', 'message' => 'Some questions still say [TO ANSWER]. Write those answers (or delete the questions) first.'];
+            }
             if (! ($to = Knowledge::next($ver->status, 'approve'))) {
                 return ['ok' => false, 'error' => 'not_allowed', 'message' => "A {$ver->status} version cannot be approved."];
             }

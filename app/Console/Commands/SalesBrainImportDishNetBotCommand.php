@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\SalesKnowledgeEntry;
 use App\Models\Tenant;
 use App\Services\Catalog\ProductWriteService;
+use App\Services\Sales\Brain\CustomerQuestions;
 use App\Services\Sales\Brain\DishNetBotImport;
 use App\Services\Sales\Brain\Knowledge;
 use App\Services\Sales\Brain\SalesBrain;
@@ -72,6 +73,18 @@ class SalesBrainImportDishNetBotCommand extends Command
             $this->line($r['ok']
                 ? "  {$topic}/{$key}: draft v{$r['version']}" . ($questions ? ' with ' . count($questions) . ' question(s) for management' : '')
                 : "  {$topic}/{$key}: not imported ({$r['error']})");
+        }
+        // Questions customers are likely to ask that the supplied material does not (fully) answer: one draft
+        // with [TO ANSWER] after each — it cannot be approved until management has written the answers.
+        if (SalesKnowledgeEntry::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('topic', 'faq')->where('key', 'customer-questions')->exists()) {
+            $this->line('  faq/customer-questions: already there — left as it is');
+        } else {
+            $c = CustomerQuestions::counts();
+            $r = $brain->startVersion($tenant, null, 'faq', 'customer-questions', 'Questions customers ask — answers needed', CustomerQuestions::draftBody(), null,
+                CustomerQuestions::SOURCE, [], 'Customer questions not (fully) answered by the supplied material', 'console: sales-brain:import-dishnet-bot');
+            $this->line($r['ok']
+                ? '  faq/customer-questions: draft v' . $r['version'] . ' — ' . (($c['partly'] ?? 0) + ($c['missing'] ?? 0)) . ' questions need answers (' . ($c['covered'] ?? 0) . ' others are already covered)'
+                : "  faq/customer-questions: not imported ({$r['error']})");
         }
         $this->info('Done. Review in Customers → Sales Brain and Products. Hardware needs its real stock entered before the bot can quote it.');
 

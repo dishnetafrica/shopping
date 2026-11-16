@@ -15,6 +15,7 @@ final class TemplateTerms
     private const Q_EXCISE = 'Confirm the "Includes 26% Excise Duty" statement: is 26% the current South Sudan excise rate, and are all quoted prices really inclusive of it?';
     private const Q_UPTIME = 'Confirm the "99.5% guarantee" of uptime: can DishNet guarantee this (Starlink itself gives no uptime guarantee), and what does the customer get if it is missed?';
     private const Q_SUPPORT = 'Confirm the 24/7 support number +211 921 443 002 written into this term.';
+    private const Q_RESELL = 'Fair use says "No illegal content or reselling", but DishNet runs a hotspot and reseller programme where customers sell Wi-Fi vouchers. Which customers may share or resell the connection, and how should the term read?';
     private const Q_LEASE = 'Term 4 says all devices are DishNet property (leased), but term 5 describes transferring the kit, which implies the customer owns it. Which is it — leased, sold, or different per package?';
 
     /** key => [title, items, open questions] */
@@ -39,7 +40,7 @@ final class TemplateTerms
                     ['label' => 'Customer Duty', 'text' => 'Accurate info, safe environment, protect equipment, report faults within 24hrs.'],
                     ['label' => 'Governing Law', 'text' => 'Republic of South Sudan law and jurisdiction.'],
                 ],
-                'questions' => [self::Q_LEASE, self::Q_UPTIME, self::Q_EXCISE, self::Q_SUPPORT],
+                'questions' => [self::Q_LEASE, self::Q_UPTIME, self::Q_EXCISE, self::Q_SUPPORT, self::Q_RESELL],
             ],
             'fiber' => [
                 'title' => 'FTTH service — terms and conditions',
@@ -58,7 +59,7 @@ final class TemplateTerms
                     ['label' => 'Customer Duty', 'text' => 'Accurate info, safe environment, protect equipment, report faults within 24hrs.'],
                     ['label' => 'Governing Law', 'text' => 'Republic of South Sudan law and jurisdiction.'],
                 ],
-                'questions' => [self::Q_UPTIME, self::Q_EXCISE, self::Q_SUPPORT],
+                'questions' => [self::Q_UPTIME, self::Q_EXCISE, self::Q_SUPPORT, self::Q_RESELL],
             ],
             'general' => [
                 'title' => 'Terms and conditions',
@@ -76,7 +77,7 @@ final class TemplateTerms
                     ['label' => 'Customer Duty', 'text' => 'Accurate info, safe environment, protect equipment, report faults within 24hrs.'],
                     ['label' => 'Governing Law', 'text' => 'Republic of South Sudan law and jurisdiction.'],
                 ],
-                'questions' => [self::Q_UPTIME, self::Q_EXCISE, self::Q_SUPPORT],
+                'questions' => [self::Q_UPTIME, self::Q_EXCISE, self::Q_SUPPORT, self::Q_RESELL],
             ],
         ];
     }

@@ -40,6 +40,14 @@ final class Knowledge
 
     public const STATUSES = ['draft', 'approved', 'published', 'retired', 'rejected'];
 
+    /** A gap left for management: "[TO ANSWER]" or "[TO ANSWER — note]". A version containing it cannot be approved. */
+    public const PLACEHOLDER = '[TO ANSWER';
+
+    public static function hasPlaceholder(?string $body, $data): bool
+    {
+        return str_contains((string) $body, self::PLACEHOLDER) || ($data !== null && str_contains((string) json_encode($data, JSON_UNESCAPED_UNICODE), self::PLACEHOLDER));
+    }
+
     /** Coverage answers. Anything not explicitly listed as covered is "survey needed", never "covered". */
     public const COVERAGE = ['covered', 'survey', 'none'];
 

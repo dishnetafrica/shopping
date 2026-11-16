@@ -8,8 +8,11 @@ require __DIR__ . '/../app/Services/Travel/Conversation/ReplyGuard.php';
 require __DIR__ . '/../app/Services/Sales/Brain/Knowledge.php';
 require __DIR__ . '/../app/Services/Sales/Brain/CoverageCheck.php';
 require __DIR__ . '/../app/Services/Sales/Brain/DishNetBotImport.php';
+require __DIR__ . '/../app/Services/Sales/Training/Assessment.php';
+require __DIR__ . '/../app/Services/Sales/Brain/CustomerQuestions.php';
 
 use App\Services\Sales\Brain\CoverageCheck as C;
+use App\Services\Sales\Brain\CustomerQuestions as CQ;
 use App\Services\Sales\Brain\DishNetBotImport as D;
 use App\Services\Sales\Brain\Knowledge as K;
 use App\Services\Travel\Conversation\ReplyGuard;
@@ -60,6 +63,19 @@ echo "== privacy\n";
 $staff = ['211927797217', '256778938825', '211926134489', '211929563036', '211923731040', '211921443004', '927797217', '778938825', '926134489', '929563036', '923731040'];
 chk('no staff personal number or internal bot line is imported', array_values(array_filter($staff, fn ($n) => str_contains(preg_replace('/\D/', '', $all), $n))), []);
 chk('only the three public department numbers appear', array_values(array_unique(preg_match_all('/\+211 9\d\d \d{3} \d{3}/', $all, $m) ? $m[0] : [])), ['+211 923 400 000', '+211 921 443 002', '+211 921 443 009']);
+
+echo "== customer questions (answers left to management)\n";
+$all = CQ::all();
+$open = array_filter($all, fn ($q) => $q[2] !== 'covered');
+$body = CQ::draftBody();
+chk('44 questions: 13 covered, 16 partly, 15 missing', CQ::counts(), ['covered' => 13, 'partly' => 16, 'missing' => 15]);
+chk('every status is covered/partly/missing', array_values(array_unique(array_map(fn ($q) => in_array($q[2], ['covered', 'partly', 'missing'], true), $all))), [true]);
+chk('every partly/missing question is in the draft, none of the covered ones', [count(array_filter($open, fn ($q) => str_contains($body, 'Q: ' . $q[1]))), count(array_filter($all, fn ($q) => $q[2] === 'covered' && str_contains($body, 'Q: ' . $q[1])))], [count($open), 0]);
+chk('no answer is written for management: every A: is a placeholder', preg_match_all('/^A: (?!\[TO ANSWER)/m', $body), 0);
+chk('the instructions are inside a placeholder, so they cannot be approved and reach the bot', str_starts_with($body, '[TO ANSWER'), true);
+chk('the draft blocks approval', K::hasPlaceholder($body, null), true);
+chk('…and is valid text for the FAQ topic', K::validate('faq', $body, null)['ok'], true);
+chk('a filled-in draft no longer blocks', K::hasPlaceholder(preg_replace('/\[TO ANSWER[^\]]*\]/', 'x', $body), null), false);
 
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");
 exit($fail === 0 ? 0 : 1);

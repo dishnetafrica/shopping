@@ -47,10 +47,19 @@ class DishNetImportTest extends TestCase
         $this->assertSame(['monthly', 'fiber', 75.0], [$plan->billing, $plan->service_line, (float) $plan->price]);
 
         $versions = SalesKnowledgeVersion::withoutGlobalScopes()->where('tenant_id', $t->id)->get();
-        $this->assertCount(12, $versions);
+        $this->assertCount(13, $versions, '12 knowledge drafts + the customer-questions draft');
         $this->assertSame(['draft'], $versions->pluck('status')->unique()->values()->all());
         $this->assertSame([], app(SalesBrain::class)->published($t), 'nothing reaches the bot');
         $this->assertSame('survey', app(SalesBrain::class)->coverage($t, 'fiber', 'Gudele Two')['status'], 'draft coverage does not count');
+
+        // The customer-questions draft cannot be approved while any answer is still "[TO ANSWER]".
+        $mgr = \App\Models\User::create(['tenant_id' => $t->id, 'name' => 'Manager', 'role' => 'manager', 'email' => 'mq@t.test', 'password' => 'secret']);
+        $cq = $versions->first(fn ($v) => str_contains((string) $v->body, '[TO ANSWER'));
+        $this->assertNotNull($cq);
+        $this->assertSame('unanswered', app(SalesBrain::class)->approve($t, $mgr, $cq->id)['error']);
+        $answered = preg_replace('/\[TO ANSWER[^\]]*\]/', 'Test answer.', (string) $cq->body);
+        $this->assertTrue(app(SalesBrain::class)->editDraft($t, $mgr, $cq->id, $answered)['ok']);
+        $this->assertTrue(app(SalesBrain::class)->approve($t, $mgr, $cq->id)['ok'], 'once every answer is written it can be approved');
     }
 
     public function test_a_switched_off_product_is_never_quoted_and_a_monthly_plan_is_not_refused_for_stock(): void
