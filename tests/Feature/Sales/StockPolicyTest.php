@@ -37,6 +37,23 @@ class StockPolicyTest extends TestCase
         $this->assertEmpty($line['out_of_stock'] ?? false);
     }
 
+    public function test_the_main_catalogue_never_says_out_of_stock_when_stock_is_not_tracked(): void
+    {
+        $t = \App\Models\Tenant::factory()->create(['settings' => ['vertical' => 'isp', 'currency' => 'USD', 'track_stock' => false]]);
+        app(TenantContext::class)->set($t->id);
+        $p = app(ProductWriteService::class)->create($t, ['name' => 'Test Kit Counted Zero', 'price' => 400, 'stock' => 0]);
+        app(\App\Services\Inventory\InventoryState::class)->recordCount($p, 0);      // a fresh exact count of zero
+
+        $m = new \ReflectionMethod(\App\Services\Bot\AiBrain::class, 'systemPrompt');
+        $m->setAccessible(true);
+        $prompt = (string) $m->invoke(app(\App\Services\Bot\AiBrain::class), $t);
+        $line = collect(explode("\n", $prompt))->first(fn ($l) => str_contains($l, 'Test Kit Counted Zero'));
+
+        $this->assertNotNull($line);
+        $this->assertStringContainsString('stock not tracked', $line);
+        $this->assertStringNotContainsString('OUT OF STOCK', $line);
+    }
+
     public function test_every_other_business_keeps_refusing_a_zero_stock_item_on_the_bot_quote(): void
     {
         $line = $this->quoteZeroStockItem(['vertical' => 'grocery']);
