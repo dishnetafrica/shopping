@@ -11,7 +11,7 @@ class Lead extends Model
     protected $fillable = [
         'tenant_id', 'customer_phone', 'customer_name', 'company', 'intent', 'interest', 'dedupe_key', 'lead_score',
         'message', 'notes', 'source', 'tag', 'marketing_opt_in', 'conversation_id', 'status', 'assigned_to', 'claimed_at',
-        'next_followup_at', 'last_contacted_at',
+        'next_followup_at', 'last_contacted_at', 'owner_user_id',
     ];
 
     protected $casts = [

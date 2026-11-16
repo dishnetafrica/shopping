@@ -63,6 +63,10 @@ jobs:
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends tesseract-ocr poppler-utils
       - name: Travel vertical tests (must pass)
         run: php artisan test tests/Unit/Travel tests/Feature/Travel
+      # Sales team (DishNet South Sudan plan). Required like the travel step: one salesperson per
+      # customer on an Internet-provider business, reply attribution, and other businesses unchanged.
+      - name: Sales team tests (must pass)
+        run: php artisan test tests/Unit/Sales tests/Feature/Sales
       - name: Full suite (informational only — shows what still needs work)
         continue-on-error: true
         run: |

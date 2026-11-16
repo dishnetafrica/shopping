@@ -596,13 +596,13 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
 
         // live chats inbox (Phase 4b)
         Route::get('chats',              [PanelApiController::class, 'chats']);
-        Route::get('chats/thread',       [PanelApiController::class, 'chatThread']);
-        Route::post('chats/send',        [PanelApiController::class, 'chatSend']);
+        Route::get('chats/thread',       [PanelApiController::class, 'chatThread'])->middleware(\App\Http\Middleware\SalesOwnershipGuard::class . ':read');   // Sales team: own customers only (ISP)
+        Route::post('chats/send',        [PanelApiController::class, 'chatSend'])->middleware(\App\Http\Middleware\SalesOwnershipGuard::class . ':reply');
         Route::get('chats/media',        [PanelApiController::class, 'chatMedia']);
-        Route::post('chats/send-media',  [PanelApiController::class, 'chatSendMedia']);
-        Route::post('chats/send-document', [PanelApiController::class, 'chatSendDocument']);
-        Route::post('chats/send-location', [PanelApiController::class, 'chatSendLocation']);
-        Route::post('chats/send-catalogue', [PanelApiController::class, 'chatSendCatalogue']);
+        Route::post('chats/send-media',  [PanelApiController::class, 'chatSendMedia'])->middleware(\App\Http\Middleware\SalesOwnershipGuard::class . ':reply');
+        Route::post('chats/send-document', [PanelApiController::class, 'chatSendDocument'])->middleware(\App\Http\Middleware\SalesOwnershipGuard::class . ':reply');
+        Route::post('chats/send-location', [PanelApiController::class, 'chatSendLocation'])->middleware(\App\Http\Middleware\SalesOwnershipGuard::class . ':reply');
+        Route::post('chats/send-catalogue', [PanelApiController::class, 'chatSendCatalogue'])->middleware(\App\Http\Middleware\SalesOwnershipGuard::class . ':reply');
         Route::post('chats/translate',      [PanelApiController::class, 'chatTranslate']);
         Route::post('chats/translate-out',  [PanelApiController::class, 'chatTranslateOut']);
         Route::post('followups/{id}/approve', [PanelApiController::class, 'followupApprove']);
@@ -612,7 +612,7 @@ Route::middleware(['web', 'auth', SetTenantFromUser::class, \App\Http\Middleware
         Route::post('push/subscribe',    [\App\Http\Controllers\Panel\PushController::class, 'subscribe']);
         Route::post('push/unsubscribe',  [\App\Http\Controllers\Panel\PushController::class, 'unsubscribe']);
         Route::post('push/test',         [\App\Http\Controllers\Panel\PushController::class, 'test']);
-        Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover']);
+        Route::post('chats/takeover',    [PanelApiController::class, 'chatTakeover'])->middleware(\App\Http\Middleware\SalesOwnershipGuard::class . ':reply');
         Route::post('chats/mute',        [PanelApiController::class, 'chatMute']);
         Route::post('chats/bot-mode',    [PanelApiController::class, 'chatBotMode']);
         Route::post('chats/sync',        [PanelApiController::class, 'chatSync']);

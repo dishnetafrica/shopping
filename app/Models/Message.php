@@ -12,7 +12,7 @@ class Message extends Model
 
     protected $fillable = [
         'tenant_id', 'customer_phone', 'instance',
-        'direction', 'sender', 'body', 'wa_message_id', 'status', 'meta',
+        'direction', 'sender', 'body', 'wa_message_id', 'status', 'meta', 'sender_user_id',
     ];
 
     protected $casts = ['meta' => 'array'];

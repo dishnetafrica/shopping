@@ -98,6 +98,8 @@ class QuotationService
                 'quote_no'       => (string) ($doc['no'] ?? ''),
                 'customer_name'  => $name !== '' ? $name : null,
                 'customer_phone' => preg_replace('/[^0-9]/', '', $phone),
+                // Prepared by: the staff member creating it, or the customer's salesperson for a bot draft.
+                'sales_exec_id'  => app(\App\Services\Sales\SalesOwnership::class)->preparedBy($tenant, $phone),
                 'currency'       => (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX')),
                 'total'          => (float) ($doc['total'] ?? $quote['total'] ?? 0),
                 'status'         => 'sent',

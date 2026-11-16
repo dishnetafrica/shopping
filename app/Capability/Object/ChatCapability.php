@@ -40,6 +40,11 @@ final class ChatCapability implements ObjectCapability
     {
         $t = $ctx->tenantId();
         $c = Conversation::where('tenant_id', $t)->find((int) $id);
+        // Sales team (Internet-provider businesses): another salesperson's customer is not opened.
+        if ($c && \App\Services\Sales\SalesOwnership::enabled($ctx->tenant) && ! \App\Services\Sales\SalesOwnership::canManage($ctx->user)
+            && $c->owner_user_id && (int) $c->owner_user_id !== (int) $ctx->user->id) {
+            $c = null;
+        }
         if (! $c) {
             return (new WorkspacePayload)
                 ->object(['type' => 'chat', 'title' => 'Conversation not found'])

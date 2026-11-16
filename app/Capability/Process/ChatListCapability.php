@@ -33,7 +33,8 @@ final class ChatListCapability implements ProcessCapability
         $t = $ctx->tenantId();
         $canChat = $ctx->can('menu:whatsapp');
 
-        $convos = Conversation::where('tenant_id', $t)
+        // Sales team (Internet-provider businesses): a salesperson sees their own chats and unassigned ones.
+        $convos = \App\Services\Sales\SalesOwnership::scopeVisible(Conversation::where('tenant_id', $t), $ctx)
             ->orderByDesc('last_message_at')
             ->limit(self::MAX_ROWS)
             ->get();

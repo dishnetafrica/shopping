@@ -45,7 +45,7 @@ final class LeadListCapability implements ProcessCapability
         }
         $comboAssignee = 'combo:' . (count($recipNames) ? implode('|', $recipNames) : '');
 
-        $base = fn () => Lead::where('tenant_id', $t)->where('intent', 'lead');
+        $base = fn () => \App\Services\Sales\SalesOwnership::scopeVisible(Lead::where('tenant_id', $t)->where('intent', 'lead'), $ctx);   // Sales team: mine + unassigned
 
         $rows = [];
         $leads = $base()->latest('id')->limit(self::MAX_ROWS)->get();
@@ -181,7 +181,7 @@ final class LeadListCapability implements ProcessCapability
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
         $t = $ctx->tenantId();
-        $base = fn () => Lead::where('tenant_id', $t)->where('intent', 'lead');
+        $base = fn () => \App\Services\Sales\SalesOwnership::scopeVisible(Lead::where('tenant_id', $t)->where('intent', 'lead'), $ctx);   // Sales team: mine + unassigned
 
         return [
             'total' => (clone $base())->count(),
