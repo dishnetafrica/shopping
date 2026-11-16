@@ -102,9 +102,34 @@ final class DishNetDecisions
         [['dn_products'], 'Decided: Sales quotes hEX, L009 and the Ruijie range until prices are supplied.'],
     ];
 
-    /** The recorded answer for an open question, or null if no decision — or more than one — matches. */
+    /** Every open question exactly as imported (TemplateTerms + DishNetBotImport). */
+    public static function knownQuestions(): array
+    {
+        $out = [];
+        foreach (TemplateTerms::all() as $t) {
+            foreach ($t['questions'] as $q) {
+                $out[] = $q;
+            }
+        }
+        foreach (DishNetBotImport::knowledge() as $k) {
+            foreach ($k[4] as $q) {
+                $out[] = $q;
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /**
+     * The recorded answer for an open question, or null. Only a question that is EXACTLY one of the
+     * imported questions is answered (a reworded or new question is left for management), and then only
+     * if exactly one decision matches it.
+     */
     public static function answerFor(string $question): ?string
     {
+        if (! in_array(trim($question), self::knownQuestions(), true)) {
+            return null;
+        }
         $q = mb_strtolower($question);
         $hits = array_values(array_filter(self::ANSWERS, fn ($a) => ! array_filter($a[0], fn ($w) => ! str_contains($q, mb_strtolower($w)))));
 
@@ -115,10 +140,15 @@ final class DishNetDecisions
     public static function applyTerms(string $key, array $data): array
     {
         $changes = self::termsChanges($key);
-        $labels = array_column((array) ($data['items'] ?? []), 'label');
+        // Anchor: a term is only replaced while it still reads exactly as imported from the template.
+        $original = array_column(TemplateTerms::all()[$key]['items'] ?? [], 'text', 'label');
+        $current = array_column((array) ($data['items'] ?? []), 'text', 'label');
         foreach (array_keys($changes) as $label) {
-            if (! in_array($label, $labels, true)) {
+            if (! array_key_exists($label, $current)) {
                 return ['ok' => false, 'error' => "term \"{$label}\" not found"];
+            }
+            if (! isset($original[$label]) || $current[$label] !== $original[$label]) {
+                return ['ok' => false, 'error' => "term \"{$label}\" was changed after import"];
             }
         }
         $items = [];

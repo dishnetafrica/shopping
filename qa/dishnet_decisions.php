@@ -29,6 +29,12 @@ $unanswered = [];
 foreach ($questions as $e => $qs) { foreach ($qs as $q) { if (X::answerFor($q) === null) { $unanswered[] = $e; } } }
 chk('all 29 questions answered, none ambiguous', [array_sum(array_map('count', $questions)), $unanswered], [29, []]);
 chk('an unknown question gets no answer (that draft would stay a draft)', X::answerFor('Is the sky blue?'), null);
+chk('a NEW question that merely mentions "leased" is not answered', X::answerFor('Should the router be leased or sold to hotels?'), null);
+chk('a reworded imported question is not answered', X::answerFor(str_replace('Which is it', 'Which one is it', $questions['terms/starlink'][0])), null);
+$tpl = T::all()['starlink'];
+$edited = $tpl['items'];
+foreach ($edited as $i => $it) { if ($it['label'] === 'Uptime') { $edited[$i]['text'] = 'Changed by hand after import.'; } }
+chk('a term changed by hand after import is NOT overwritten (the draft stays for review)', X::applyTerms('starlink', ['title' => $tpl['title'], 'items' => $edited]), ['ok' => false, 'error' => 'term "Uptime" was changed after import']);
 chk('every answer records when and by whom', str_ends_with((string) X::answerFor($questions['terms/starlink'][0]), '(16 Nov 2026, by the owner)'), true);
 chk('customer questions are NOT part of the go-live', in_array('faq/customer-questions', X::ENTRIES, true), false);
 
