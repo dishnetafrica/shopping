@@ -221,7 +221,9 @@ class OrderCalculator
 
     private function catalogue(Tenant $tenant): array
     {
-        return Cache::remember("ai_calc_catalogue:{$tenant->id}", 60, function () use ($tenant) {
+        $tracked = \App\Support\StockPolicy::tracked($tenant);
+
+        return Cache::remember("ai_calc_catalogue:{$tenant->id}", 60, function () use ($tenant, $tracked) {
             return Product::withoutGlobalScopes()->with('weightVariants')
                 ->where('tenant_id', $tenant->id)->where('active', true)
                 ->get()
@@ -240,7 +242,8 @@ class OrderCalculator
                     // we don't actually have.
                     // A monthly subscription (Internet-provider plans) is a service, not a shelf item: no stock
                     // figure, so it is never refused as "out of stock". Only products marked billing=monthly.
-                    'stock' => ($p->billing ?? null) === 'monthly' ? null : (float) ($p->stock ?? 0),
+                    // A business that does not track stock (StockPolicy) never has an item refused for stock.
+                    'stock' => (! $tracked || ($p->billing ?? null) === 'monthly') ? null : (float) ($p->stock ?? 0),
                     'image' => (string) ($p->image_url ?? ''),
                     'sold_by_weight' => (bool) ($p->sold_by_weight ?? false),
                     'reference_price' => $p->reference_price !== null ? (float) $p->reference_price : null,

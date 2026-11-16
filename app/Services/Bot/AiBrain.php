@@ -2361,7 +2361,7 @@ class AiBrain
             foreach ($scored as $s) {
                 $p = $s['p']; $price = (float) ($p->price ?? $p->base_price ?? 0);
                 $tag = $price > 0 ? ($cur . ' ' . number_format($price, $dec)) : 'ask for price';
-                $stk = ($p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
+                $stk = (\App\Support\StockPolicy::tracked($tenant) && $p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
                 $lines[] = '• ' . $p->name . ' — ' . $tag . $stk;
             }
             return "PRODUCTS MATCHING THIS REQUEST (searched across the WHOLE catalogue for this message — "
