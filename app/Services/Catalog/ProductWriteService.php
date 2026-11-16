@@ -194,6 +194,16 @@ final class ProductWriteService
         return $p;
     }
 
+    /** Switch a product on (sellable, quotable, shown) — the counterpart of archive(). Clears an archive stamp. */
+    public function activate(Tenant $t, Product $p): void
+    {
+        $p->active = true;
+        if (in_array('archived_at', $p->getFillable(), true) || $p->isFillable('archived_at')) {
+            $p->archived_at = null;
+        }
+        $p->save();
+    }
+
     /** Non-destructive removal: deactivate + timestamp, preserving order history. */
     public function archive(Tenant $t, Product $p): void
     {

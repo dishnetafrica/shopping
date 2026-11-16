@@ -63,4 +63,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('sales_insights.php');
     }
+
+    public function test_dishnet_management_decisions_apply_exactly(): void
+    {
+        $this->harness('dishnet_decisions.php');
+    }
 }

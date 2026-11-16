@@ -66,6 +66,10 @@ final class ProductCapability implements ObjectCapability
             'prefill' => ['name' => (string) $p->name, 'category' => (string) $p->category, 'price' => round($price, 2), 'piece_price' => $p->piece_price !== null && (float) $p->piece_price > 0 ? round((float) $p->piece_price, 2) : '', 'cost' => $p->cost_price === null ? '' : round($cost, 2), 'stock' => (int) $stock, 'moq' => $p->moq !== null ? (int) $p->moq : '', 'pack_size' => $p->pack_size !== null ? (int) $p->pack_size : '', 'reorder_point' => $p->reorder_point !== null ? (int) $p->reorder_point : '', 'unit_label' => (string) ($p->unit_label ?? ''), 'hidden' => ($p->hidden ?? false) ? 'yes' : 'no', 'photos' => $photos,
                 'billing' => (string) ($p->billing ?? ''), 'service_line' => (string) ($p->service_line ?? ''), 'min_term_months' => $p->min_term_months ?? '']];
         $archive = ['key' => 'archive_product', 'label' => 'Archive', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/archive_product', 'actor' => 'human', 'tone' => 'danger', 'confirm' => 'Archive "' . $p->name . '"? It will be hidden from the catalogue but kept for order history.'];
+        // A switched-off product (e.g. imported for review) is switched on here; an active one is archived.
+        if (! $p->active) {
+            $archive = ['key' => 'activate_product', 'label' => 'Switch on', 'method' => 'POST', 'endpoint' => '/api/v1/workspace/product/' . $p->id . '/activate_product', 'actor' => 'human', 'tone' => 'primary', 'confirm' => 'Switch on "' . $p->name . '"? It can then be sold, quoted and shown to customers at its price.'];
+        }
 
         // Record a physical count from the product page — the fastest way to give a fast-mover the
         // trusted opening the Juba Stock reorder alert needs. Writes exactly where the stock:count CLI
@@ -287,6 +291,7 @@ final class ProductCapability implements ObjectCapability
         return match ($action) {
             'update_product' => $this->doUpdate($ctx, $p, $input),
             'archive_product' => $this->doArchive($ctx, $p),
+            'activate_product' => $this->doActivate($ctx, $p),
             'record_count' => $this->doRecordCount($ctx, $p, $input),
             'set_specs' => $this->doSetSpecs($ctx, $p, $input),
             'add_serials' => $this->doAddSerials($ctx, $p, $input),
@@ -378,6 +383,13 @@ final class ProductCapability implements ObjectCapability
         app(ProductWriteService::class)->archive($ctx->tenant, $p);
 
         return ['ok' => true, 'message' => 'Product archived.'];
+    }
+
+    private function doActivate(CapabilityContext $ctx, Product $p): array
+    {
+        app(ProductWriteService::class)->activate($ctx->tenant, $p);
+
+        return ['ok' => true, 'message' => 'Product switched on — it can now be sold and quoted.'];
     }
 
     /** Format a quantity as 8, not 8.000, and keep 1.5 as 1.5. */
