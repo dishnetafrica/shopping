@@ -2115,7 +2115,7 @@ class AiBrain
         $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
         $p .= "- OUR PRICES ARE FIXED from the catalogue. If a customer proposes, assumes, states, or haggles their OWN price (e.g. \"30\", \"can you do 30\", \"10 cartons for 30\"), you must NEVER accept, confirm, agree to, or repeat their number as our price, and never compute a total from it. Politely restate OUR listed price for that exact product (e.g. \"Our price for that is 33 per carton\"), and if they want it in writing emit the <<QUOTE>> line so the system prices it. You have no authority to give a discount or match a customer's price.\n";
-        $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" → do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
+        $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" or \"stock not tracked — confirm availability before promising\" → you may quote the price, but do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
         $deliverFrom = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
         // When the owner has stated a delivery policy (delivery_note), the hard-coded South-Sudan
@@ -2361,7 +2361,7 @@ class AiBrain
             foreach ($scored as $s) {
                 $p = $s['p']; $price = (float) ($p->price ?? $p->base_price ?? 0);
                 $tag = $price > 0 ? ($cur . ' ' . number_format($price, $dec)) : 'ask for price';
-                $stk = ($p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
+                $stk = (\App\Support\StockPolicy::tracked($tenant) && $p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
                 $lines[] = '• ' . $p->name . ' — ' . $tag . $stk;
             }
             return "PRODUCTS MATCHING THIS REQUEST (searched across the WHOLE catalogue for this message — "
@@ -2423,7 +2423,10 @@ class AiBrain
             // the model quotes the same number the order is priced at. Off = the plain carton unit rate.
             $looseOn  = (bool) $tenant->setting('loose_enabled', false);
             $loosePct = (float) $tenant->setting('loose_markup_pct', 20);
-            return $products->map(function ($p) use ($inv, $specTxt, $looseOn, $loosePct) {
+            // A business that does not track stock (StockPolicy): no stock verdict either way — the model
+            // quotes the price and says the team confirms availability.
+            $tracked = \App\Support\StockPolicy::tracked($tenant);
+            return $products->map(function ($p) use ($inv, $specTxt, $looseOn, $loosePct, $tracked) {
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
                 $pack = $p->pack_size ? ' (' . (int) $p->pack_size . ' per ' . ($p->unit_label ?: 'unit') . ')' : '';
                 $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
@@ -2463,7 +2466,7 @@ class AiBrain
                 $sizeTxt = trim((string) ($p->unit_size ?? ''));
                 $size = $sizeTxt !== '' ? ', size: ' . $sizeTxt : '';
 
-                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [{$inv->botTag($p)}]{$off}";
+                return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [" . ($tracked ? $inv->botTag($p) : 'stock not tracked — confirm availability before promising') . "]{$off}";
             })->all();
         });
         return implode("\n", $rows);
