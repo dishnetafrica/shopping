@@ -58,4 +58,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('sales_pipeline.php');
     }
+
+    public function test_dashboard_numbers_and_quality_rules(): void
+    {
+        $this->harness('sales_insights.php');
+    }
 }

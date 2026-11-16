@@ -50,6 +50,8 @@ use App\Capability\Process\SalesBrainListCapability;
 use App\Capability\Object\SalesKnowledgeCapability;
 use App\Capability\Process\SalesTrainingCapability;
 use App\Capability\Process\SalesPipelineCapability;
+use App\Capability\Process\SalesDashboardCapability;
+use App\Capability\Process\SalesQualityCapability;
 use App\Capability\Object\PipelineLeadCapability;
 use App\Capability\Process\TrainingResultsCapability;
 use App\Capability\Object\TrainingModuleCapability;
@@ -149,6 +151,9 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // Standard sales pipeline (Internet providers): gated stages per lead, hand-over to installation.
         $r->register(new SalesPipelineCapability(), new CapabilityManifest(key: 'salesPipeline', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesPipeline'));
         $r->register(new PipelineLeadCapability(), new CapabilityManifest(key: 'pipelineLead', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/pipelineLead/{id}'));
+        // Sales dashboard and quality monitoring (Internet providers; read-only).
+        $r->register(new SalesDashboardCapability(), new CapabilityManifest(key: 'salesDashboard', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesDashboard'));
+        $r->register(new SalesQualityCapability(), new CapabilityManifest(key: 'salesQuality', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesQuality'));
         // Migration plan G1 — the WhatsApp inbox in v3 (list + single-conversation object).
         $r->register(new ChatListCapability(), new CapabilityManifest(key: 'chats', type: 'process', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chats'));
         $r->register(new ChatCapability(), new CapabilityManifest(key: 'chat', type: 'object', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chat/{id}'));

@@ -68,6 +68,35 @@ final class IspReplyGuard
         return ['reply' => $out, 'price_hits' => $price, 'coverage_hits' => $coverage];
     }
 
+    /**
+     * The same rules as clean(), reporting instead of removing — used to review what people sent
+     * (quality monitoring). @return list<array{kind:string,sentence:string}> kind: price | coverage
+     */
+    public static function findings(string $text, array $allowedAmounts, array $coveredPlaces): array
+    {
+        $out = [];
+        $parts = preg_split('/(<<[A-Z_]+.*?>>)/s', $text, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$text];
+        foreach ($parts as $i => $part) {
+            if ($i % 2 === 1) {
+                continue;
+            }
+            foreach (explode("\n", $part) as $line) {
+                foreach (self::sentences($line) as $sentence) {
+                    if (trim($sentence) === '') {
+                        continue;
+                    }
+                    if (self::unknownAmount($sentence, $allowedAmounts)) {
+                        $out[] = ['kind' => 'price', 'sentence' => trim($sentence)];
+                    } elseif (self::claimsCoverage($sentence, $coveredPlaces)) {
+                        $out[] = ['kind' => 'coverage', 'sentence' => trim($sentence)];
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
     /** A statement (not a question, not hedged) that we cover a place not published as covered. */
     public static function claimsCoverage(string $sentence, array $coveredPlaces): bool
     {
