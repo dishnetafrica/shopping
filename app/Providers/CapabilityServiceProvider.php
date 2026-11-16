@@ -78,6 +78,11 @@ final class CapabilityServiceProvider extends ServiceProvider
                 if (! $t || ! \App\Services\Sales\QuoteNumber::sequential($t)) {
                     return;
                 }
+                // Already numbered from the series (taken before the PDF was drawn): keep it, so the
+                // customer's PDF and the saved quotation carry the same number.
+                if (\App\Services\Sales\QuoteNumber::isSeries($t, (string) $q->quote_no)) {
+                    return;
+                }
                 $q->quote_no = \App\Services\Sales\QuoteNumber::next($t);
             } catch (\Throwable $e) {
                 \Log::warning('QuoteNumber: kept the minted number — ' . $e->getMessage());

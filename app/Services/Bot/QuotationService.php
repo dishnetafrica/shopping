@@ -43,7 +43,10 @@ class QuotationService
         $matched = array_filter($quote['lines'], fn ($l) => $l['matched']);
         if (! $matched) return null;
 
-        $no   = $quoteNo ?: $this->quoteNo($tenant);
+        // On the running series, take the real number BEFORE drawing the PDF, so the PDF shows the
+        // number the quotation is saved under (persist keeps a series number; see QuoteNumber::isSeries).
+        $no   = $quoteNo ?: (\App\Services\Sales\QuoteNumber::sequential($tenant)
+            ? \App\Services\Sales\QuoteNumber::next($tenant) : $this->quoteNo($tenant));
 
         // Compute discount + VAT once so the PDF and the saved/returned total all agree.
         $discPct = (float) $tenant->setting('quote_discount_pct', 0);

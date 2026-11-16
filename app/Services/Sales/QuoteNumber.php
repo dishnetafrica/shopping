@@ -57,6 +57,24 @@ final class QuoteNumber
         return self::format($prefix, $byYear ? $year : 0, $seqStr);
     }
 
+    /**
+     * Is this already a number from this tenant's running series (e.g. QUO-2026-0007)? Used so a
+     * number taken BEFORE the PDF is drawn is kept when the quotation is saved, instead of being
+     * replaced by the next one (which made the PDF and the saved record disagree).
+     */
+    public static function isSeries(Tenant $t, string $no): bool
+    {
+        $prefix = strtoupper(trim((string) $t->setting('quote_prefix', 'QUO'))) ?: 'QUO';
+
+        return self::matchesSeries($prefix, $no);
+    }
+
+    /** Pure — the shape test behind isSeries(). */
+    public static function matchesSeries(string $prefix, string $no): bool
+    {
+        return (bool) preg_match('/^' . preg_quote($prefix, '/') . '-(\d{4}-)?\d{3,8}$/', $no);
+    }
+
     /** Pure — the shape of a number, so the harness can assert it without a database. */
     public static function format(string $prefix, int $year, string $seq): string
     {

@@ -981,6 +981,11 @@ class AiBrain
             $qy = \App\Models\Quotation::where('tenant_id', $tenant->id)
                 ->where('customer_phone', $digits)
                 ->whereNotIn('status', ['converted', 'declined', 'expired', 'archived']);
+            // Internet provider: a quotation past its validity date is not accepted, even before the
+            // nightly quotes:expire run has marked it (QuoteExpiry). Other businesses: unchanged.
+            if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
+                $qy->where(fn ($w) => $w->whereNull('valid_until')->orWhere('valid_until', '>=', now()->toDateString()));
+            }
             if ($wantNo !== '') $qy->where('quote_no', $wantNo);
             $q = $qy->with('items')->orderByDesc('id')->first();
 
