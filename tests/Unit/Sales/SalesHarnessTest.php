@@ -43,4 +43,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('dishnet_import.php');
     }
+
+    public function test_sales_coach_suggestions_are_built_from_approved_knowledge_and_guarded(): void
+    {
+        $this->harness('sales_coach.php');
+    }
 }

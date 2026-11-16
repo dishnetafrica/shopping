@@ -201,6 +201,13 @@ final class ChatCapability implements ObjectCapability
                     'body' => ['phone' => $phone, 'active' => 1],
                     'confirm' => 'Pause the bot and handle '.$name.' yourself?'];
 
+            // AI Sales Coach (Internet providers only): suggests the next reply into the composer, where the
+            // salesperson edits it and sends it through the normal reply above. The coach never sends.
+            if (\App\Services\Sales\SalesOwnership::enabled($ctx->tenant)) {
+                $actions[] = ['key' => 'coach', 'coach' => true, 'label' => 'Suggest a reply', 'method' => 'POST',
+                    'endpoint' => '/api/v1/workspace/chat/'.$c->id.'/coach', 'actor' => 'human'];
+            }
+
             // Travel Vertical (M1): TRAVEL TENANTS ONLY. A takeover records its reason on the trip, and
             // the chat links to the customer's open trip. Other business types see no change.
             if (\App\Services\Travel\Enquiry\EnquiryService::isTravel($ctx->tenant)) {
@@ -245,6 +252,22 @@ final class ChatCapability implements ObjectCapability
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
-        return ['ok' => false, 'error' => 'unknown_action'];
+        if ($action !== 'coach') {
+            return ['ok' => false, 'error' => 'unknown_action'];
+        }
+        if (! \App\Services\Sales\SalesOwnership::enabled($ctx->tenant)) {
+            return ['ok' => false, 'error' => 'not_available'];
+        }
+        // Same visibility as opening the chat: a salesperson never gets coaching on a colleague's customer.
+        $c = Conversation::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? 0));
+        if ($c && ! \App\Services\Sales\SalesOwnership::canManage($ctx->user)
+            && $c->owner_user_id && (int) $c->owner_user_id !== (int) $ctx->user->id) {
+            $c = null;
+        }
+        if (! $c) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+
+        return app(\App\Services\Isp\SalesCoach::class)->suggest($ctx->tenant, $c, $ctx->user);
     }
 }
