@@ -43,7 +43,10 @@ class QuotationService
         $matched = array_filter($quote['lines'], fn ($l) => $l['matched']);
         if (! $matched) return null;
 
-        $no   = $quoteNo ?: $this->quoteNo($tenant);
+        // On the running series, take the real number BEFORE drawing the PDF, so the PDF shows the
+        // number the quotation is saved under (persist keeps a series number; see QuoteNumber::isSeries).
+        $no   = $quoteNo ?: (\App\Services\Sales\QuoteNumber::sequential($tenant)
+            ? \App\Services\Sales\QuoteNumber::next($tenant) : $this->quoteNo($tenant));
 
         // Compute discount + VAT once so the PDF and the saved/returned total all agree.
         $discPct = (float) $tenant->setting('quote_discount_pct', 0);
@@ -56,7 +59,14 @@ class QuotationService
         $totals['freight'] = $freight;
         $totals['grand']   = (float) $totals['grand'] + $freight;
 
-        $html = $this->html($tenant, $no, $customerPhone, $customerName, $quote, $totals, $portalUrl);
+        // Internet-provider businesses: the DishNet layout, with one-time and monthly charges apart.
+        // The prices are the ones just calculated above; the ISP layer only groups and lays them out.
+        $isp = null;
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
+            $isp = $this->ispDoc($tenant, $no, $customerPhone, $customerName, $quote, $totals, $vatPct, $freight);
+            $totals['grand'] = $isp['one_off_total'];
+        }
+        $html = $isp ? $isp['html'] : $this->html($tenant, $no, $customerPhone, $customerName, $quote, $totals, $portalUrl);
 
         try {
             $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
@@ -81,6 +91,96 @@ class QuotationService
             'fileName' => $fileName,
             'total'    => $totals['grand'],           // VAT/discount-inclusive, matches the PDF
             'currency' => $quote['currency'],
+        ] + ($isp ? [
+            // Internet provider: the stored total is the one-time total; the monthly total is kept beside it.
+            'monthly_total'   => $isp['monthly_total'],
+            'service_lines'   => $isp['service_lines'],
+            'billing_by_name' => $isp['billing_by_name'],
+        ] : []);
+    }
+
+    /**
+     * One-time / monthly figures for an Internet-provider quotation, priced exactly as generate() does
+     * (same discount, VAT and VAT-inclusive settings), for a save that has no PDF behind it.
+     */
+    private function ispFigures(Tenant $tenant, string $phone, string $name, array $quote): array
+    {
+        $vatPct = (float) $tenant->setting('quote_vat_pct', 0);
+        $totals = $this->priced($quote, (float) $tenant->setting('quote_discount_pct', 0), $vatPct, (bool) $tenant->setting('prices_include_vat', false));
+        $d = $this->ispDoc($tenant, (string) ($quote['no'] ?? ''), $phone, $name, $quote, $totals, $vatPct, 0.0);
+        unset($d['html']);
+
+        return $d;
+    }
+
+    /**
+     * The Internet-provider quotation (App\Services\Isp\IspQuoteLayout). Everything printed comes from
+     * the business's settings, the customer record, the salesperson and the catalogue. Terms print
+     * only once approved in the Sales Brain; until then the section is left out, and the platform's
+     * general default terms (written for another market) are never used here.
+     *
+     * @return array{html:string,one_off_total:float,monthly_total:float,service_lines:string[],billing_by_name:array}
+     */
+    private function ispDoc(Tenant $tenant, string $no, string $phone, string $name, array $quote, array $totals, float $vatPct, float $freight): array
+    {
+        $names = [];
+        foreach ($totals['lines'] as $l) {
+            if (! empty($l['matched'])) {
+                $names[] = (string) ($l['name'] ?? '');
+            }
+        }
+        $products = [];
+        foreach (\App\Models\Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->whereIn('name', $names)->get(['name', 'billing', 'service_line']) as $p) {
+            $products[mb_strtolower(trim((string) $p->name))] = ['billing' => $p->billing, 'service_line' => $p->service_line];
+        }
+        $split = \App\Services\Isp\IspQuote::split($totals['lines'], $products, $vatPct / 100);
+
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+        $cust = \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('phone', $digits)->first();
+        $prepId = app(\App\Services\Sales\SalesOwnership::class)->preparedBy($tenant, $phone);
+        $prep = $prepId ? \App\Models\User::where('tenant_id', $tenant->id)->find($prepId) : null;
+        $valid = (int) $tenant->setting('quote_validity_days', 14);
+        $lines = fn ($s) => array_values(array_filter(array_map('trim', preg_split('/\R/', (string) $s) ?: [])));
+
+        $html = \App\Services\Isp\IspQuoteLayout::html([
+            'company'       => (string) $tenant->name,
+            'address_lines' => $lines($tenant->setting('address', '')),
+            'phone'         => trim((string) ($tenant->setting('public_phone', '') ?: $tenant->whatsapp_number)),
+            'email'         => trim((string) $tenant->setting('public_email', $tenant->setting('email', ''))),
+            'website'       => trim((string) $tenant->setting('website', '')),
+            'tagline'       => trim((string) $tenant->setting('quote_tagline', '')),
+            'quote_no'      => $no,
+            'date'          => now()->format('j M Y'),
+            'valid_until'   => now()->addDays($valid > 0 ? $valid : 14)->format('j M Y'),
+            'currency'      => (string) $quote['currency'],
+            'customer'      => [
+                'name'          => $name !== '' ? $name : ($cust?->name ?: '+' . $digits),
+                'company'       => (string) ($cust?->contact_person ? $cust->name : ''),
+                'address_lines' => array_filter([(string) ($cust?->address ?? ''), trim(implode(', ', array_filter([(string) ($cust?->city ?? ''), (string) ($cust?->country ?? '')])))]),
+                'phone'         => $digits !== '' ? '+' . $digits : '',
+                'email'         => (string) ($cust?->email ?? ''),
+            ],
+            'service_lines' => $split['service_lines'],
+            'split'         => $split,
+            'vat_label'     => $vatPct > 0 ? 'VAT ' . rtrim(rtrim(number_format($vatPct, 2), '0'), '.') . '%' : 'Tax',
+            // Only terms management has PUBLISHED in the Sales Brain; none published → none printed.
+            'terms'         => app(\App\Services\Sales\Brain\SalesBrain::class)->quoteTerms($tenant, $split['service_lines']),
+            'prepared_by'   => ['name' => (string) ($prep?->name ?? ''), 'phone' => $prep && $prep->phone ? '+' . preg_replace('/[^0-9]/', '', (string) $prep->phone) : ''],
+        ]);
+
+        $billing = [];
+        foreach (['one_off', 'monthly'] as $g) {
+            foreach ($split[$g] as $l) {
+                $billing[mb_strtolower(trim((string) $l['name']))] = $g;
+            }
+        }
+
+        return [
+            'html'            => $html,
+            'one_off_total'   => round($split['one_off_total']['total'] + max(0.0, $freight), 2),
+            'monthly_total'   => $split['monthly_total']['total'],
+            'service_lines'   => $split['service_lines'],
+            'billing_by_name' => $billing,
         ];
     }
 
@@ -91,6 +191,12 @@ class QuotationService
     public function persist(Tenant $tenant, string $phone, string $name, array $quote, array $doc, string $source): ?\App\Models\Quotation
     {
         try {
+            // Internet provider: one-time and monthly totals are kept apart even when the PDF step did
+            // not run (no PDF engine, a render failure, or a caller that skips it) — never one sum.
+            if (! array_key_exists('monthly_total', $doc) && \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
+                $f = $this->ispFigures($tenant, $phone, $name, $quote);
+                $doc = array_merge($doc, $f, ['total' => $f['one_off_total']]);
+            }
             $valid = (int) ($tenant->setting('quote_validity_days', 14));
             if ($valid <= 0) $valid = 14;
             $q = \App\Models\Quotation::create([
@@ -98,6 +204,8 @@ class QuotationService
                 'quote_no'       => (string) ($doc['no'] ?? ''),
                 'customer_name'  => $name !== '' ? $name : null,
                 'customer_phone' => preg_replace('/[^0-9]/', '', $phone),
+                // Prepared by: the staff member creating it, or the customer's salesperson for a bot draft.
+                'sales_exec_id'  => app(\App\Services\Sales\SalesOwnership::class)->preparedBy($tenant, $phone),
                 'currency'       => (string) ($quote['currency'] ?? $tenant->setting('currency', 'UGX')),
                 'total'          => (float) ($doc['total'] ?? $quote['total'] ?? 0),
                 'status'         => 'sent',
@@ -106,7 +214,11 @@ class QuotationService
                 'pdf_path'       => (string) ($doc['path'] ?? ''),
                 'send_count'     => 1,
                 'last_sent_at'   => now(),
-            ]);
+            ] + (array_key_exists('monthly_total', $doc) ? ['meta' => [
+                // Internet provider: what is paid every month, kept beside the one-time total.
+                'monthly_total' => (float) $doc['monthly_total'],
+                'service_lines' => (array) ($doc['service_lines'] ?? []),
+            ]] : []));
             foreach (($quote['lines'] ?? []) as $l) {
                 if (empty($l['matched'])) continue;
                 \App\Models\QuotationItem::create([
@@ -119,7 +231,7 @@ class QuotationService
                     'unit_label'   => ((string) ($l['unit'] ?? '')) ?: null,
                     'image_url'    => ((string) ($l['image'] ?? '')) ?: null,
                     'matched'      => true,
-                ]);
+                ] + (isset($doc['billing_by_name']) ? ['billing' => $doc['billing_by_name'][mb_strtolower(trim((string) ($l['name'] ?? '')))] ?? 'one_off'] : []));
             }
             // BOS spine (Slice 4): record QuoteCreated for the customer timeline. Guarded + never-throws.
             \App\BOS\Emit::customerEvent($tenant->id, 'QuoteCreated', (string) $q->customer_phone, [

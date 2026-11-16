@@ -46,6 +46,16 @@ use App\Capability\Process\GuideCapability;
 use App\Capability\Process\ScheduledOrdersCapability;
 use App\Capability\Process\LeadListCapability;
 use App\Capability\Process\TravelEnquiryListCapability;
+use App\Capability\Process\SalesBrainListCapability;
+use App\Capability\Object\SalesKnowledgeCapability;
+use App\Capability\Process\SalesTrainingCapability;
+use App\Capability\Process\SalesPipelineCapability;
+use App\Capability\Process\SalesDashboardCapability;
+use App\Capability\Process\SalesQualityCapability;
+use App\Capability\Object\PipelineLeadCapability;
+use App\Capability\Process\TrainingResultsCapability;
+use App\Capability\Object\TrainingModuleCapability;
+use App\Capability\Object\TrainingAttemptCapability;
 use App\Capability\Object\TravelEnquiryCapability;
 use App\Capability\Process\PaymentListCapability;
 use App\Capability\Process\ProductListCapability;
@@ -130,6 +140,20 @@ final class CoreCapabilityProvider implements CapabilityProvider
         // Travel Vertical (M1) — travel enquiries. Same permission as Leads; the screen is empty for non-travel tenants.
         $r->register(new TravelEnquiryListCapability(), new CapabilityManifest(key: 'trips', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trips'));
         $r->register(new TravelEnquiryCapability(), new CapabilityManifest(key: 'trip', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trip/{id}'));
+        // Sales Brain (Internet providers): governed sales knowledge — list + one entry.
+        $r->register(new SalesBrainListCapability(), new CapabilityManifest(key: 'salesBrain', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesBrain'));
+        $r->register(new SalesKnowledgeCapability(), new CapabilityManifest(key: 'salesKnowledge', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesKnowledge/{id}'));
+        // Sales training and certification (Internet providers): modules, sittings, team results.
+        $r->register(new SalesTrainingCapability(), new CapabilityManifest(key: 'salesTraining', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesTraining'));
+        $r->register(new TrainingResultsCapability(), new CapabilityManifest(key: 'trainingResults', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trainingResults'));
+        $r->register(new TrainingModuleCapability(), new CapabilityManifest(key: 'trainingModule', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trainingModule/{id}'));
+        $r->register(new TrainingAttemptCapability(), new CapabilityManifest(key: 'trainingAttempt', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/trainingAttempt/{id}'));
+        // Standard sales pipeline (Internet providers): gated stages per lead, hand-over to installation.
+        $r->register(new SalesPipelineCapability(), new CapabilityManifest(key: 'salesPipeline', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesPipeline'));
+        $r->register(new PipelineLeadCapability(), new CapabilityManifest(key: 'pipelineLead', type: 'object', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/pipelineLead/{id}'));
+        // Sales dashboard and quality monitoring (Internet providers; read-only).
+        $r->register(new SalesDashboardCapability(), new CapabilityManifest(key: 'salesDashboard', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesDashboard'));
+        $r->register(new SalesQualityCapability(), new CapabilityManifest(key: 'salesQuality', type: 'process', owner: 'sales', permission: 'menu:customers', api: '/api/v1/workspace/salesQuality'));
         // Migration plan G1 — the WhatsApp inbox in v3 (list + single-conversation object).
         $r->register(new ChatListCapability(), new CapabilityManifest(key: 'chats', type: 'process', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chats'));
         $r->register(new ChatCapability(), new CapabilityManifest(key: 'chat', type: 'object', owner: 'sales', permission: 'menu:whatsapp', api: '/api/v1/workspace/chat/{id}'));

@@ -58,7 +58,7 @@ final class CustomerListCapability implements ProcessCapability
 
         // v4.60 — the directory lists customers. Discovered businesses share this table and get
         // their own screen; mixed in here they would bury the 676 people who actually buy.
-        $customers = BusinessStage::scope(CustomerProfile::where('tenant_id', $t))
+        $customers = \App\Services\Sales\SalesOwnership::scopeVisible(BusinessStage::scope(CustomerProfile::where('tenant_id', $t)), $ctx)   // Sales team: mine + unassigned
             ->orderBy('name')
             ->limit(self::MAX_ROWS)
             ->get();
@@ -111,7 +111,7 @@ final class CustomerListCapability implements ProcessCapability
         }
 
         $total = $customers->count();
-        $newThisMonth = BusinessStage::scope(CustomerProfile::where('tenant_id', $t))
+        $newThisMonth = \App\Services\Sales\SalesOwnership::scopeVisible(BusinessStage::scope(CustomerProfile::where('tenant_id', $t)), $ctx)
             ->where('created_at', '>=', $now->copy()->startOfMonth())->count();
         $avgOrder = $totalOrders > 0 ? $totalSpend / $totalOrders : 0.0;
 
@@ -174,7 +174,7 @@ final class CustomerListCapability implements ProcessCapability
 
     public function summary(CapabilityContext $ctx, array $scope = []): array
     {
-        return ['customers' => BusinessStage::scope(CustomerProfile::where('tenant_id', $ctx->tenantId()))->count()];
+        return ['customers' => \App\Services\Sales\SalesOwnership::scopeVisible(BusinessStage::scope(CustomerProfile::where('tenant_id', $ctx->tenantId())), $ctx)->count()];
     }
 
     public function command(CapabilityContext $ctx, string $action, array $input): array
@@ -182,7 +182,7 @@ final class CustomerListCapability implements ProcessCapability
         if ($action === 'search') {
             $q = trim((string) ($input['q'] ?? ''));
             $digits = preg_replace('/[^0-9]/', '', $q);
-            $rows = BusinessStage::scope(CustomerProfile::where('tenant_id', $ctx->tenantId()))
+            $rows = \App\Services\Sales\SalesOwnership::scopeVisible(BusinessStage::scope(CustomerProfile::where('tenant_id', $ctx->tenantId())), $ctx)
                 ->when($q !== '', fn ($qq) => $qq->where(fn ($w) => $w
                     ->where('name', 'ilike', '%' . $q . '%')
                     ->orWhere('contact_person', 'ilike', '%' . $q . '%')

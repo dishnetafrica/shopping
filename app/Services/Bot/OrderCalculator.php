@@ -238,7 +238,9 @@ class OrderCalculator
                     // On-hand (home cache) — feeds the matcher's in-stock ranking bonus (until now the
                     // field was never supplied, so that bonus was dead) and lets bot quotes skip items
                     // we don't actually have.
-                    'stock' => (float) ($p->stock ?? 0),
+                    // A monthly subscription (Internet-provider plans) is a service, not a shelf item: no stock
+                    // figure, so it is never refused as "out of stock". Only products marked billing=monthly.
+                    'stock' => ($p->billing ?? null) === 'monthly' ? null : (float) ($p->stock ?? 0),
                     'image' => (string) ($p->image_url ?? ''),
                     'sold_by_weight' => (bool) ($p->sold_by_weight ?? false),
                     'reference_price' => $p->reference_price !== null ? (float) $p->reference_price : null,

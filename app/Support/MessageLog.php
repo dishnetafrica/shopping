@@ -33,7 +33,7 @@ class MessageLog
             'wa_message_id' => $waId,
             'status'        => $status,
             'meta'          => $meta ?: null,
-        ]);
+        ] + self::senderColumn($sender));
 
         $convo = Conversation::firstOrCreate(
             ['customer_phone' => $phone, 'instance' => $instance],
@@ -61,5 +61,25 @@ class MessageLog
         }
 
         return $msg;
+    }
+
+    /**
+     * Who on the team sent it: a reply typed in the panel is logged as 'agent' while a staff member is
+     * signed in. Bot, customer and phone-typed ('human') messages stay unattributed. The column is
+     * only written when there is someone to record AND it exists, so logging can never fail on it.
+     */
+    private static function senderColumn(string $sender): array
+    {
+        static $hasColumn = null;
+        try {
+            if ($sender !== 'agent' || ($id = auth()->id()) === null) {
+                return [];
+            }
+            $hasColumn ??= \Illuminate\Support\Facades\Schema::hasColumn('messages', 'sender_user_id');
+
+            return $hasColumn ? ['sender_user_id' => (int) $id] : [];
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 }

@@ -63,6 +63,10 @@ jobs:
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends tesseract-ocr poppler-utils
       - name: Travel vertical tests (must pass)
         run: php artisan test tests/Unit/Travel tests/Feature/Travel
+      # Sales team (DishNet South Sudan plan). Required like the travel step: one salesperson per
+      # customer on an Internet-provider business, reply attribution, and other businesses unchanged.
+      - name: Sales team tests (must pass)
+        run: php artisan test tests/Unit/Sales tests/Feature/Sales
       - name: Full suite (informational only — shows what still needs work)
         continue-on-error: true
         run: |
@@ -99,3 +103,9 @@ jobs:
       # menu entry would show for any business type other than a travel agency.
       - name: Trips menu shows only for travel agencies
         run: node tests/render-sim/trips_nav_gate.js
+      # Sales Brain (DishNet plan, Phase 3): the menu entry shows only for Internet providers.
+      - name: Sales Brain menu shows only for Internet providers
+        run: node tests/render-sim/sales_brain_nav_gate.js
+      # AI Sales Coach (DishNet plan, Phase 4): the suggestion fills the composer and is never sent by the coach.
+      - name: Sales Coach suggestion is editable and never sent
+        run: node tests/render-sim/coach_render.js

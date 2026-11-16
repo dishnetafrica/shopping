@@ -65,6 +65,22 @@ class LeadService
         $mode = (string) $tenant->setting('lead_assignment_mode', 'round_robin');
         $role = $intent === 'ticket' ? 'support' : 'sales';
 
+        // Sales team (Internet-provider businesses only): one salesperson per customer. A sales
+        // enquiry goes to the customer's existing salesperson, or to the next one in turn, who then
+        // owns the customer (App\Services\Sales\SalesOwnership). Support tickets keep the normal route.
+        if ($intent === 'lead' && \App\Services\Sales\SalesOwnership::enabled($tenant)) {
+            $owner = app(\App\Services\Sales\SalesOwnership::class)->ownerForEnquiry($tenant, $phone, $name);
+            if ($owner) {
+                $lead->update(['owner_user_id' => $owner->id, 'assigned_to' => preg_replace('/[^0-9]/', '', (string) $owner->phone), 'status' => 'assigned']);
+                $this->event($tenant->id, 'lead_assigned', $phone, "#{$lead->id} → user {$owner->id} (customer's salesperson)");
+                NotifyOwner::dispatch($tenant->id, $this->leadCard($lead, "🔥 New enquiry from your customer (#{$lead->id})"), (string) $lead->assigned_to);
+            } else {
+                $this->notifyManual($tenant, $lead, $role);   // no salesperson with a WhatsApp number yet
+            }
+
+            return ['created' => true, 'reply' => $this->ackCustomer($tenant, $intent, false)];
+        }
+
         if ($mode === 'claim') {
             $this->notifyClaim($tenant, $lead, $role);
         } elseif ($mode === 'manual') {

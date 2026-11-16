@@ -47,6 +47,11 @@ final class CustomerCapability implements ObjectCapability
     public function forId(CapabilityContext $ctx, string $id): WorkspacePayload
     {
         $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->findOrFail((int) $id);
+        // Sales team (Internet-provider businesses): another salesperson's customer is not opened.
+        if (\App\Services\Sales\SalesOwnership::enabled($ctx->tenant) && ! \App\Services\Sales\SalesOwnership::canManage($ctx->user)
+            && $c->owner_user_id && (int) $c->owner_user_id !== (int) $ctx->user->id) {
+            throw (new \Illuminate\Database\Eloquent\ModelNotFoundException())->setModel(CustomerProfile::class, [(int) $id]);
+        }
         $phone = (string) $c->phone;
         $ins = app(CustomerInsight::class)->for($ctx, $c);
         // Headline/KPI money follows the report/base currency (always one currency), so the top-bar
@@ -452,7 +457,8 @@ final class CustomerCapability implements ObjectCapability
                 ['key' => 'financials', 'label' => 'Account statement'],
                 ['key' => 'timeline', 'label' => 'Timeline', 'count' => count($timelineEvents)],
             ])
-            ->actions([$primary, $secondary, $newTask, ['key' => 'bos_timeline', 'label' => '🕑 Timeline', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/bos.timeline/' . $c->id, 'actor' => 'human', 'tone' => 'default']])
+            ->actions(array_values(array_filter([$primary, $secondary, $newTask, ['key' => 'bos_timeline', 'label' => '🕑 Timeline', 'method' => 'GET', 'endpoint' => '/api/v1/workspace/bos.timeline/' . $c->id, 'actor' => 'human', 'tone' => 'default'],
+                $this->ownerAction($ctx, $c, $endpoint)])))
             ->more(array_values(array_filter([
                 $editAction,
                 (bool) $ctx->tenant->setting('relationship_memory', false) ? [
@@ -554,12 +560,57 @@ final class CustomerCapability implements ObjectCapability
             'log_whatsapp' => $this->touch($ctx, $input, 'whatsapp'),
             'create_quotation' => $this->createQuotation($ctx, $input),
             'assign_task' => $this->assignTask($ctx, $input),
+            'reassign_owner' => $this->reassignOwner($ctx, $input),
             // v4.52 — send_statement now posts straight to /papi/statement-send (see actions above),
             // and send_reminder is gone rather than left answering "Reminder sent." to a send that
             // never happened. Anything still calling either name gets an honest unknown_action.
             'timeline' => $this->bosTimeline($ctx, $input),
             default => ['ok' => false, 'error' => 'unknown_action:' . $action],
         };
+    }
+
+    /**
+     * Sales team (Internet-provider businesses): who handles this customer, and — for an owner or a
+     * manager — the control to move them to another salesperson (logged, reason required).
+     */
+    private function ownerAction(CapabilityContext $ctx, CustomerProfile $c, string $endpoint): ?array
+    {
+        if (! \App\Services\Sales\SalesOwnership::enabled($ctx->tenant) || ! \App\Services\Sales\SalesOwnership::canManage($ctx->user)) {
+            return null;
+        }
+        $staff = \App\Models\User::where('tenant_id', $ctx->tenantId())->whereIn('role', ['sales', 'manager', 'owner', 'admin'])->orderBy('name')->get(['id', 'name']);
+        $current = $c->owner_user_id ? (string) ($staff->firstWhere('id', (int) $c->owner_user_id)?->name ?? '') : '';
+
+        return [
+            'key' => 'reassign_owner', 'label' => $current !== '' ? 'Salesperson: ' . $current : 'Assign salesperson', 'method' => 'POST',
+            'endpoint' => $endpoint . '/reassign_owner', 'actor' => 'human', 'tone' => 'default', 'submitLabel' => 'Assign',
+            'schema' => ['owner' => 'combo:' . $staff->map(fn ($u) => $u->id . ' — ' . $u->name)->implode('|'), 'reason' => 'text'],
+            'labels' => ['owner' => 'Salesperson', 'reason' => 'Why (recorded)'],
+            'prefill' => ['customer_id' => (int) $c->id],
+        ];
+    }
+
+    private function reassignOwner(CapabilityContext $ctx, array $input): array
+    {
+        if (! \App\Services\Sales\SalesOwnership::enabled($ctx->tenant)) {
+            return ['ok' => false, 'error' => 'not_available'];
+        }
+        $c = CustomerProfile::where('tenant_id', $ctx->tenantId())->find((int) ($input['id'] ?? $input['customer_id'] ?? 0));
+        if (! $c) {
+            return ['ok' => false, 'error' => 'not_found'];
+        }
+        $to = (int) preg_replace('/\D.*$/s', '', trim((string) ($input['owner'] ?? '')));   // "12 — Name" → 12
+        $r = app(\App\Services\Sales\SalesOwnership::class)->reassign($ctx->tenant, (string) $c->phone, $to, $ctx->user, (string) ($input['reason'] ?? ''));
+        if (! $r['ok']) {
+            return $r + ['message' => match ($r['error'] ?? '') {
+                'forbidden' => 'Only an owner or a manager can change a customer\'s salesperson.',
+                'reason_required' => 'Please say why the customer is moving.',
+                'unknown_staff' => 'Choose someone from your own team.',
+                default => 'The salesperson was not changed.',
+            }];
+        }
+
+        return ['ok' => true, 'message' => 'Salesperson changed'];
     }
 
     /**

@@ -4,7 +4,7 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
   products:'Products', categories:'Categories', 'purchase.process':'Purchasing', 'procurement.hub':'Procurement Hub', 'demand.plans':'Demand Plans', 'juba.stock':'Juba Stock', suppliers:'Suppliers', lpos:'Purchase Orders', warehouse:'Warehouse', dispatch:'Dispatch', transport:'Transport Register', cashbook:'Cashbook',
   customer:'Customer', invoice:'Invoice', payment:'Payment', product:'Product', supplier:'Supplier', quotation:'Quotation',
   salesOrder:'Sales Order', purchaseOrder:'Purchase Order', lpo:'Purchase Order', 'sales.process':'Sales Pipeline', statement:'Statement', settings:'Settings', ads:'Facebook Ads', campaigns:'Campaigns', 'storefront.insights':'Storefront Insights',
-  jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', trips:'Trips', trip:'Trip', modules:'Modules', billing:'Billing', team:'Team & Roles',
+  jobs:'Jobs', workOrder:'Job', maintenance:'Maintenance', maintenancePlan:'Service Plan', claims:'Warranty Claims', warrantyClaim:'Claim', trips:'Trips', trip:'Trip', salesBrain:'Sales Brain', salesKnowledge:'Sales knowledge', salesPipeline:'Pipeline', pipelineLead:'Sales lead', salesDashboard:'Sales dashboard', salesQuality:'Quality monitoring', salesTraining:'Sales Training', trainingModule:'Training module', trainingAttempt:'Assessment', trainingResults:'Training results', modules:'Modules', billing:'Billing', team:'Team & Roles',
   'storefront.collections':'Shop for Every Need', 'storefront.kits':'Ready-made Kits', 'storefront.delivery':'Delivery & Free Shipping',
   tenders:'Tenders', suggestions:'Suggestions', evidence:'Evidence', engagement:'Customer Engagement', 'vision.review':'Stock & Loss' };
 // Navigation IA (2026-08) — grouped around the operator's question in the moment (Am I selling? buying?
@@ -13,7 +13,7 @@ const LABELS = { pos:'POS Till', 'ai.campaign':'AI Campaign', advisor:'Solar Adv
 // never changes what a role can see. Renames/order only — no routes, permissions or keys change.
 const GROUPS = [ ['Home',['briefing','worklist','setup','guide']],
   ['Sell',['pos','salesOrders','quotations','invoices','payments','collections','advisor']],
-  ['Customers',['customers','leads','trips','followups','growth','discovery','visits','demand','tenders','evidence']],
+  ['Customers',['customers','leads','salesPipeline','salesDashboard','trips','salesBrain','salesTraining','followups','growth','discovery','visits','demand','tenders','evidence']],
   ['Buy',['purchase.process','suppliers','lpos','procurement.hub','demand.plans','juba.stock']],
   ['Stock',['products','categories','suggestions','warehouse','consignments','vision.review']],
   ['Money',['finance','cashbook','partners']],
@@ -26,7 +26,7 @@ const NAVCOUNT = { growth:'growth', demand:'demand', discovery:'discovery', visi
 // DOCUMENTATION ONLY — read by nothing. What actually gates a menu item is has() below,
 // via the permission keys the server sends. Left here as a list of what has been built,
 // and labelled because four test contracts were written against it as though it were a gate.
-const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','trips','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence','engagement','vision.review']);
+const READY = new Set(['pos','ai.campaign','advisor','setup','briefing','worklist','followups','diagnostics','chats','communication','guide','consignments','scheduled','customers','growth','discovery','visits','leads','salesPipeline','salesDashboard','trips','salesBrain','salesTraining','salesOrders','quotations','invoices','payments','products','categories','suppliers','purchase.process','demand.plans','procurement.hub','juba.stock','collections','finance','pnl','books','warehouse','dispatch','tasks','settings','cashbook','partners','ads','campaigns','storefront.insights','storefront.collections','storefront.kits','storefront.delivery','transport','jobs','maintenance','claims','modules','billing','team','tenders','suggestions','evidence','engagement','vision.review']);
 // Storefront config pages are client-rendered (not server workspaces) and always available to the owner.
 const SF_KEYS = new Set(['storefront.collections','storefront.kits','storefront.delivery','transport']);
 // Dedicated list views still pending — none; kept for future additions.
@@ -46,6 +46,13 @@ const P = {
   claims:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3zM9.5 12l2 2 4-4',
   trips:'M2.5 13.5l19-8-5.5 14-3.6-5.4-4 3.4.4-4.6 8.2-6.2',
   trip:'M2.5 13.5l19-8-5.5 14-3.6-5.4-4 3.4.4-4.6 8.2-6.2',
+  salesBrain:'M4 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4zM20 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z',
+  salesKnowledge:'M4 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4zM20 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z',
+  salesTraining:'M2 9l10-5 10 5-10 5zM6 11v5c3 2.5 9 2.5 12 0v-5M22 9v6',
+  salesPipeline:'M3 4h18l-7 8v6l-4 2v-8z',
+  salesDashboard:'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  salesQuality:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3zM9.5 12l2 2 4-4',
+  pipelineLead:'M3 4h18l-7 8v6l-4 2v-8z',
   warrantyClaim:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3zM9.5 12l2 2 4-4',
   shield:'M12 2 4 5v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V5l-8-3z',
   modules:'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
@@ -359,6 +366,7 @@ async function openThread(id){
     window.__WA.locAct=loc||null;
     const tk=acts.find(a=>a.key==='takeover'||a.key==='to_bot');
     window.__THREAD_REPLY__=reply||null;
+    const coach=acts.find(a=>a.key==='coach'); window.__THREAD_COACH__=coach||null;
     const msgs=(p.meta&&p.meta.msgs)||[];
     const mh=msgs.map(function(m){
       const out=m.dir==='out'; const bot=out&&m.sender==='bot';
@@ -401,7 +409,9 @@ async function openThread(id){
       (tk?'<button class="btn sm" onclick=\'doAction('+JSON.stringify(tk).replace(/'/g,"&#39;")+')\'>'+esc(tk.label)+'</button>':'')+
       '</div>'+
       '<div class="thread" id="thread">'+(mh||'<div class="waempty" style="padding:30px">No messages logged yet — your first reply starts the transcript.</div>')+'</div>'+
+      (reply&&coach?'<div id="cmpcoach" style="display:none;padding:8px 12px;font-size:12.5px;line-height:1.45;border-top:1px solid var(--line,#e4e9e4)"></div>':'')+
       (reply?('<div class="composer">'+
+        (coach?'<button class="attach" title="Coach: suggest a reply (you edit it before sending)" onclick="coachSuggest()">✨</button>':'')+
         (img?'<button class="attach" title="Send photo" onclick=\'doAction('+JSON.stringify(img).replace(/'/g,"&#39;")+')\'>📎</button>':'')+
         (doc?'<button class="attach" title="Send document (PDF…)" onclick=\'doAction('+JSON.stringify(doc).replace(/'/g,"&#39;")+')\'>📄</button>':'')+
         (loc?'<button class="attach" title="Send location" onclick="sendLoc()">📍</button>':'')+
@@ -452,7 +462,9 @@ function renderNav(caps){
      STRICT: it shows only when the server says the business type is travel, so no other shop
      ever gains a menu entry from this change. */
   const travelish = k => k!=='trips' || vert==='travel';
-  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || (k==='engagement' && keys.has('campaigns')) || k==='vision.review' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k) && travelish(k);
+  /* Pipeline, Sales Brain and Sales Training (DishNet plan) — Internet-provider businesses only; STRICT like Trips. */
+  const ispish = k => (k!=='salesBrain' && k!=='salesTraining' && k!=='salesPipeline' && k!=='salesDashboard') || vert==='isp';
+  const has = k => ((k==='pnl' && keys.has('finance')) || (k==='books' && keys.has('finance')) || (k==='partners' && keys.has('finance')) || k==='settings' || k==='advisor' || k==='pos' || k==='ai.campaign' || (k==='tenders' && !!(CFG.flags && CFG.flags.tenders)) || (k==='suggestions' && !!(CFG.flags && (CFG.flags.suggestions || CFG.flags.research))) || k==='evidence' || (k==='engagement' && keys.has('campaigns')) || k==='vision.review' || SF_KEYS.has(k) || keys.has(k) || (SOON[k] && CFG.counts[NAVCOUNT[k]||k] != null)) && solarish(k) && travelish(k) && ispish(k);
   // The top-bar POS launcher follows the same gate as the menu entry.
   try{ var pb=document.getElementById('posTop'); if(pb) pb.style.display = has('pos') ? 'flex' : 'none'; }catch(e){}
   let html='';
@@ -2014,6 +2026,7 @@ function renderView(p){
            to the payload's own `reply` action — same endpoint, same body, no new write path. */
         const ract=(p.actions||[]).find(a=>a.key==='reply');
         window.__THREAD_REPLY__=ract||null;
+        const cact=(p.actions||[]).find(a=>a.key==='coach'); window.__THREAD_COACH__=cact||null;
         h+='<div class="card"><div class="h">'+icon('clock','ic-sm')+'Conversation</div><div class="b">'+
           '<div class="thread" id="thread">'+
           p.timeline.map(e=>{
@@ -2023,7 +2036,8 @@ function renderView(p){
               '<div class="who">'+esc(e.title||'')+'</div>'+esc(e.detail||'')+
               '<div class="when">'+esc(e.at||'')+'</div></div>';
           }).join('')+'</div>'+
-          (ract?'<div class="composer"><input id="cmpin" placeholder="Type a reply…" autocomplete="off" onkeydown="if(event.key===\'Enter\')sendThread()"><button id="cmpbtn" onclick="sendThread()">Send</button></div>':'')+
+          (ract&&cact?'<div id="cmpcoach" style="display:none;padding:8px 0;font-size:12.5px;line-height:1.45"></div>':'')+
+          (ract?'<div class="composer">'+(cact?'<button class="attach" title="Coach: suggest a reply (you edit it before sending)" onclick="coachSuggest()">✨</button>':'')+'<input id="cmpin" placeholder="Type a reply…" autocomplete="off" onkeydown="if(event.key===\'Enter\')sendThread()"><button id="cmpbtn" onclick="sendThread()">Send</button></div>':'')+
           '</div></div>';
         setTimeout(function(){var el=document.getElementById('thread'); if(el) el.scrollTop=el.scrollHeight;},0);
       } else {
@@ -2395,6 +2409,7 @@ async function doAction(a){
   if(a.href){ const u=withScope(a); try{ window.open(u,'_blank'); }catch(e){ location.href=u; } return; }
   if(a.statement){ return statementModal(a); }
   if(a.chooser){ return chooserModal(a); }
+  if(a.coach){ return coachSuggest(a); }
   // queryWrite: reuse a legacy panel GET endpoint. With a schema → open the form (submit builds the
   // query string); without → an optional confirm then a direct GET-query write, then refresh.
   if(a.queryWrite){
@@ -2450,6 +2465,25 @@ async function sendThread(){
   const res=await post(a.endpoint,body);
   toast(res&&res.ok?'Sent':((res&&(res.message||res.error))||'Could not send'), !(res&&res.ok));
   refresh();
+}
+/* AI Sales Coach (Internet providers): asks for a suggested reply and puts it in the composer for the
+   salesperson to edit, with the reasoning shown above. It never sends — Send goes through the normal
+   reply path. With no composer on screen it opens the Reply form pre-filled instead. */
+async function coachSuggest(a){
+  a=a||window.__THREAD_COACH__; if(!a) return;
+  const inp=document.getElementById('cmpin'); const box=document.getElementById('cmpcoach');
+  if(box){ box.style.display='block'; box.innerHTML='<span class="mut">Coach is preparing a suggestion…</span>'; } else { toast('Coach is preparing a suggestion…'); }
+  const res=await post(a.endpoint,a.body||{});
+  if(!(res&&res.ok)){ const m=(res&&(res.message||res.error))||'No suggestion'; if(box){ box.innerHTML='<span class="mut">'+esc(m)+'</span>'; } else { toast(m,true); } return; }
+  const text=String(res.suggestion||'');
+  const why='<div><b>Why:</b> '+esc(res.why||'')+'</div>'+
+    (res.check?'<div style="color:var(--warn,#b45309)"><b>Check before sending:</b> '+esc(res.check)+'</div>':'')+
+    ((res.used&&res.used.length)?'<div class="mut">Based on: '+esc(res.used.join(', '))+'</div>':'')+
+    '<div class="mut">Edit it as you like, then press Send.</div>';
+  if(inp){ inp.value=text.replace(/\s*\n+\s*/g,' ').trim(); inp.focus(); if(box) box.innerHTML=why; return; }
+  const r=window.__THREAD_REPLY__; if(!r){ toast(text); return; }
+  formModal(Object.assign({}, r, {prefill:Object.assign({}, r.prefill||{}, {body:text}),
+    labels:Object.assign({}, r.labels||{}, {body:'Suggested reply — edit before sending. Why: '+(res.why||'')+(res.check?' · Check: '+res.check:'')})}));
 }
 /* Per-row list action: confirm (optional) → POST → toast → refresh the list. */
 async function rowPost(o){

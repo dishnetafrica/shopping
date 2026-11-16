@@ -39,6 +39,13 @@ class User extends Authenticatable implements FilamentUser
         $menus = $this->effectiveMenusRaw();
         // Everyone can see their own task list, regardless of role.
         if (! in_array('tasks', $menus, true)) $menus[] = 'tasks';
+        // Sales team: on an Internet-provider business salespeople work their customers in the
+        // WhatsApp inbox (they see only their own chats — SalesOwnership). A per-user menu set
+        // chosen by the owner still wins.
+        if ((string) $this->role === 'sales' && ! is_array($this->allowed_menus) && ! in_array('whatsapp', $menus, true)
+            && \App\Services\Sales\SalesOwnership::enabled($this->tenant)) {
+            $menus[] = 'whatsapp';
+        }
         return array_values($menus);
     }
 

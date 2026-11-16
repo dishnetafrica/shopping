@@ -11,6 +11,8 @@ Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->
 Schedule::command('travel:retry-handoffs')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 // Travel (#145): delete travellers' passport / ID numbers after each agency's retention period.
 Schedule::command('travel:purge-documents')->dailyAt('02:17')->withoutOverlapping()->onOneServer();
+// Sales team (Internet-provider businesses): quotations past their validity date become expired.
+Schedule::command('quotes:expire')->dailyAt('03:07')->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:learn')->dailyAt('02:30')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('demand:digest')->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();

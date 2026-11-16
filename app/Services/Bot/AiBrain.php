@@ -235,6 +235,11 @@ class AiBrain
         if ($isTravel) {
             $reply = app(\App\Services\Travel\Conversation\TravelTurn::class)->afterReply($tenant, $convo, $from, $channel, $text, $reply);
         }
+        // Internet providers: no amount that is not a catalogue price or in the published Sales Brain,
+        // and no coverage claim for a place not published as covered (IspReplyGuard).
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
+            $reply = app(\App\Services\Isp\IspSalesTurn::class)->afterReply($tenant, $from, $text, $reply);
+        }
 
         // 3a-quote. Customer ACCEPTED their outstanding quotation — the model emits a hidden
         //     <<ACCEPT_QUOTE>> line. Convert that quote into a real order through the one authoritative
@@ -981,6 +986,11 @@ class AiBrain
             $qy = \App\Models\Quotation::where('tenant_id', $tenant->id)
                 ->where('customer_phone', $digits)
                 ->whereNotIn('status', ['converted', 'declined', 'expired', 'archived']);
+            // Internet provider: a quotation past its validity date is not accepted, even before the
+            // nightly quotes:expire run has marked it (QuoteExpiry). Other businesses: unchanged.
+            if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
+                $qy->where(fn ($w) => $w->whereNull('valid_until')->orWhere('valid_until', '>=', now()->toDateString()));
+            }
             if ($wantNo !== '') $qy->where('quote_no', $wantNo);
             $q = $qy->with('items')->orderByDesc('id')->first();
 
@@ -1973,6 +1983,14 @@ class AiBrain
         $faqTxt  = collect($this->brandFaq($tenant))
             ->map(fn ($f) => 'Q: ' . ($f['q'] ?? '') . "\nA: " . ($f['a'] ?? ''))
             ->implode("\n\n");
+        // Internet providers: the customer-facing AI may use only knowledge management APPROVED and
+        // PUBLISHED in the Sales Brain (IspSalesTurn). The free-text company knowledge and FAQ settings
+        // skip that approval, so they are left out — put that content into the Sales Brain instead.
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP && ($know !== '' || $faqTxt !== '')) {
+            \App\Support\BotTrace::log($tenant->id, 'prompt', null, 'isp_unapproved_skipped', 'company knowledge/FAQ settings not used');
+            $know = '';
+            $faqTxt = '';
+        }
         if ($lexTxt !== '') {
             $p2lex = "CUSTOMER VOCABULARY (learned from this shop's real chats — treat as ground truth when interpreting requests):\n".$lexTxt."\n\n";
         } else { $p2lex = ''; }
@@ -2147,6 +2165,11 @@ class AiBrain
         if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::TRAVEL) {
             // Travel Vertical (M1): the consultant rules live with the rest of the travel code.
             $p .= \App\Services\Travel\Conversation\TravelTurn::promptBlock($tenant);
+        }
+        // Internet providers (DishNet South Sudan plan): qualify, and use ONLY the Sales Brain's
+        // published knowledge and catalogue prices. Gated to the ISP vertical — no other shop sees this.
+        if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
+            $p .= app(\App\Services\Isp\IspSalesTurn::class)->promptBlock($tenant);
         }
         $p .= "AD LEADS (messages starting with [NEW AD LEAD] clicked our advert - highest-value first contact):\n";
         $p .= "- They came from an ad showing WHOLESALE PRICES and expect prices, not policy. Never say 'the price is as listed' - they have not seen any list yet.\n";
