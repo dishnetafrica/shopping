@@ -85,7 +85,8 @@ final class ReplyGuard
     public static function amounts(string $text): array
     {
         $out = [];
-        $re = '/(?:' . self::CURRENCY . '\s?(' . self::NUMBER . '))|(?:(' . self::NUMBER . ')\s?' . self::UNIT . '(?![a-z]))/iu';
+        // (?<![a-z]) — a currency code must start a word: "takes 2 days" is not "KES 2".
+        $re = '/(?:(?<![a-z])' . self::CURRENCY . '\s?(' . self::NUMBER . '))|(?:(' . self::NUMBER . ')\s?' . self::UNIT . '(?![a-z]))/iu';
         if (preg_match_all($re, $text, $m, PREG_SET_ORDER)) {
             foreach ($m as $hit) {
                 $raw = $hit[1] !== '' ? $hit[1] : ($hit[2] ?? '');

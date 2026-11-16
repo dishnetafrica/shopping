@@ -33,4 +33,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('sales_brain.php');
     }
+
+    public function test_internet_provider_bot_never_states_unapproved_prices_or_coverage(): void
+    {
+        $this->harness('isp_bot.php');
+    }
 }
