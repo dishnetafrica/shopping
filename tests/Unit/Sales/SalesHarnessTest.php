@@ -53,4 +53,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('sales_training.php');
     }
+
+    public function test_pipeline_stages_are_gated_and_lost_needs_a_reason(): void
+    {
+        $this->harness('sales_pipeline.php');
+    }
 }
