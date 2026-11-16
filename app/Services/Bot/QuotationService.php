@@ -163,7 +163,8 @@ class QuotationService
             'service_lines' => $split['service_lines'],
             'split'         => $split,
             'vat_label'     => $vatPct > 0 ? 'VAT ' . rtrim(rtrim(number_format($vatPct, 2), '0'), '.') . '%' : 'Tax',
-            'terms'         => [],          // published Sales Brain terms (Phase 3); none until approved
+            // Only terms management has PUBLISHED in the Sales Brain; none published → none printed.
+            'terms'         => app(\App\Services\Sales\Brain\SalesBrain::class)->quoteTerms($tenant, $split['service_lines']),
             'prepared_by'   => ['name' => (string) ($prep?->name ?? ''), 'phone' => $prep && $prep->phone ? '+' . preg_replace('/[^0-9]/', '', (string) $prep->phone) : ''],
         ]);
 

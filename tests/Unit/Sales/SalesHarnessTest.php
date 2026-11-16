@@ -28,4 +28,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('isp_quote.php');
     }
+
+    public function test_sales_knowledge_is_governed_and_coverage_defaults_to_survey(): void
+    {
+        $this->harness('sales_brain.php');
+    }
 }
