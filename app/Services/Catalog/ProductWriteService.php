@@ -38,7 +38,8 @@ final class ProductWriteService
             'piece_price' => isset($d['piece_price']) && $d['piece_price'] !== '' && (float) $d['piece_price'] > 0 ? (float) $d['piece_price'] : null,
             'reorder_point' => isset($d['reorder_point']) && $d['reorder_point'] !== '' ? max(0, (int) $d['reorder_point']) : null,
             'unit_label' => trim((string) ($d['unit_label'] ?? '')) ?: null,
-            'active'     => true,
+            // Default on, as always. A caller may create it switched off (e.g. an import awaiting review).
+            'active'     => array_key_exists('active', $d) ? (bool) $d['active'] : true,
         ], $this->detailColumns($d), $this->photoColumns($d) ?: ['image_url' => trim((string) ($d['image'] ?? ''))]));
         $this->ensureCategory($t, $category);
 

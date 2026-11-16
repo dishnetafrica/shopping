@@ -38,4 +38,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('isp_bot.php');
     }
+
+    public function test_dishnet_bot_import_is_drafts_only_and_carries_no_staff_numbers(): void
+    {
+        $this->harness('dishnet_import.php');
+    }
 }

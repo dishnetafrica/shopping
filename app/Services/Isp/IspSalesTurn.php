@@ -143,7 +143,7 @@ class IspSalesTurn
 
     private function cataloguePrices(Tenant $tenant): array
     {
-        return Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('price', '>', 0)
+        return Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)->where('price', '>', 0)
             ->limit(500)->pluck('price')->map(fn ($p) => (float) $p)->unique()->values()->all();
     }
 }
