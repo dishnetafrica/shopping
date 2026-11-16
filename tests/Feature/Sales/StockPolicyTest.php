@@ -47,7 +47,8 @@ class StockPolicyTest extends TestCase
         $m = new \ReflectionMethod(\App\Services\Bot\AiBrain::class, 'systemPrompt');
         $m->setAccessible(true);
         $prompt = (string) $m->invoke(app(\App\Services\Bot\AiBrain::class), $t);
-        $line = collect(explode("\n", $prompt))->first(fn ($l) => str_contains($l, 'Test Kit Counted Zero'));
+        // The catalogue line ("• name — price … [stock tag]"), not the category summary ("- Other (1): name").
+        $line = collect(explode("\n", $prompt))->first(fn ($l) => str_starts_with(ltrim($l), "\u{2022} Test Kit Counted Zero"));
 
         $this->assertNotNull($line);
         $this->assertStringContainsString('stock not tracked', $line);
