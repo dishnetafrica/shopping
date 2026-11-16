@@ -42,8 +42,8 @@ final class SalesBrainListCapability implements ProcessCapability
             $vs = $versions->get($e->id, collect());
             $live = $vs->firstWhere('status', 'published');
             $pending = $vs->first(fn ($v) => in_array($v->status, ['draft', 'approved'], true));
-            if (! $live && ! $manage) {
-                continue;                                    // staff see published knowledge only
+            if (! $manage && (! $live || in_array($e->topic, Knowledge::INTERNAL, true))) {
+                continue;                                    // staff see published knowledge only, never training answers
             }
             if ($live) {
                 $liveTopics[$e->topic] = true;
@@ -84,7 +84,7 @@ final class SalesBrainListCapability implements ProcessCapability
             'schema' => ['topic' => 'enum:' . implode(',', array_keys(Knowledge::TOPICS)), 'title' => 'text', 'key' => 'text', 'content' => 'textarea', 'source' => 'text', 'note' => 'text'],
             'labels' => [
                 'topic' => 'Topic', 'title' => 'Title (e.g. Starlink terms)', 'key' => 'Short name (e.g. starlink); same topic + short name = same entry',
-                'content' => 'Content. Terms: one per line, "Label: text". Coverage: one area per line, "Name | starlink or fiber | covered, survey or none | place names, comma separated | note"',
+                'content' => 'Content. Terms: one per line, "Label: text". Coverage: one area per line, "Name | starlink or fiber | covered, survey or none | place names, comma separated | note". Training questions: short name = the module (product, qualification, communication, quotation, service); "Q: question", options on their own lines with "* " before the correct one and "- " before the others, a blank line between questions',
                 'source' => 'Where this came from (optional)', 'note' => 'Change note (optional)',
             ],
         ]] : [];
@@ -126,7 +126,7 @@ final class SalesBrainListCapability implements ProcessCapability
         }
         $topic = (string) ($input['topic'] ?? '');
         $title = trim((string) ($input['title'] ?? ''));
-        [$body, $data] = Knowledge::fromText($topic, (string) ($input['content'] ?? ''), $title);
+        [$body, $data] = Knowledge::fromText($topic, (string) ($input['content'] ?? ''), $title, (string) (($input['key'] ?? '') ?: $title));
         $r = app(SalesBrain::class)->startVersion($ctx->tenant, $ctx->user, $topic, (string) (($input['key'] ?? '') ?: $title), $title, $body, $data,
             trim((string) ($input['source'] ?? '')) ?: null, [], trim((string) ($input['note'] ?? '')) ?: null);
 

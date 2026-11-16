@@ -59,6 +59,8 @@ chk('published knowledge is given, terms as numbered text', [str_contains($block
 chk('coverage is listed by service and answer', [str_contains($block, 'Fiber — Covered: Test Town (test town, test market)'), str_contains($block, 'Fiber — Not served: Test Hills')], [true, true]);
 chk('anything unlisted is a survey', str_contains($block, 'any place not listed here: site survey needed'), true);
 chk('the rules forbid general knowledge and unwritten promises', [str_contains(S::rules(), 'do not use general knowledge'), str_contains(S::rules(), 'Never promise a discount')], [true, true]);
+$withQuiz = array_merge($published, [['topic' => 'quiz', 'key' => 'product', 'title' => 'Product quiz', 'body' => '1 question(s)', 'data' => ['module' => 'product', 'questions' => [['q' => 'SECRET QUIZ QUESTION', 'options' => ['a', 'b'], 'answer' => 0, 'why' => '']]], 'version' => 1, 'published_at' => null]]);
+chk('training questions never reach the bot\'s or coach\'s knowledge', str_contains(S::knowledgeBlock($withQuiz), 'SECRET QUIZ') || str_contains(S::knowledgeBlock($withQuiz), 'Training questions'), false);
 chk('no Uganda defaults in the rules', stripos(S::rules() . $block, 'Kampala') === false && stripos(S::rules() . $block, 'UGX') === false, true);
 
 echo "\n" . ($fail === 0 ? "ALL PASS: $pass passed, 0 failed\n" : "FAILURES: $fail failed, $pass passed\n");

@@ -41,7 +41,7 @@ final class SalesKnowledgeCapability implements ObjectCapability
         $manage = SalesOwnership::canManage($ctx->user);
         $versions = $e ? SalesKnowledgeVersion::withoutGlobalScopes()->where('tenant_id', $ctx->tenantId())->where('entry_id', $e->id)->orderByDesc('version')->get() : collect();
         $live = $versions->firstWhere('status', 'published');
-        if (! $e || (! $manage && ! $live)) {
+        if (! $e || (! $manage && (! $live || in_array($e->topic, Knowledge::INTERNAL, true)))) {   // quiz answers: managers only
             return (new WorkspacePayload)->object(['type' => 'salesKnowledge', 'title' => 'Not found'])->meta(['capability' => 'salesKnowledge', 'error' => 'not_found']);
         }
         $pending = $manage ? $versions->first(fn ($v) => in_array($v->status, ['draft', 'approved'], true)) : null;
@@ -213,7 +213,7 @@ final class SalesKnowledgeCapability implements ObjectCapability
     /** Text box → [body, data] for SalesBrain, keeping a terms entry's heading. */
     private function content(SalesKnowledgeEntry $e, string $text): array
     {
-        [$body, $data] = Knowledge::fromText($e->topic, $text, $e->title);
+        [$body, $data] = Knowledge::fromText($e->topic, $text, $e->title, $e->key);
         if ($e->topic === 'terms') {
             $current = SalesKnowledgeVersion::withoutGlobalScopes()->where('entry_id', $e->id)->orderByDesc('version')->value('data');
             $heading = is_array($current) ? ($current['title'] ?? '') : (is_string($current) ? (json_decode($current, true)['title'] ?? '') : '');
@@ -230,6 +230,7 @@ final class SalesKnowledgeCapability implements ObjectCapability
         return match ($topic) {
             'terms'    => 'Terms, one per line: "Label: text"',
             'coverage' => 'Areas, one per line: "Name | starlink or fiber | covered, survey or none | place names, comma separated | note"',
+            'quiz'     => 'Questions, separated by a blank line: "Q: question", then one option per line — "* " before the correct one, "- " before the others — and optionally "Why: explanation"',
             default    => 'Content',
         };
     }

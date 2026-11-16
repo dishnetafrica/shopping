@@ -35,16 +35,20 @@ function nav(vertical, capKeys) {
   return el.innerHTML;
 }
 const hasBrain = html => html.indexOf('data-key="salesBrain"') !== -1;
-const staff = ['customers', 'leads', 'salesBrain', 'trips', 'chats'];
+const staff = ['customers', 'leads', 'salesBrain', 'salesTraining', 'trips', 'chats'];
+const hasTraining = html => html.indexOf('data-key="salesTraining"') !== -1;
 
 ok('Internet provider with permission sees Sales Brain', hasBrain(nav('isp', staff)));
 ok('…labelled "Sales Brain"', nav('isp', staff).indexOf('>Sales Brain<') !== -1);
 ok('…in the Customers group after Leads', /data-key="leads"[\s\S]*data-key="salesBrain"/.test(nav('isp', staff)));
 ok('Internet provider WITHOUT the permission does not', !hasBrain(nav('isp', ['chats'])));
+ok('Internet provider sees Sales Training after Sales Brain', /data-key="salesBrain"[\s\S]*data-key="salesTraining"/.test(nav('isp', staff)));
+ok('…labelled "Sales Training"', nav('isp', staff).indexOf('>Sales Training<') !== -1);
 for (const v of ['grocery', 'restaurant', 'snacks', 'manufacturer', 'solar', 'auto_parts', 'technology', 'travel']) {
   ok(v + ' business never sees Sales Brain', !hasBrain(nav(v, staff)));
+  ok(v + ' business never sees Sales Training', !hasTraining(nav(v, staff)));
 }
-ok('unknown business type does not see it (strict gate)', !hasBrain(nav('', staff)));
+ok('unknown business type does not see it (strict gate)', !hasBrain(nav('', staff)) && !hasTraining(nav('', staff)));
 ok('server sent no business type: not shown', !hasBrain(nav(null, staff)));
 ok('an Internet provider does not get Trips', nav('isp', staff).indexOf('data-key="trips"') === -1);
 ok('a travel agency still gets Trips', nav('travel', staff).indexOf('data-key="trips"') !== -1);

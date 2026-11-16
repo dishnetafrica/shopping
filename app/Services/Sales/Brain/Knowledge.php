@@ -32,7 +32,11 @@ final class Knowledge
         'payment'       => 'Payment procedures',
         'terms'         => 'Terms and conditions',
         'followup'      => 'Follow-up and closing',
+        'quiz'          => 'Training questions',
     ];
+
+    /** Internal topics: management and the training only — never the bot, the coach or sales staff's reading. */
+    public const INTERNAL = ['quiz'];
 
     public const STATUSES = ['draft', 'approved', 'published', 'retired', 'rejected'];
 
@@ -131,6 +135,14 @@ final class Knowledge
                 return ['ok' => false, 'error' => 'coverage_needs_areas'];
             }
             $data = ['areas' => $areas];
+        } elseif ($topic === 'quiz') {
+            // Training questions for one module (Phase 5); the module is the entry's key.
+            $v = \App\Services\Sales\Training\Assessment::validate((string) ($data['module'] ?? ''), (array) ($data['questions'] ?? []));
+            if (! $v['ok']) {
+                return $v;
+            }
+            $data = $v['data'];
+            $body = count($data['questions']) . ' question(s) for ' . \App\Services\Sales\Training\Assessment::MODULES[$data['module']]['label'];
         } else {
             if ($body === '') {
                 return ['ok' => false, 'error' => 'body_required'];
@@ -214,11 +226,12 @@ final class Knowledge
     }
 
     /** Screen text → [body, data] for a topic (terms and coverage are typed as lines; others are prose). */
-    public static function fromText(string $topic, string $text, string $title = ''): array
+    public static function fromText(string $topic, string $text, string $title = '', string $key = ''): array
     {
         return match ($topic) {
             'terms'    => [null, ['title' => $title, 'items' => self::parseTermsLines($text)]],
             'coverage' => [null, ['areas' => self::parseCoverageLines($text)]],
+            'quiz'     => [null, ['module' => self::key($key), 'questions' => \App\Services\Sales\Training\Assessment::parseQuestions($text)]],
             default    => [$text, null],
         };
     }
@@ -229,6 +242,7 @@ final class Knowledge
         return match ($topic) {
             'terms'    => self::termsLines((array) $data),
             'coverage' => self::coverageLines((array) $data),
+            'quiz'     => \App\Services\Sales\Training\Assessment::questionsText((array) ($data['questions'] ?? [])),
             default    => (string) $body,
         };
     }

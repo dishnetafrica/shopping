@@ -48,4 +48,9 @@ class SalesHarnessTest extends TestCase
     {
         $this->harness('sales_coach.php');
     }
+
+    public function test_training_is_weighted_with_an_80_percent_pass_and_questions_are_governed(): void
+    {
+        $this->harness('sales_training.php');
+    }
 }

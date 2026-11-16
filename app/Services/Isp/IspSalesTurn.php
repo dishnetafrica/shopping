@@ -76,6 +76,9 @@ class IspSalesTurn
         $coverage = [];
         $text = '';
         foreach ($published as $p) {
+            if (in_array($p['topic'], Knowledge::INTERNAL, true)) {
+                continue;                                   // training questions are never customer knowledge
+            }
             if ($p['topic'] === 'coverage') {
                 foreach ((array) ($p['data']['areas'] ?? []) as $a) {
                     $coverage[] = $a;
@@ -123,6 +126,9 @@ class IspSalesTurn
         $amounts = [];
         $places = [];
         foreach ($published as $p) {
+            if (in_array($p['topic'], Knowledge::INTERNAL, true)) {
+                continue;
+            }
             if ($p['topic'] === 'coverage') {
                 foreach ((array) ($p['data']['areas'] ?? []) as $a) {
                     if (($a['status'] ?? '') === 'covered') {
