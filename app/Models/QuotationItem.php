@@ -13,7 +13,7 @@ class QuotationItem extends Model
 
     protected $fillable = [
         'quotation_id', 'tenant_id', 'name', 'specs_summary', 'qty',
-        'unit_price', 'line_total', 'unit_label', 'image_url', 'matched',
+        'unit_price', 'line_total', 'unit_label', 'image_url', 'matched', 'billing',
     ];
 
     protected $casts = [

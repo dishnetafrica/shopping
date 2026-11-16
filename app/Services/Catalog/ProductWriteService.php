@@ -67,6 +67,25 @@ final class ProductWriteService
             $out['hidden'] = in_array(mb_strtolower(trim((string) ($d['hidden'] ?? ''))), ['1', 'yes', 'y', 'true', 'on', 'hidden'], true);
         }
 
+        // Internet-provider catalogue: paid once or monthly, which service, minimum contract. Only the
+        // listed values are kept; anything else is stored as "not set". Schema-guarded like the rest.
+        foreach (['billing' => \App\Services\Isp\IspQuote::BILLING, 'service_line' => \App\Services\Isp\IspQuote::SERVICE_LINES] as $col => $allowed) {
+            if (($onlyPresent && ! array_key_exists($col, $d)) || ! \Illuminate\Support\Facades\Schema::hasColumn('products', $col)) {
+                continue;
+            }
+            $v = mb_strtolower(trim((string) ($d[$col] ?? '')));
+            if ($v === '' && ! $onlyPresent) {
+                continue;
+            }
+            $out[$col] = in_array($v, $allowed, true) ? $v : null;
+        }
+        if ((! $onlyPresent || array_key_exists('min_term_months', $d)) && \Illuminate\Support\Facades\Schema::hasColumn('products', 'min_term_months')) {
+            $m = trim((string) ($d['min_term_months'] ?? ''));
+            if ($m !== '' || $onlyPresent) {
+                $out['min_term_months'] = ($m === '' || (int) $m <= 0) ? null : min(120, (int) $m);
+            }
+        }
+
         foreach (['brand', 'sku', 'barcode', 'description', 'unit_size', 'origin_country'] as $col) {
             if ($onlyPresent && ! array_key_exists($col, $d)) {
                 continue;

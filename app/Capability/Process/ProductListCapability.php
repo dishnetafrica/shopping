@@ -177,6 +177,9 @@ final class ProductListCapability implements ProcessCapability
     {
         $fromTable = Category::where('tenant_id', $tenantId)->pluck('name');
         $fromProducts = Product::where('tenant_id', $tenantId)->whereNotNull('category')->distinct()->pluck('category');
+        $tenant = \App\Models\Tenant::find($tenantId);
+        $isp = $tenant && \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP
+            && \Illuminate\Support\Facades\Schema::hasColumn('products', 'billing');
         $cats = $fromTable->merge($fromProducts)
             ->map(fn ($n) => trim((string) $n))
             ->filter(fn ($n) => $n !== '')
@@ -200,6 +203,10 @@ final class ProductListCapability implements ProcessCapability
             'barcode'        => 'text',
             'description'    => 'text',
             'hidden'         => \Illuminate\Support\Facades\Schema::hasColumn('products', 'hidden') ? 'enum:no,yes' : null,
+            // Internet-provider businesses only: one-time vs monthly, which service, minimum contract.
+            'billing'         => $isp ? 'enum:one_off,monthly' : null,
+            'service_line'    => $isp ? 'enum:starlink,fiber' : null,
+            'min_term_months' => $isp ? 'number' : null,
             'photos'         => 'gallery',
         ]);
     }
