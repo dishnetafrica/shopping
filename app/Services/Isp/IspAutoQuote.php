@@ -119,6 +119,8 @@ class IspAutoQuote
             return ['reply' => $after, 'sent' => true];
         } catch (\Throwable $e) {
             report($e);
+            // why, in the step log: a failure must be diagnosable, not guessed
+            QuotationPipeline::stage($tenant->id, $from, 'isp_failed', false, '', mb_substr(class_basename($e) . ': ' . $e->getMessage() . ' @' . basename($e->getFile()) . ':' . $e->getLine(), 0, 250));
 
             return ['reply' => $this->handoff($tenant, $from, $name, $clean, 'asked for a quotation — the automatic one failed, please send it'), 'sent' => false];
         }

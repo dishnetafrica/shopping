@@ -33,7 +33,7 @@ class IspAutoQuoteTest extends TestCase
 
     private function business(array $settings = []): Tenant
     {
-        $t = Tenant::factory()->create(['settings' => ['vertical' => 'isp', 'currency' => 'USD', 'timezone' => 'Africa/Juba', 'quote_validity_days' => 14] + $settings]);
+        $t = Tenant::factory()->create(['whatsapp_instance' => 'inst_' . uniqid(), 'whatsapp_driver' => 'evolution', 'settings' => ['vertical' => 'isp', 'currency' => 'USD', 'timezone' => 'Africa/Juba', 'quote_validity_days' => 14] + $settings]);
         app(TenantContext::class)->set($t->id);
         $w = app(ProductWriteService::class);
         $w->create($t, ['name' => 'Test Starlink Kit', 'price' => 400, 'stock' => 0, 'billing' => 'one_off', 'service_line' => 'starlink']);
@@ -60,6 +60,13 @@ class IspAutoQuoteTest extends TestCase
         };
     }
 
+    /** The quotation step log, so a failure says why. */
+    private function steps(Tenant $t): string
+    {
+        return \Illuminate\Support\Facades\DB::table('bot_events')->where('tenant_id', $t->id)->orderBy('id')->get(['stage', 'detail'])
+            ->map(fn ($e) => $e->stage . ': ' . $e->detail)->implode(' | ');
+    }
+
     private function capture(Tenant $t, object $gw, string $reply): array
     {
         $c = Conversation::firstOrCreate(['tenant_id' => $t->id, 'customer_phone' => self::CUSTOMER], ['instance' => $t->whatsapp_instance, 'state' => [], 'cart' => []]);
@@ -76,7 +83,7 @@ class IspAutoQuoteTest extends TestCase
 
         $r = $this->capture($t, $gw, "Sure — here is your quotation 📄\n<<QUOTE {\"items\":[{\"name\":\"Fiber Test 20 Mbps\",\"qty\":1}]}>>");
 
-        $this->assertTrue($r['sent']);
+        $this->assertTrue($r['sent'], $this->steps($t));
         $this->assertSame([self::CUSTOMER, 'Sure — here is your quotation 📄'], $gw->texts[0], 'the model\'s sentence first, without the hidden line');
         $this->assertCount(1, $gw->docs);
         $this->assertStringContainsString("One-time: USD 150.00\nMonthly: USD 45.00", $gw->docs[0][2], 'catalogue prices, one-time and monthly apart');
@@ -104,7 +111,7 @@ class IspAutoQuoteTest extends TestCase
 
         $r = $this->capture($t, $gw, "<<QUOTE {\"items\":[{\"name\":\"Test Starlink Kit\",\"qty\":1},{\"name\":\"Test Starlink Plan\",\"qty\":1}]}>>");
 
-        $this->assertTrue($r['sent'], 'kits are ordered for the customer; stock 0 does not stop a quotation');
+        $this->assertTrue($r['sent'], 'kits are ordered for the customer; stock 0 does not stop a quotation. ' . $this->steps($t));
         $this->assertStringContainsString("One-time: USD 400.00\nMonthly: USD 50.00", $gw->docs[0][2]);
         $this->assertSame([], $gw->texts, 'no empty sentence is sent');
     }
