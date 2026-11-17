@@ -22,10 +22,20 @@ class TenantSiteController extends Controller
 {
     public const PAGE = '(tutorials/)?[a-z0-9][a-z0-9\-]*\.(html|css)';
 
-    public function page(?string $shop = null, ?string $page = null)
+    /** /{page} on the business's own domain. (Laravel passes route parameters by position, hence two entry points.) */
+    public function onDomain(string $page)
     {
-        // Custom domain → only {page} is bound ($shop null); platform host → /{shop}/{page}.
-        $page = (string) $page;
+        return $this->serve(null, $page);
+    }
+
+    /** /{shop}/{page} on the platform host. */
+    public function forShop(string $shop, string $page)
+    {
+        return $this->serve($shop, $page);
+    }
+
+    private function serve(?string $shop, string $page)
+    {
         [$tenant, $base] = app(StorefrontController::class)->resolveShop($shop);
 
         $dir = self::bundleDir($tenant);

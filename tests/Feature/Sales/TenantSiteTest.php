@@ -73,6 +73,24 @@ class TenantSiteTest extends TestCase
         $this->assertStringEndsWith('/#plans', (string) $held->headers->get('Location'));
     }
 
+    /** Codex review on #157: old product / category links and the sitemap must not lead back to a basket. */
+    public function test_product_and_category_links_go_to_the_plans_page_and_the_sitemap_lists_the_site(): void
+    {
+        $t = $this->dishnet();
+        $s = '/' . $t->slug;
+        $this->get("$s/p/starlink-mini-12")->assertStatus(301)->assertRedirect("$s#plans");
+        $this->get("$s/c/starlink-hardware")->assertStatus(301)->assertRedirect("$s#plans");
+
+        $t->custom_domain = 'dishnet-site.test';
+        $t->save();
+        $xml = $this->get('http://dishnet-site.test/sitemap.xml')->assertOk()->getContent();
+        $this->assertStringContainsString('/about.html</loc>', $xml);
+        $this->assertStringContainsString('/tutorials/change-wifi-password.html</loc>', $xml);
+        $this->assertStringNotContainsString('/fiber.html', $xml, 'a held page is not advertised');
+        $this->assertStringNotContainsString('/p/', $xml);
+        $this->assertStringNotContainsString('/c/', $xml);
+    }
+
     public function test_a_business_without_a_site_bundle_has_no_such_pages(): void
     {
         $t = Tenant::factory()->create(['settings' => ['vertical' => 'grocery']]);

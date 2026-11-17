@@ -149,6 +149,9 @@ class StorefrontController extends Controller
         // On a custom domain the route has one segment; on the platform it is /{shop}/p/{slugId}.
         if ($slugId === null) { $slugId = (string) $shop; $shop = null; }
         [$tenant, $base] = $this->resolveShop($shop);
+        if ($this->ispEnabled($tenant)) {                       // ISP: no product pages with a basket — the plans page
+            return redirect(($base === '' ? '/' : $base) . '#plans', 301);
+        }
 
         // trailing digits are the id — "sugar-2kg-kakira-412" → 412
         $id = preg_match('/(\d+)$/', (string) $slugId, $m) ? (int) $m[1] : 0;
@@ -2401,6 +2404,9 @@ class StorefrontController extends Controller
             ? Tenant::byCustomDomain(request()->getHost())
             : Tenant::where('slug', $slugOrShop)->first();
         abort_unless($tenant, 404);
+        if ($this->ispEnabled($tenant)) {                       // ISP: no category pages with a basket — the plans page
+            return redirect(($slug === null ? '/' : '/' . strtolower($slugOrShop)) . '#plans', 301);
+        }
         $want = $slug ?? $slugOrShop;
         foreach (array_keys($this->liveCategories($tenant)) as $cat) {
             if (\Illuminate\Support\Str::slug($cat) === $want) {
@@ -2417,6 +2423,22 @@ class StorefrontController extends Controller
         $tenant = Tenant::byCustomDomain(request()->getHost());
         abort_unless($tenant, 404);
         $urls = ['<url><loc>'.e(url('/')).'</loc><changefreq>daily</changefreq></url>'];
+        if ($this->ispEnabled($tenant)) {
+            // ISP: the plans page plus the business's own website pages served as-is (never held ones,
+            // never product or category pages — those redirect to the plans page).
+            if ($dir = TenantSiteController::bundleDir($tenant)) {
+                $hold = (array) (TenantSiteController::manifest($dir)['hold'] ?? []);
+                foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $f) {
+                    $rel = ltrim(str_replace('\\', '/', substr($f->getPathname(), strlen($dir))), '/');
+                    if (str_ends_with($rel, '.html') && ! array_key_exists($rel, $hold) && preg_match('#^' . TenantSiteController::PAGE . '$#', $rel)) {
+                        $urls[] = '<url><loc>'.e(url('/' . $rel)).'</loc><changefreq>monthly</changefreq></url>';
+                    }
+                }
+            }
+
+            return response('<?xml version="1.0" encoding="UTF-8"?>'."\n".'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'.implode('', $urls).'</urlset>', 200)
+                ->header('Content-Type', 'application/xml; charset=utf-8');
+        }
         foreach (array_keys($this->liveCategories($tenant)) as $cat) {
             $urls[] = '<url><loc>'.e(url('/c/'.\Illuminate\Support\Str::slug($cat))).'</loc><changefreq>weekly</changefreq></url>';
         }
