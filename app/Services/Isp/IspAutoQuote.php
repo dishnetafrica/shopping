@@ -32,6 +32,8 @@ class IspAutoQuote
 {
     public const HANDOFF = 'Your salesperson will prepare your quotation and send it to you shortly.';
 
+    public const LARGE = 'For a setup of about %d users you need a business plan, which your salesperson prices for you. They will prepare a custom quotation and contact you shortly.';
+
     public function __construct(private QuotationService $quotes, private OrderCalculator $calc, private SalesOwnership $owners) {}
 
     public static function enabled(Tenant $tenant): bool
@@ -49,7 +51,9 @@ class IspAutoQuote
         $end = strpos($reply, '>>', $pos);
         $block = $end === false ? substr($reply, $pos) : substr($reply, $pos, $end + 2 - $pos);
         $clean = trim(substr($reply, 0, $pos) . ($end === false ? '' : substr($reply, $end + 2)));
-        $name = trim((string) ($convo->customer_name ?? ''));
+        // The name the customer gave in the chat travels in the hidden line (live, 17 Nov 2026: "My name
+        // is peter" was said, and the quotation was billed to a bare phone number).
+        $name = trim((string) ($convo->customer_name ?? '')) ?: IspQuotePlan::customerName($block);
 
         try {
             $catalogue = $this->catalogue($tenant);
@@ -59,6 +63,19 @@ class IspAutoQuote
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', $plan['reason'] . ': ' . mb_substr($asked, 0, 200));
 
                 return ['reply' => $this->handoff($tenant, $from, $name, $clean, "asked for a quotation ({$asked}) — prepare it ({$plan['reason']})"), 'sent' => false];
+            }
+            // A large setup is a custom (Priority) job for the salesperson, whatever the model chose.
+            // Live, 17 Nov 2026: "not like 250 people" was quoted the Residential plan (published for about
+            // 50 users). Read from the customer's own messages, not from the model.
+            // Only a Starlink plan has this ceiling (Residential "up to about 50 active users"; Priority above,
+            // priced by Sales). Fiber's published guidance has no upper limit.
+            $starlinkPlan = (bool) array_filter($plan['lines'], fn ($l) => ($catalogue[$l['name']]['service_line'] ?? null) === 'starlink' && ($catalogue[$l['name']]['billing'] ?? null) === 'monthly');
+            $users = $starlinkPlan ? IspQuotePlan::users($this->customerTexts($tenant, $from)) : 0;
+            $maxUsers = (int) $tenant->setting('isp_auto_quote_max_users', 50);
+            if ($maxUsers > 0 && $users >= $maxUsers) {
+                QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', "large setup: {$users} users");
+
+                return ['reply' => $this->handoff($tenant, $from, $name, $clean, "has a large setup (about {$users} users) — prepare a custom (Priority) quotation", sprintf(self::LARGE, $users)), 'sent' => false];
             }
             if (! $this->quotes->available() || ! method_exists($gateway, 'sendDocument')) {
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', 'no PDF engine / gateway cannot send documents');
@@ -75,7 +92,11 @@ class IspAutoQuote
                 return ['reply' => $this->handoff($tenant, $from, $name, $clean, 'asked for a quotation — please prepare it'), 'sent' => false];
             }
 
-            if ($again = $this->recent($tenant, $from, $quote)) {
+            // The name first, so a reused quotation still leaves it on the customer's record; a recent
+            // quotation without a name is not reused once the customer has given one (Codex on #163).
+            $this->rememberName($tenant, $from, $name);
+            $again = $this->recent($tenant, $from, $quote);
+            if ($again && ($name === '' || trim((string) $again->customer_name) !== '')) {
                 BotTrace::log($tenant->id, 'isp', $from, 'isp_quote_reused', (string) $again->quote_no);
 
                 return ['reply' => trim($clean . "\n\nThat's your quotation *{$again->quote_no}* from earlier — the same items, still valid \u{1F44D}"), 'sent' => false];
@@ -83,6 +104,7 @@ class IspAutoQuote
 
             // The customer's salesperson owns the quotation (prepared-by on the PDF) and is alerted.
             $owner = $this->owners->ownerForEnquiry($tenant, $from, $name !== '' ? $name : null);
+            $this->rememberName($tenant, $from, $name);
             $doc = $this->quotes->generate($tenant, $from, $name, $quote);
             if (! $doc) {
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', 'generate() returned null');
@@ -96,7 +118,8 @@ class IspAutoQuote
             $dec = \App\Services\Pricing::decimalsForCurrency($cur);
             $days = ((int) $tenant->setting('quote_validity_days', 14)) ?: 14;
             $caption = self::caption((string) $doc['no'], $cur, (float) $doc['total'], (float) ($doc['monthly_total'] ?? 0), $days, $dec);
-            $after = self::afterText($owner?->name, $owner?->phone);
+            $opens = IspSalesTurn::opensAt($tenant);
+            $after = self::afterText($owner?->name, $owner?->phone, $opens);
 
             if ($clean !== '') {
                 $gateway->sendText((string) $tenant->whatsapp_instance, $from, $clean);
@@ -116,13 +139,13 @@ class IspAutoQuote
                 QuotationPipeline::stage($tenant->id, $from, 'isp_not_delivered', false, (string) $doc['no'], mb_substr(json_encode($res) ?: '', 0, 200));
                 $this->alert($tenant, $owner, "\u{26A0}\u{FE0F} Quotation {$doc['no']} for " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} was saved but WhatsApp did not deliver the PDF — please send it from Quotations.");
 
-                return ['reply' => self::HANDOFF, 'sent' => false];
+                return ['reply' => self::timed(self::HANDOFF, IspSalesTurn::opensAt($tenant)), 'sent' => false];
             }
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
 
             $this->alert($tenant, $owner, "\u{1F4C4} *Quotation {$doc['no']} sent* by the bot to " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)}\n"
                 . implode("\n", array_map(fn ($l) => '• ' . $l['qty'] . ' x ' . $l['name'], $plan['lines'])) . "\n"
-                . str_replace("\n", ' • ', $caption) . "\nCall them today: confirm coverage at their location and book the installation.");
+                . str_replace("\n", ' • ', $caption) . "\n" . ($opens !== null ? "\u{1F319} Sent after office hours: call them when the office opens ({$opens})" : 'Call them today') . ': confirm coverage at their location and book the installation.');
 
             return ['reply' => $after, 'sent' => true];
         } catch (\Throwable $e) {
@@ -164,14 +187,26 @@ class IspAutoQuote
     }
 
     /** PURE. What the customer reads after the PDF: who will call them, and how to go ahead. */
-    public static function afterText(?string $salesName, ?string $salesPhone): string
+    public static function afterText(?string $salesName, ?string $salesPhone, ?string $opens = null): string
     {
         $digits = preg_replace('/[^0-9]/', '', (string) $salesPhone) ?? '';
         $who = trim((string) $salesName) !== ''
             ? '*' . trim((string) $salesName) . '*' . ($digits !== '' ? ' (+' . $digits . ')' : '') . ', your salesperson,'
             : 'Your salesperson';
 
-        return "Here is your quotation \u{1F446}\n\n{$who} will call you to confirm coverage at your exact location and book the installation.\n\nIf you're happy with it, just reply *YES* and we'll take it from there. Any question about it, ask me here.";
+        $when = $opens !== null ? " when our office opens ({$opens})" : '';
+
+        return "Here is your quotation \u{1F446}\n\n{$who} will call you{$when} to confirm coverage at your exact location and book the installation.\n\nIf you're happy with it, just reply *YES* and we'll take it from there. Any question about it, ask me here.";
+    }
+
+    /**
+     * PURE. A hand-off line, timed: outside office hours "shortly" becomes "when our office opens
+     * (tomorrow at 9:00 AM)" (DishNet, 17 Nov 2026: "if the bot replied at night, tell them our team
+     * member will call in the morning during office hours").
+     */
+    public static function timed(string $line, ?string $opens): string
+    {
+        return $opens === null ? $line : str_replace('shortly', "when our office opens ({$opens})", $line);
     }
 
     /** Visible, priced products by exact name, with how each is billed and which service it belongs to. */
@@ -215,17 +250,51 @@ class IspAutoQuote
     }
 
     /** No automatic quotation: tell the customer plainly and give the salesperson the request. */
-    private function handoff(Tenant $tenant, string $from, string $name, string $clean, string $what): string
+    private function handoff(Tenant $tenant, string $from, string $name, string $clean, string $what, string $line = self::HANDOFF): string
     {
         $owner = null;
         try {
             $owner = $this->owners->ownerForEnquiry($tenant, $from, $name !== '' ? $name : null);
+            $this->rememberName($tenant, $from, $name);
         } catch (\Throwable $e) {
             report($e);
         }
-        $this->alert($tenant, $owner, "\u{1F4DD} " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} {$what}.");
+        $opens = IspSalesTurn::opensAt($tenant);
+        $this->alert($tenant, $owner, "\u{1F4DD} " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} {$what}."
+            . ($opens !== null ? "\n\u{1F319} Sent after office hours: contact them when the office opens ({$opens})." : ''));
 
-        return trim($clean . "\n\n" . self::HANDOFF);
+        return trim(self::withoutQuoteClaims($clean) . "\n\n" . self::timed($line, $opens));
+    }
+
+    /** PURE. The model's text minus any sentence saying a quotation is here or on its way (none is). */
+    public static function withoutQuoteClaims(string $text): string
+    {
+        $kept = [];
+        foreach (preg_split('/(?<=[.!?\x{1F4C4}])\s+/u', trim($text)) ?: [] as $sentence) {
+            if (preg_match('/\b(here is|here\'s|sending|attached|i will prepare|i\'ll prepare|preparing)\b.{0,40}\bquotation\b/iu', $sentence)) {
+                continue;
+            }
+            $kept[] = $sentence;
+        }
+
+        return trim(implode(' ', $kept));
+    }
+
+    /** The customer's own recent messages (for what they said about their setup). */
+    private function customerTexts(Tenant $tenant, string $from): array
+    {
+        return \App\Models\Message::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)
+            ->where('direction', 'in')->orderByDesc('id')->limit(20)->pluck('body')->map(fn ($b) => (string) $b)->all();
+    }
+
+    /** Keep the name the customer gave on their record when it has none yet. */
+    private function rememberName(Tenant $tenant, string $from, string $name): void
+    {
+        if ($name === '') {
+            return;
+        }
+        \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('phone', $this->digits($from))
+            ->where(fn ($q) => $q->whereNull('name')->orWhere('name', ''))->update(['name' => mb_substr($name, 0, 120)]);
     }
 
     private function alert(Tenant $tenant, ?\App\Models\User $owner, string $text): void

@@ -5,6 +5,7 @@
 //   php qa/isp_autoquote.php
 require __DIR__ . '/../app/Services/Travel/Conversation/ReplyGuard.php';
 require __DIR__ . '/../app/Services/Sales/Brain/Knowledge.php';
+require __DIR__ . '/../app/Services/Bot/TimeContext.php';
 require __DIR__ . '/../app/Services/Isp/IspQuotePlan.php';
 require __DIR__ . '/../app/Services/Isp/IspSalesTurn.php';
 require __DIR__ . '/../app/Services/Isp/IspAutoQuote.php';
@@ -87,11 +88,59 @@ chk('Evolution refused', A::delivered(['status' => 400, 'error' => 'Bad Request'
 chk('the gateway flagged a failed send', A::delivered(['_ok' => false, '_status' => 500]), false);
 chk('nothing back', A::delivered(null), false);
 
+echo "== what the customer said about their setup (decorative letters included)\n";
+chk('decorative Unicode letters read as plain text', P::plain("\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E}"), 'Not like 250 people');
+chk('…also without the intl extension', P::plainByHand("\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E} \u{1D7F8}\u{1D7F6}"), 'Not like 250 people 20');
+chk('"Not like 250 people" in decorative letters = 250 users', P::users(["\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E}"]), 250);
+chk('"3o users" typed with a letter o = 30', P::users(['it can hold 3o users']), 30);
+chk('spelled-out counts (Codex on #163): "fifty people", "two hundred and fifty users", "a hundred students", "forty five devices"', [P::users(['fifty people']), P::users(['about two hundred and fifty users']), P::users(['a hundred students']), P::users(['forty five devices'])], [50, 250, 100, 45]);
+chk('…"a few people", "a kit and a dish" stay uncounted', [P::users(['a few people']), P::wordsToDigits('i have a kit and a dish')], [0, 'i have a kit and a dish']);
+chk('the largest number across messages', P::users(['for 20+ users', 'actually about 300 active users', 'for 1,000 students next year']), 1000);
+chk('"users: 60" = 60', P::users(['users: 60']), 60);
+chk('speeds, money and plain numbers are not users', P::users(['Fiber 50 Mbps please', '$250 budget', 'I have 2 kits']), 0);
+chk('the customer\'s name from the hidden line', [P::customerName('<<QUOTE {"customer_name":"peter","items":[]}>>'), P::customerName('<<QUOTE {"customer_name":"mary  akech","items":[]}>>')], ['Peter', 'Mary Akech']);
+chk('…not a phone number or nothing', [P::customerName('<<QUOTE {"customer_name":"+211 92","items":[]}>>'), P::customerName('<<QUOTE {"items":[]}>>')], ['', '']);
+
+echo "== when no quotation is sent, the reply does not claim one\n";
+chk('"here is your quotation" is removed, the rest kept', A::withoutQuoteClaims("Thank you, Peter! I will prepare your quotation for the kit and plan. Sure — here is your quotation \u{1F4C4}"), 'Thank you, Peter!');
+chk('ordinary sentences stay', A::withoutQuoteClaims('Great choice. Which area are you in?'), 'Great choice. Which area are you in?');
+chk('the large-setup line names the size, no amount', [sprintf(A::LARGE, 250), preg_match('/\$|USD/', A::LARGE)], ['For a setup of about 250 users you need a business plan, which your salesperson prices for you. They will prepare a custom quotation and contact you shortly.', 0]);
+
+echo "== the bot promised a follow-up (someone must be told)\n";
+chk('live: "I will confirm the prices … with the team. Please hold on"', S::promisesFollowUp('I will confirm the prices and availability for the MikroTik router and any necessary cables with the team. Please hold on for a moment.'), true);
+chk('"your salesperson will confirm the exact price" (the guard\'s own note)', S::promisesFollowUp('Your salesperson will confirm the exact price in a written quotation.'), true);
+chk('"we\'ll get back to you"', S::promisesFollowUp("Thanks! We'll get back to you shortly."), true);
+chk('a question or an answer is not a promise', [S::promisesFollowUp('Which area are you in?'), S::promisesFollowUp('The Starlink Standard kit is a one-time charge.')], [false, false]);
+
+echo "== outside office hours: the call is promised for when the office opens\n";
+$T = App\Services\Bot\TimeContext::class;
+$week = $T::parseHours('Mon–Sat 9 AM – 6 PM (closed Sundays)');
+chk('DishNet\'s published hours are understood (the bracketed "closed Sundays" no longer hides them)', [$week['mon'] ?? null, $week['sat'] ?? null, $week['sun'] ?? null], [[[540, 1080]], [[540, 1080]], []]);
+$z = new DateTimeZone('Africa/Juba');
+$at = fn (string $d) => new DateTimeImmutable($d, $z);
+$next = fn (string $d) => ($n = $T::nextOpen($week, $at($d))) ? $n->format('D H:i') : null;
+chk('Tuesday 22:30 → Wednesday 9:00', $next('2026-11-17 22:30'), 'Wed 09:00');
+chk('Wednesday 07:10 → the same morning, 9:00', $next('2026-11-18 07:10'), 'Wed 09:00');
+chk('open (Wednesday noon) → now', $next('2026-11-18 12:00'), 'Wed 12:00');
+chk('Saturday 19:00 and Sunday → Monday 9:00', [$next('2026-11-21 19:00'), $next('2026-11-22 10:00')], ['Mon 09:00', 'Mon 09:00']);
+chk('unknown hours → nothing is said about timing', $T::nextOpen($T::parseHours(''), $at('2026-11-17 22:30')), null);
+chk('the customer reads "tomorrow at 9:00 AM" / "today at 9:00 AM" / "on Monday at 9:00 AM"', [S::opensPhrase($at('2026-11-18 09:00'), $at('2026-11-17 22:30')), S::opensPhrase($at('2026-11-18 09:00'), $at('2026-11-18 07:10')), S::opensPhrase($at('2026-11-23 09:00'), $at('2026-11-21 19:00'))], ['tomorrow at 9:00 AM', 'today at 9:00 AM', 'on Monday at 9:00 AM']);
+chk('the model is told the next opening when closed', str_contains($T::block($at('2026-11-17 22:30'), 'Africa/Juba', 'Mon–Sat 9 AM – 6 PM (closed Sundays)'), '- Next opening: Wednesday, 18 November, 9:00 AM'), true);
+chk('…and not when open', str_contains($T::block($at('2026-11-18 12:00'), 'Africa/Juba', 'Mon–Sat 9 AM – 6 PM'), 'Next opening'), false);
+chk('after the PDF at night: "will call you when our office opens (tomorrow at 9:00 AM)"', str_contains(A::afterText('Justus', null, 'tomorrow at 9:00 AM'), '*Justus*, your salesperson, will call you when our office opens (tomorrow at 9:00 AM) to confirm coverage'), true);
+chk('…in office hours, unchanged', str_contains(A::afterText('Justus', null), 'your salesperson, will call you to confirm coverage'), true);
+chk('hand-off at night: "shortly" becomes the opening time', A::timed(A::HANDOFF, 'tomorrow at 9:00 AM'), 'Your salesperson will prepare your quotation and send it to you when our office opens (tomorrow at 9:00 AM).');
+chk('…in office hours, unchanged', A::timed(A::HANDOFF, null), A::HANDOFF);
+chk('the rules tell the model not to promise a call now when closed', str_contains(S::rules(), 'when CURRENT TIME says "Open right now: NO", never say anyone will call'), true);
+
 echo "== the rules the model is given\n";
 $r = S::quoteRules();
 chk('the model writes the hidden line, never the quotation', [str_contains($r, '<<QUOTE'), str_contains($r, 'Never type a quotation')], [true, true]);
 chk('exact catalogue names; Starlink kit + plan; Fiber installation automatic', [str_contains($r, 'EXACT names from PRODUCTS'), str_contains($r, 'kit AND the monthly plan'), str_contains($r, 'installation is added automatically')], [true, true, true]);
 chk('large and custom jobs go to the salesperson', str_contains($r, 'more than 5 kits'), true);
+chk('50+ users on Starlink: no Residential, a Priority quotation from the salesperson', str_contains($r, 'do NOT recommend the Residential plan'), true);
+chk('the hidden line carries the customer\'s name', str_contains($r, 'customer_name'), true);
+chk('accessories: price what is in PRODUCTS, salesperson quotes the rest, never "I will check"', [str_contains($r, 'ACCESSORIES'), str_contains($r, 'never say you will check yourself')], [true, true]);
 chk('no discount on a price objection', str_contains($r, 'do not offer a discount'), true);
 chk('no amounts and no Uganda defaults in the rules', [preg_match('/\$\s?\d/', $r), stripos($r, 'UGX'), stripos($r, 'Kampala')], [0, false, false]);
 chk('the general rules no longer say "salesperson takes it from here" (that line is used only when quotations are off)', str_contains(S::rules(), 'take it from here'), false);
