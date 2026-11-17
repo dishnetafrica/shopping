@@ -56,7 +56,7 @@ class IspWinbackTest extends TestCase
             $this->rec('211900000006', 5, false, 'price?'),
             $this->rec('211900000006', 4, false, 'not interested, stop'),
             $this->rec('211900000007', 15, false, 'my starlink has a red light'),
-            // WhatsApp hid this customer's number (an @lid chat, no number from Evolution): counted, not imported
+            // WhatsApp hid this customer's number (an @lid chat, no number from Evolution): imported and flagged: replies to such chats arrive (live, 16 Nov 2026)
             ['key' => ['remoteJid' => '123456789012345@lid', 'fromMe' => false, 'id' => 'LID1'], 'pushName' => 'Deng', 'messageTimestamp' => time() - 25 * 86400, 'message' => ['conversation' => 'fiber price for my office please']],
             // WhatsApp's own account (the "busiest season" tips): never a customer
             ['key' => ['remoteJid' => '0@s.whatsapp.net', 'fromMe' => false, 'id' => 'WA0'], 'pushName' => '0', 'messageTimestamp' => time() - 9 * 86400, 'message' => ['conversation' => '*Get ready for the busiest season of the year*']],
@@ -78,8 +78,8 @@ class IspWinbackTest extends TestCase
 
         $this->artisan('isp:winback', ['tenant' => $t->id])
             ->expectsOutputToContain('[DRY RUN')
-            ->expectsOutputToContain('To chase: 4')
-            ->expectsOutputToContain('Not imported: past customers whose number WhatsApp hides (1 warm)')
+            ->expectsOutputToContain('To chase: 5')
+            ->expectsOutputToContain('WhatsApp hides the phone number (message from the inbox; cannot be called): 1')
             ->expectsOutputToContain('211900000005')                     // received the old bot's staff alerts
             ->assertSuccessful();
 
@@ -96,8 +96,10 @@ class IspWinbackTest extends TestCase
         $this->artisan('isp:winback', ['tenant' => $t->id, '--apply' => true, '--per-day' => 1])->assertSuccessful();
 
         $leads = Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->get()->keyBy('customer_phone');
-        $this->assertEqualsCanonicalizing(['211900000001', '211900000002', '211900000003', '211900000007'], $leads->keys()->all(),
-            'scam-only, staff-alert, muted and "stop" numbers, WhatsApp\'s own account and a number WhatsApp hides are left out');
+        $this->assertEqualsCanonicalizing(['211900000001', '211900000002', '211900000003', '211900000007', '123456789012345'], $leads->keys()->all(),
+            'scam-only, staff-alert, muted and "stop" numbers and WhatsApp\'s own account are left out');
+        $this->assertStringContainsString('cannot be called', (string) $leads['123456789012345']->notes, 'a hidden number is flagged for the salesperson');
+        $this->assertStringNotContainsString('cannot be called', (string) $leads['211900000001']->notes);
         $mary = $leads['211900000001'];
         $this->assertSame(['winback', 'winback', 'Starlink', 'Mary Akech'], [$mary->source, $mary->tag, $mary->interest, $mary->customer_name]);
         $this->assertNotNull($mary->owner_user_id, 'given to a salesperson');
@@ -121,7 +123,7 @@ class IspWinbackTest extends TestCase
         Bus::assertNotDispatched(NotifyOwner::class, fn ($j) => str_starts_with((string) $j->to, '2119000'));
 
         $this->artisan('isp:winback', ['tenant' => $t->id, '--apply' => true])->assertSuccessful();
-        $this->assertSame(4, Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->count(), 're-running adds nothing');
+        $this->assertSame(5, Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->count(), 're-running adds nothing');
     }
 
     public function test_only_an_internet_provider(): void
