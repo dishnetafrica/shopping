@@ -1884,11 +1884,25 @@ class AiBrain
     /** Send + log one bot message. */
     private function say(Tenant $tenant, string $from, WhatsAppGateway $gateway, string $text, array $meta = ['via' => 'ai']): void
     {
+        // Missed-reply recovery (opt-in): a holding message WhatsApp refused or timed out on is NOT
+        // delivered — fail the turn so the chat stays unread and bot:recover-missed answers it later.
+        $recover = (bool) $tenant->setting('bot_recover_missed', false);
+        $failed = null;
         try {
-            $gateway->sendText($tenant->whatsapp_instance, $from, $text);
-            MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $text, null, null, $meta);
+            $sent = $gateway->sendText($tenant->whatsapp_instance, $from, $text);
+            if ($recover && is_array($sent) && ($sent['_ok'] ?? true) === false) {
+                $failed = 'WhatsApp did not accept the reply (HTTP ' . ($sent['_status'] ?? '?') . ')';
+            } else {
+                MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $text, null, null, $meta);
+            }
         } catch (\Throwable $e) {
             Log::warning('AiBrain say failed: ' . $e->getMessage());
+            if ($recover) {
+                $failed = $e->getMessage();
+            }
+        }
+        if ($failed !== null) {
+            throw new \RuntimeException($failed);
         }
     }
 

@@ -43,24 +43,18 @@ class BotRecoverMissedCommand extends Command
             if (! (bool) $t->setting('bot_recover_missed', false) || (string) $t->setting('bot_mode', 'ai') !== 'ai') {
                 continue;
             }
-            $instance = (string) $t->whatsapp_instance;
-            if (($t->whatsapp_driver ?: 'evolution') === 'evolution') {
-                $state = ($instance !== '' && $evo->configured()) ? $evo->state($instance) : 'missing';
-                if ($state !== 'open') {
-                    $this->line("tenant {$t->id}: WhatsApp is {$state} — will try again next run");
-                    continue;
-                }
-            }
             $ctx->set($t->id);
-            $this->recoverTenant($t, $wa, $dry);
+            $this->recoverTenant($t, $wa, $evo, $dry);
             $ctx->reset();
         }
 
         return self::SUCCESS;
     }
 
-    private function recoverTenant(Tenant $t, WhatsAppManager $wa, bool $dry): void
+    private function recoverTenant(Tenant $t, WhatsAppManager $wa, EvolutionAdmin $evo, bool $dry): void
     {
+        $evolution = ($t->whatsapp_driver ?: 'evolution') === 'evolution';
+        $states = [];                                           // instance => state, asked once per run
         $cfg = [
             'wait_min' => (int) $t->setting('bot_recover_wait_min', MissedReply::DEFAULTS['wait_min']),
             'window_min' => (int) $t->setting('bot_recover_window_min', MissedReply::DEFAULTS['window_min']),
@@ -82,13 +76,20 @@ class BotRecoverMissedCommand extends Command
 
         foreach ($chats as $c) {
             $from = preg_replace('/[^0-9]/', '', (string) $c->customer_phone);
-            $text = (string) DB::table('messages')->where('tenant_id', $t->id)->where('customer_phone', $c->customer_phone)
-                ->where('direction', 'in')->where('sender', 'customer')->orderByDesc('id')->value('body');
+            // The customer's latest words in THIS chat (same number they wrote to — a customer may write to two).
+            $lastIn = DB::table('messages')->where('tenant_id', $t->id)->where('customer_phone', $c->customer_phone)
+                ->where('instance', $c->instance)->where('direction', 'in')->where('sender', 'customer')->orderByDesc('id')
+                ->first(['body', 'wa_message_id']);
+            $text = (string) ($lastIn->body ?? '');
+            $waId = (string) ($lastIn->wa_message_id ?? '');
             $st = is_array($c->state) ? $c->state : [];
             $mr = is_array($st['missed_reply'] ?? null) ? $st['missed_reply'] : [];
             $in = $c->last_inbound_at ? $c->last_inbound_at->getTimestamp() : 0;
-            $events = DB::table('bot_events')->where('tenant_id', $t->id)->where('phone', $from)
-                ->where('created_at', '>=', $c->last_inbound_at)->orderBy('id')->limit(200)->get(['stage', 'detail'])
+            // The bot's steps for THAT message (its WhatsApp id is the step log's trace); without an id, this
+            // phone's steps since the message — the step log does not record which number it came in on.
+            $eq = DB::table('bot_events')->where('tenant_id', $t->id);
+            $waId !== '' ? $eq->where('trace', $waId) : $eq->where('phone', $from)->where('created_at', '>=', $c->last_inbound_at);
+            $events = $eq->orderBy('id')->limit(200)->get(['stage', 'detail'])
                 ->map(fn ($e) => ['stage' => (string) $e->stage, 'detail' => $e->detail])->all();
 
             $why = MissedReply::skipReason([
@@ -102,8 +103,18 @@ class BotRecoverMissedCommand extends Command
                 $this->line("  {$from}: skip — {$why}");
                 continue;
             }
+            // Reply from the same number a normal reply would use (the one they wrote to, or the connected
+            // fallback while the primary is down) — and only once that number is connected again.
+            $replyInst = ProcessIncomingMessage::replyInstance($t, (string) $c->instance);
+            if ($evolution) {
+                $states[$replyInst] ??= ($replyInst !== '' && $evo->configured()) ? $evo->state($replyInst) : 'missing';
+                if ($states[$replyInst] !== 'open') {
+                    $this->line("  {$from}: wait — WhatsApp {$replyInst} is {$states[$replyInst]}");
+                    continue;
+                }
+            }
             if ($dry) {
-                $this->line("  {$from}: WOULD reply late to \"" . mb_substr($text, 0, 60) . '"');
+                $this->line("  {$from}: WOULD reply late from {$replyInst} to \"" . mb_substr($text, 0, 60) . '"');
                 continue;
             }
 
@@ -119,14 +130,17 @@ class BotRecoverMissedCommand extends Command
                 if ((int) $c->unread <= 0 || $c->agent_active) {
                     continue;                                   // answered while we were looking
                 }
-                BotTrace::log($t->id, 'recover', $from, 'missed_reply_try', mb_substr($text, 0, 120));
-                app(AiBrain::class)->handle($t, $c, $from, $text, $wa->forTenant($t), ['late' => true]);
+                $trace = $waId !== '' ? $waId : 'recover';
+                BotTrace::log($t->id, $trace, $from, 'missed_reply_try', mb_substr($text, 0, 120));
+                $sendAs = clone $t;                                 // in memory only, never saved — as the message job does
+                $sendAs->whatsapp_instance = $replyInst;
+                app(AiBrain::class)->handle($sendAs, $c, $from, $text, $wa->forTenant($sendAs), ['late' => true]);
                 $this->mark($c, $in, (int) ($mr['inbound'] ?? 0) === $in ? (int) ($mr['tries'] ?? 0) + 1 : 1, true);
-                BotTrace::log($t->id, 'recover', $from, 'missed_replied', null);
+                BotTrace::log($t->id, $trace, $from, 'missed_replied', null);
                 $this->info("  {$from}: replied late");
             } catch (\Throwable $e) {
                 $this->mark($c, $in, (int) ($mr['inbound'] ?? 0) === $in ? (int) ($mr['tries'] ?? 0) + 1 : 1, false);
-                BotTrace::log($t->id, 'recover', $from, 'missed_reply_failed', mb_substr($e->getMessage(), 0, 200));
+                BotTrace::log($t->id, $waId !== '' ? $waId : 'recover', $from, 'missed_reply_failed', mb_substr($e->getMessage(), 0, 200));
                 $this->warn("  {$from}: failed — " . mb_substr($e->getMessage(), 0, 120));
             } finally {
                 $lock->release();
