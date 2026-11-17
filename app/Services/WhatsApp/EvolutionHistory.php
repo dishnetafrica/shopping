@@ -6,10 +6,15 @@ namespace App\Services\WhatsApp;
  * Reads a WhatsApp line's full stored history from Evolution, one conversation per customer number —
  * including what was said before ShopBot was connected (DishNet: ~7,000 messages, Jan–Nov 2026).
  *
- * parse() is PURE: one Evolution record → [phone, unix time, sent by us, text, contact name], or null for
- * what is not a customer message (status updates, groups, channels, reactions, system records). Messages
- * wrapped as disappearing/view-once/edited are unwrapped; a chat WhatsApp keys by a hidden id (@lid) is
- * put under the real number when Evolution gives it.
+ * parse() is PURE: one Evolution record → [phone, unix time, sent by us, text, contact name, number hidden],
+ * or null for what is not a customer message (status updates, groups, channels, reactions, system records,
+ * WhatsApp's own account "0@…"). Messages wrapped as disappearing/view-once/edited are unwrapped.
+ *
+ * A chat WhatsApp keys by a hidden id (@lid) is put under the real number when Evolution gives it.
+ * Without one it is kept under the hidden id's digits, exactly as ShopBot keys that chat when the customer
+ * writes (EvolutionGateway::parseIncoming), so it is the same customer in both places; it is marked
+ * hidden because that id can be messaged on WhatsApp but not dialled (DishNet, 17 Nov 2026: most of the
+ * line's history is such chats).
  */
 class EvolutionHistory
 {
@@ -18,7 +23,7 @@ class EvolutionHistory
     public function __construct(private EvolutionAdmin $evo) {}
 
     /**
-     * @return array<string,array{name:string,rows:list<array{0:int,1:bool,2:string}>}> phone => conversation
+     * @return array<string,array{name:string,hidden:bool,rows:list<array{0:int,1:bool,2:string}>}> phone => conversation
      */
     public function chats(string $instance, int $maxPages = 400): array
     {
@@ -41,8 +46,9 @@ class EvolutionHistory
                 if ($m === null) {
                     continue;
                 }
-                [$phone, $ts, $me, $text, $name] = $m;
+                [$phone, $ts, $me, $text, $name, $hidden] = $m;
                 $chats[$phone]['rows'][] = [$ts, $me, $text];
+                $chats[$phone]['hidden'] = $hidden;
                 if (! $me && $name !== '') {
                     $chats[$phone]['name'] = $name;
                 }
@@ -56,23 +62,25 @@ class EvolutionHistory
         return $chats;
     }
 
-    /** PURE. @return array{0:string,1:int,2:bool,3:string,4:string}|null */
+    /** PURE. @return array{0:string,1:int,2:bool,3:string,4:string,5:bool}|null */
     public static function parse(array $r): ?array
     {
         $jid = (string) ($r['key']['remoteJid'] ?? '');
         if ($jid === '' || str_ends_with($jid, '@broadcast') || str_ends_with($jid, '@g.us') || str_ends_with($jid, '@newsletter')) {
             return null;
         }
+        $hidden = false;
         if (str_ends_with($jid, '@lid')) {
             $alt = (string) (($r['key']['remoteJidAlt'] ?? '') ?: ($r['key']['senderPn'] ?? ''));
-            if ($alt === '') {
-                return null;                                // a hidden id with no number: cannot be contacted
+            if ($alt !== '') {
+                $jid = $alt;
+            } else {
+                $hidden = true;                             // kept under the hidden id, as ShopBot keys it
             }
-            $jid = $alt;
         }
         $phone = preg_replace('/\D/', '', explode('@', $jid)[0]) ?? '';
-        if ($phone === '') {
-            return null;
+        if (strlen($phone) < 6) {
+            return null;                                    // "0@s.whatsapp.net" is WhatsApp's own account, not a customer
         }
         $msg = (array) ($r['message'] ?? []);
         foreach (['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2', 'documentWithCaptionMessage', 'editedMessage'] as $w) {
@@ -94,6 +102,6 @@ class EvolutionHistory
         $ts = is_array($ts) ? (int) ($ts['low'] ?? 0) : (int) $ts;
         $me = (bool) ($r['key']['fromMe'] ?? false);
 
-        return [$phone, $ts, $me, trim((string) $text), $me ? '' : trim((string) ($r['pushName'] ?? ''))];
+        return [$phone, $ts, $me, trim((string) $text), $me ? '' : trim((string) ($r['pushName'] ?? '')), $hidden];
     }
 }

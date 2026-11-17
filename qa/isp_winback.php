@@ -74,14 +74,15 @@ chk('best first, at most 2 a day per salesperson, each salesperson starts today'
 
 echo "== reading the history\n";
 chk('a customer text', H::parse(['key' => ['remoteJid' => '211920000001@s.whatsapp.net', 'fromMe' => false, 'id' => 'A'], 'pushName' => 'Ann', 'messageTimestamp' => 1763000000, 'message' => ['conversation' => ' hi ']]),
-    ['211920000001', 1763000000, false, 'hi', 'Ann']);
+    ['211920000001', 1763000000, false, 'hi', 'Ann', false]);
 chk('ours: no contact name taken from it', H::parse(['key' => ['remoteJid' => '211920000001@s.whatsapp.net', 'fromMe' => true], 'pushName' => 'DishNet', 'messageTimestamp' => ['low' => 5], 'message' => ['extendedTextMessage' => ['text' => 'Welcome']]]),
-    ['211920000001', 5, true, 'Welcome', '']);
+    ['211920000001', 5, true, 'Welcome', '', false]);
 chk('a disappearing message is unwrapped', H::parse(['key' => ['remoteJid' => '211920000001@s.whatsapp.net'], 'message' => ['ephemeralMessage' => ['message' => ['conversation' => 'price?']]]])[3], 'price?');
-chk('a hidden-id chat goes under the real number', H::parse(['key' => ['remoteJid' => '9988@lid', 'remoteJidAlt' => '211920000002@s.whatsapp.net'], 'message' => ['conversation' => 'x']])[0], '211920000002');
-chk('…and is dropped when there is no number', H::parse(['key' => ['remoteJid' => '9988@lid'], 'message' => ['conversation' => 'x']]), null);
+chk('a hidden-id chat goes under the real number when Evolution has it', array_values(array_intersect_key(H::parse(['key' => ['remoteJid' => '123456789012345@lid', 'remoteJidAlt' => '211920000002@s.whatsapp.net'], 'message' => ['conversation' => 'x']]), [0 => 1, 5 => 1])), ['211920000002', false]);
+chk('…and with no number is kept under the hidden id, as ShopBot keys it, marked hidden', [H::parse(['key' => ['remoteJid' => '123456789012345@lid'], 'message' => ['conversation' => 'x']])[0], H::parse(['key' => ['remoteJid' => '123456789012345@lid'], 'message' => ['conversation' => 'x']])[5]], ['123456789012345', true]);
+chk('WhatsApp\'s own account (0@s.whatsapp.net, the "busiest season" tips) is not a customer', H::parse(['key' => ['remoteJid' => '0@s.whatsapp.net'], 'pushName' => '0', 'message' => ['conversation' => '*Get ready for the busiest season of the year*']]), null);
 chk('groups, status, channels are not customers', [H::parse(['key' => ['remoteJid' => '1-2@g.us'], 'message' => ['conversation' => 'x']]), H::parse(['key' => ['remoteJid' => 'status@broadcast'], 'message' => ['conversation' => 'x']]), H::parse(['key' => ['remoteJid' => '1@newsletter'], 'message' => ['conversation' => 'x']])], [null, null, null]);
-chk('a reaction is not a message; a photo is kept as a marker', [H::parse(['key' => ['remoteJid' => '1@s.whatsapp.net'], 'message' => ['reactionMessage' => ['text' => 'x']]]), H::parse(['key' => ['remoteJid' => '1@s.whatsapp.net'], 'message' => ['imageMessage' => ['url' => 'u']]])[3]], [null, '[image]']);
+chk('a reaction is not a message; a photo is kept as a marker', [H::parse(['key' => ['remoteJid' => '211920000003@s.whatsapp.net'], 'message' => ['reactionMessage' => ['text' => 'x']]]), H::parse(['key' => ['remoteJid' => '211920000003@s.whatsapp.net'], 'message' => ['imageMessage' => ['url' => 'u']]])[3]], [null, '[image]']);
 
 echo "\n" . ($fail ? 'FAILURES' : 'ALL PASS') . ": $pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

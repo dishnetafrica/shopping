@@ -98,7 +98,7 @@ class IspWinbackCommand extends Command
                 }
                 continue;
             }
-            $picked[$phone] = $c + ['name' => (string) ($chat['name'] ?? '')];
+            $picked[$phone] = $c + ['name' => (string) ($chat['name'] ?? ''), 'hidden' => (bool) ($chat['hidden'] ?? false)];
         }
 
         $bySeg = array_count_values(array_column($picked, 'segment'));
@@ -109,6 +109,7 @@ class IspWinbackCommand extends Command
             $this->line(sprintf('  %-18s %4d  %s', $seg, $n, Winback::SEGMENTS[$seg] ?? ''));
         }
         $this->line('  of which we never answered their last message: ' . count(array_filter($picked, fn ($c) => $c['unanswered'])));
+        $this->line('  of which WhatsApp hides the phone number (message from the inbox; cannot be called): ' . count(array_filter($picked, fn ($c) => $c['hidden'])));
         $this->info('Left out:');
         ksort($skip);
         foreach ($skip as $why => $n) {
@@ -123,7 +124,7 @@ class IspWinbackCommand extends Command
         $this->newLine();
         $this->info('Examples (best first):');
         foreach (array_slice($picked, 0, max(0, (int) $this->option('sample')), true) as $phone => $c) {
-            $this->line("  +{$phone} " . ($c['name'] !== '' ? "({$c['name']}) " : '') . "— {$c['segment']}, {$c['service']}, score {$c['score']}, last wrote " . date('j M Y', $c['last_in']) . ($c['unanswered'] ? ', UNANSWERED' : ''));
+            $this->line('  ' . ($c['hidden'] ? "[hidden number {$phone}] " : "+{$phone} ") . ($c['name'] !== '' ? "({$c['name']}) " : '') . "— {$c['segment']}, {$c['service']}, score {$c['score']}, last wrote " . date('j M Y', $c['last_in']) . ($c['unanswered'] ? ', UNANSWERED' : ''));
             $this->line('     said: ' . mb_substr($c['summary'], 0, 200));
             $this->line('     first message: ' . Winback::opener($c['segment'], $c['service'], $c['unanswered'], $c['name'], '<salesperson>', (string) $tenant->name));
         }
@@ -163,6 +164,7 @@ class IspWinbackCommand extends Command
                 'lead_score'       => $c['score'],
                 'message'          => $c['summary'],
                 'notes'            => "WIN-BACK · {$label} · last wrote " . date('j M Y', $c['last_in']) . ($c['unanswered'] ? ' · WE NEVER ANSWERED' : '')
+                                    . ($c['hidden'] ? "\nWhatsApp hides this customer's phone number: message them from the ShopBot inbox (they cannot be called) and ask for a number to call." : '')
                                     . "\nSuggested first message (edit it, then send it yourself from the inbox):\n{$opener}",
                 'source'           => 'winback',
                 'tag'              => 'winback',
