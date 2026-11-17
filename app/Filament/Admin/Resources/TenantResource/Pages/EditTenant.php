@@ -61,14 +61,32 @@ class EditTenant extends EditRecord
         return $data;
     }
 
-    /** Pull the owner-login fields out before the Tenant is saved. */
+    /** Pull the owner-login fields out before the Tenant is saved; never drop settings this form does not show. */
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $this->ownerName  = $data['owner_name'] ?? null;
         $this->ownerPhone = $data['owner_phone'] ?? null;
         unset($data['owner_name'], $data['owner_phone']);
 
+        if (array_key_exists('settings', $data)) {
+            $data['settings'] = self::keepUnshownSettings($this->record->getKey(), (array) ($data['settings'] ?? []));
+        }
+
         return $data;
+    }
+
+    /**
+     * The form holds only the settings it shows (persona, alert routing, currency, …). Saving it used to
+     * REPLACE the whole settings column with just those, silently wiping every other setting — real case,
+     * DishNet South Sudan, 16–17 Nov 2026: track_stock, bot_muted and timezone vanished after an admin
+     * save. The form's values still win for its own fields; every other key is kept, read FRESH from the
+     * database (the page may have been open for hours while other screens wrote settings).
+     */
+    public static function keepUnshownSettings(int|string $tenantId, array $formSettings): array
+    {
+        $current = \App\Models\Tenant::query()->find($tenantId)?->settings;
+
+        return array_replace(is_array($current) ? $current : [], $formSettings);
     }
 
     /** Create/update the owner login from those fields; seed the solar spec catalogue if chosen. */
