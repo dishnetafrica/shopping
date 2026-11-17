@@ -180,6 +180,20 @@ class IspAutoQuoteTest extends TestCase
         $this->assertSame('Peter', (string) \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', self::CUSTOMER)->value('name'));
     }
 
+    /** Codex on #163: an unnamed quotation is not reused once the customer gives a name, and the name is kept. */
+    public function test_a_name_given_later_gets_a_named_quotation(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        $line = fn (string $name) => "<<QUOTE {\"customer_name\":\"{$name}\",\"items\":[{\"name\":\"Fiber Test 20 Mbps\",\"qty\":1}]}>>";
+
+        $this->assertTrue($this->capture($t, $this->gateway(), $line(''))['sent'], $this->steps($t));
+        $this->assertTrue($this->capture($t, $this->gateway(), $line('mary'))['sent'], 'a named quotation, not the unnamed one again');
+        $this->assertSame(['', 'Mary'], Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->orderBy('id')->pluck('customer_name')->map(fn ($n) => (string) $n)->all());
+        $this->assertFalse($this->capture($t, $this->gateway(), $line('mary'))['sent'], 'the named one is reused after that');
+        $this->assertSame('Mary', (string) \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', self::CUSTOMER)->value('name'));
+    }
+
     /** Live, 17 Nov 2026: "I will confirm … with the team. Please hold on" — and nobody was told. */
     public function test_a_promise_to_follow_up_alerts_the_salesperson_once(): void
     {

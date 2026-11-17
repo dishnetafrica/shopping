@@ -93,6 +93,8 @@ chk('decorative Unicode letters read as plain text', P::plain("\u{1D67D}\u{1D698
 chk('…also without the intl extension', P::plainByHand("\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E} \u{1D7F8}\u{1D7F6}"), 'Not like 250 people 20');
 chk('"Not like 250 people" in decorative letters = 250 users', P::users(["\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E}"]), 250);
 chk('"3o users" typed with a letter o = 30', P::users(['it can hold 3o users']), 30);
+chk('spelled-out counts (Codex on #163): "fifty people", "two hundred and fifty users", "a hundred students", "forty five devices"', [P::users(['fifty people']), P::users(['about two hundred and fifty users']), P::users(['a hundred students']), P::users(['forty five devices'])], [50, 250, 100, 45]);
+chk('…"a few people", "a kit and a dish" stay uncounted', [P::users(['a few people']), P::wordsToDigits('i have a kit and a dish')], [0, 'i have a kit and a dish']);
 chk('the largest number across messages', P::users(['for 20+ users', 'actually about 300 active users', 'for 1,000 students next year']), 1000);
 chk('"users: 60" = 60', P::users(['users: 60']), 60);
 chk('speeds, money and plain numbers are not users', P::users(['Fiber 50 Mbps please', '$250 budget', 'I have 2 kits']), 0);

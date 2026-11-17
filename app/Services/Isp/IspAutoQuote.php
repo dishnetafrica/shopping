@@ -92,7 +92,11 @@ class IspAutoQuote
                 return ['reply' => $this->handoff($tenant, $from, $name, $clean, 'asked for a quotation — please prepare it'), 'sent' => false];
             }
 
-            if ($again = $this->recent($tenant, $from, $quote)) {
+            // The name first, so a reused quotation still leaves it on the customer's record; a recent
+            // quotation without a name is not reused once the customer has given one (Codex on #163).
+            $this->rememberName($tenant, $from, $name);
+            $again = $this->recent($tenant, $from, $quote);
+            if ($again && ($name === '' || trim((string) $again->customer_name) !== '')) {
                 BotTrace::log($tenant->id, 'isp', $from, 'isp_quote_reused', (string) $again->quote_no);
 
                 return ['reply' => trim($clean . "\n\nThat's your quotation *{$again->quote_no}* from earlier — the same items, still valid \u{1F44D}"), 'sent' => false];

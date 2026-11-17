@@ -191,6 +191,7 @@ final class IspQuotePlan
         foreach ($texts as $t) {
             $t = mb_strtolower(self::plain((string) $t));
             $t = preg_replace('/(?<=\d)o|o(?=\d)/u', '0', $t) ?? $t;   // "3o users" typed with a letter o
+            $t = self::wordsToDigits($t);                                // "fifty people", "two hundred users"
             preg_match_all('/(\d[\d,]*)\s*\+?\s*(?:\w+\s+){0,2}?(?:' . $who . ')\b/u', $t, $a);
             preg_match_all('/\b(?:' . $who . ')\s*(?:of|about|around|:|=|is|are)?\s*(\d[\d,]*)/u', $t, $b);
             foreach (array_merge($a[1], $b[1]) as $n) {
@@ -199,6 +200,43 @@ final class IspQuotePlan
         }
 
         return $max;
+    }
+
+    private const UNITS = ['zero' => 0, 'one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5, 'six' => 6, 'seven' => 7, 'eight' => 8, 'nine' => 9,
+        'ten' => 10, 'eleven' => 11, 'twelve' => 12, 'thirteen' => 13, 'fourteen' => 14, 'fifteen' => 15, 'sixteen' => 16, 'seventeen' => 17, 'eighteen' => 18, 'nineteen' => 19,
+        'twenty' => 20, 'thirty' => 30, 'forty' => 40, 'fourty' => 40, 'fifty' => 50, 'sixty' => 60, 'seventy' => 70, 'eighty' => 80, 'ninety' => 90];
+
+    /**
+     * PURE. Spelled-out numbers as digits, so "fifty people" counts like "50 people" (Codex review on
+     * #163): "two hundred and fifty" → 250, "a hundred" → 100, "1 thousand" → 1000, "a few" stays.
+     */
+    public static function wordsToDigits(string $t): string
+    {
+        $word = '(?:' . implode('|', array_keys(self::UNITS)) . '|hundred|thousand|a|and|\\d+)';
+
+        return (string) preg_replace_callback('/\\b' . $word . '(?:[\\s-]+' . $word . ')*\\b/u', function ($m) {
+            $tokens = preg_split('/[\\s-]+/u', trim($m[0])) ?: [];
+            $total = 0;
+            $cur = 0;
+            $seen = false;                                  // a real number word, not only "a" / "and"
+            foreach ($tokens as $w) {
+                if (isset(self::UNITS[$w])) {
+                    $cur += self::UNITS[$w];
+                    $seen = true;
+                } elseif (ctype_digit($w)) {
+                    $cur += (int) $w;                       // "1 thousand"; digits alone are left as they are
+                } elseif ($w === 'hundred') {
+                    $cur = max(1, $cur) * 100;
+                    $seen = true;
+                } elseif ($w === 'thousand') {
+                    $total += max(1, $cur) * 1000;
+                    $cur = 0;
+                    $seen = true;
+                }
+            }
+
+            return $seen ? (string) ($total + $cur) : $m[0];
+        }, $t);
     }
 
     /** PURE. The customer's name the model put in the hidden line, if any (letters only, short). */
