@@ -150,7 +150,7 @@ class StorefrontController extends Controller
         if ($slugId === null) { $slugId = (string) $shop; $shop = null; }
         [$tenant, $base] = $this->resolveShop($shop);
         if ($this->ispEnabled($tenant)) {                       // ISP: no product pages with a basket — the plans page
-            return redirect(($base === '' ? '/' : $base) . '#plans', 301);
+            return redirect($base . '/shop#plans', 301);
         }
 
         // trailing digits are the id — "sugar-2kg-kakira-412" → 412
@@ -445,7 +445,7 @@ class StorefrontController extends Controller
     {
         [$tenant, $base] = $this->resolveShop($shop);
         if ($this->travelEnabled($tenant)) { return $this->travel($tenant, $base); }                   // TRAVEL
-        if ($this->ispEnabled($tenant)) { return $this->isp($tenant, $base); }                         // ISP
+        if ($this->ispEnabled($tenant)) { return $this->isp($tenant, $base); }                         // ISP (own home page: custom-domain root only)
         if ($this->technologyEnabled($tenant)) { return $this->technology($shop, $tenant, $base); }   // TECHNOLOGY
         if ($this->autoPartsEnabled($tenant)) { return $this->autoParts($shop, $tenant, $base); } // AUTO_PARTS
         return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant, $base) : $this->renderShop($tenant, $base);
@@ -634,6 +634,9 @@ class StorefrontController extends Controller
         $pages = [];
         if ($dir = TenantSiteController::bundleDir($tenant)) {
             $hold = (array) (TenantSiteController::manifest($dir)['hold'] ?? []);
+            if (($home = TenantSiteController::homeFile($tenant)) !== null) {
+                $pages[] = ['href' => $base === '' ? '/' : $base . '/' . $home, 'label' => 'Home'];
+            }
             foreach (['about.html' => 'About', 'tutorials/index.html' => 'Help & tutorials', 'guides.html' => 'Guides', 'blog.html' => 'Blog',
                 'gallery.html' => 'Gallery', 'get-the-app.html' => 'Get the app', 'careers.html' => 'Careers', 'contact.html' => 'Contact',
                 'privacy.html' => 'Privacy'] as $file => $label) {
@@ -2405,7 +2408,7 @@ class StorefrontController extends Controller
             : Tenant::where('slug', $slugOrShop)->first();
         abort_unless($tenant, 404);
         if ($this->ispEnabled($tenant)) {                       // ISP: no category pages with a basket — the plans page
-            return redirect(($slug === null ? '/' : '/' . strtolower($slugOrShop)) . '#plans', 301);
+            return redirect(($slug === null ? '' : '/' . strtolower($slugOrShop)) . '/shop#plans', 301);
         }
         $want = $slug ?? $slugOrShop;
         foreach (array_keys($this->liveCategories($tenant)) as $cat) {
@@ -2426,6 +2429,7 @@ class StorefrontController extends Controller
         if ($this->ispEnabled($tenant)) {
             // ISP: the plans page plus the business's own website pages served as-is (never held ones,
             // never product or category pages — those redirect to the plans page).
+            $urls[] = '<url><loc>'.e(url('/shop')).'</loc><changefreq>daily</changefreq></url>';
             if ($dir = TenantSiteController::bundleDir($tenant)) {
                 $hold = (array) (TenantSiteController::manifest($dir)['hold'] ?? []);
                 foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $f) {

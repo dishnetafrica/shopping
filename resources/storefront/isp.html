@@ -193,7 +193,7 @@ var ISP = __ISP_CFG__;
     + (T.waNumber ? ' <a target="_blank" rel="noopener" href="' + esc(waHref('')) + '">WhatsApp us</a>' : '');
   // The business's own pages in the header (About / Help / Contact) when it has a website bundle.
   var nav = document.querySelector('nav.links'), first = nav.firstChild;
-  pages.filter(function(p){ return /^(About|Help & tutorials|Contact)$/.test(p.label); }).forEach(function(p){
+  pages.filter(function(p){ return /^(Home|About|Help & tutorials|Contact)$/.test(p.label); }).forEach(function(p){
     var a = document.createElement('a'); a.className = 'nl'; a.href = p.href; a.textContent = p.label === 'Help & tutorials' ? 'Help' : p.label; nav.insertBefore(a, first);
   });
 

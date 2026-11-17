@@ -36,6 +36,11 @@ class MarketingController extends Controller
                     return response(file_get_contents($landing), 200, ['Content-Type' => 'text/html; charset=UTF-8']);
                 }
             }
+            // A business with its own website bundle (site.json "home", e.g. DishNet) gets that home page at
+            // its domain root; its plans page stays at /shop.
+            if ($home = \App\Http\Controllers\Storefront\TenantSiteController::home($tenant)) {
+                return $home;
+            }
             // No bespoke landing page: fall back to landing() — manufacturers/brand-site
             // shops get their brand site, everyone else gets the shop storefront.
             return app(\App\Http\Controllers\Storefront\StorefrontController::class)->landing($tenant->slug);
