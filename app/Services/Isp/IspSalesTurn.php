@@ -36,7 +36,7 @@ class IspSalesTurn
             $published = [];
         }
 
-        return self::rules() . self::knowledgeBlock($published);
+        return self::rules() . (IspAutoQuote::enabled($tenant) ? self::quoteRules() : self::HANDOFF_RULE) . self::knowledgeBlock($published);
     }
 
     public function afterReply(Tenant $tenant, string $from, string $customerText, string $reply): string
@@ -67,8 +67,26 @@ class IspSalesTurn
             . "- QUALIFY before recommending, ONE question at a time, using what the customer already said: which service (Starlink, Fiber, or not sure), WHERE exactly (area and a landmark), home or business, and how many people or devices will use it and for what.\n"
             . "- ONLY APPROVED INFORMATION: prices, packages, speeds, installation fees, contract terms, coverage and timelines come ONLY from APPROVED SALES KNOWLEDGE and PRODUCTS. If something is not written there, do not guess and do not use general knowledge about other countries or providers: say their salesperson will confirm it.\n"
             . "- COVERAGE: say a place is covered ONLY if COVERAGE below lists it as covered. Anywhere else, say a site survey is needed to confirm. Never say \"we cover your area\" otherwise.\n"
-            . "- Never promise a discount, free installation, a speed, an uptime figure or an installation date that is not written below.\n"
-            . "- When the customer is ready to go ahead (a quotation, a site visit, payment), tell them their salesperson will take it from here.\n";
+            . "- Never promise a discount, free installation, a speed, an uptime figure or an installation date that is not written below.\n";
+    }
+
+    /** Used when automatic quotations are switched off (isp_auto_quote = false). */
+    public const HANDOFF_RULE = "- When the customer is ready to go ahead (a quotation, a site visit, payment), tell them their salesperson will take it from here.\n";
+
+    /**
+     * PURE. How the model asks the system for a quotation (IspAutoQuote prices and sends it). Behave like
+     * a good salesperson: recommend, offer the quotation in writing, never invent its figures.
+     */
+    public static function quoteRules(): string
+    {
+        return "QUOTATION (the system prices it from PRODUCTS and sends the PDF from the customer's salesperson — you never write one):\n"
+            . "- Once you know what fits the customer and where they are, RECOMMEND one option in a sentence (why it suits them) and OFFER a written quotation: \"Shall I send you a quotation?\"\n"
+            . "- Ask for their name first if you do not have it — it goes on the quotation.\n"
+            . "- When they ask for a quotation, a proforma or the price in writing, or say yes to your offer, write ONE short visible sentence (e.g. \"Sure — here is your quotation 📄\") and append the hidden line <<QUOTE {\"items\":[{\"name\":\"<exact PRODUCT name>\",\"qty\":1}]}>> as the VERY LAST thing in your reply.\n"
+            . "- Items: use the EXACT names from PRODUCTS. Starlink = the kit AND the monthly plan they chose (ask which plan if unsure; if they already own a kit, only the plan). Fiber = the monthly plan (its installation is added automatically). Add a router, adaptor, power bank or public IP only if they asked for it.\n"
+            . "- Do NOT write the line for Starlink Priority, more than 5 kits, 50 or more users, a custom network or anything not in PRODUCTS: say their salesperson will prepare a custom quotation.\n"
+            . "- Never type a quotation, its total or a quotation number yourself: the PDF shows the exact one-time and monthly amounts.\n"
+            . "- After the quotation: answer questions about it. If the price is a concern, do not offer a discount; explain what is included and that their salesperson will call to go through the options.\n";
     }
 
     /** PURE. The published knowledge, as the model reads it. */

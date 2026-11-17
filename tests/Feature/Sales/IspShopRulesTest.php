@@ -33,7 +33,7 @@ class IspShopRulesTest extends TestCase
         'PLACING AN ORDER',
         '<<ORDER',
         'SENDING A QUOTATION (PDF)',
-        '<<QUOTE',
+        'NEVER WRITE THE QUOTATION YOURSELF',
         'LARGE / WHOLESALE ORDERS',
         'CATALOGUE RANGE',
         'a detailed sample with exact names',
@@ -76,7 +76,16 @@ class IspShopRulesTest extends TestCase
         }
         $this->assertStringContainsString('an internet provider (Starlink and fibre)', $p, 'its own persona when none is set');
         $this->assertStringContainsString('INTERNET SALES', $p, 'the internet-provider rules are still there');
-        $this->assertStringContainsString('salesperson prepares the quotation', $p);
+        // DishNet, 17 Nov 2026: the bot sends a catalogue-priced quotation (IspAutoQuote) under its own
+        // rules, never the shop's quotation rules; switched off, the salesperson prepares it as before.
+        $this->assertStringContainsString('QUOTATION (the system prices it from PRODUCTS', $p);
+        $this->assertStringContainsString('follow the QUOTATION rules', $p);
+        $this->assertStringNotContainsString('salesperson prepares the quotation', $p);
+        $t->putSetting('isp_auto_quote', false);
+        $off = $this->prompt($t->fresh());
+        $this->assertStringContainsString('salesperson prepares the quotation', $off);
+        $this->assertStringNotContainsString('<<QUOTE', $off, 'off: the model is never told how to ask for one');
+        $this->assertStringContainsString('take it from here', $off);
         $this->assertStringContainsString('ADVERT LEADS', $p, 'advert clicks get the internet-provider welcome');
         $this->assertStringContainsString('This question is REQUIRED even after a direct price or availability answer', $p, 'the ANSWER FIRST rule does not drop the qualifier');
         $this->assertStringContainsString('Never mention the [NEW AD LEAD] tag', $p, 'the internal tag never reaches a customer');
