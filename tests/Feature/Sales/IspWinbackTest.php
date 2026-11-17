@@ -148,6 +148,9 @@ class IspWinbackTest extends TestCase
         $this->assertSame(5, Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->whereNull('owner_user_id')->count());
         $this->artisan('isp:winback', ['tenant' => $t->id, '--assign' => true])->assertFailed();   // still nobody to give them to
 
+        // A manager already worked one of them: its progress must survive the assignment.
+        Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', '211900000002')->update(['status' => 'contacted']);
+
         $this->addSales($t);
         Bus::fake([NotifyOwner::class]);
         $this->artisan('isp:winback', ['tenant' => $t->id, '--assign' => true])->expectsOutputToContain('[DRY RUN')->assertSuccessful();
@@ -158,7 +161,7 @@ class IspWinbackTest extends TestCase
         $this->assertSame(0, $leads->whereNull('owner_user_id')->count());
         $this->assertSame(2, $leads->pluck('owner_user_id')->unique()->count(), 'shared between the two salespeople');
         foreach ($leads as $l) {
-            $this->assertSame('assigned', $l->status);
+            $this->assertSame($l->customer_phone === '211900000002' ? 'contacted' : 'assigned', $l->status, 'new becomes assigned; a lead already contacted stays contacted');
             $this->assertStringNotContainsString('this is your salesperson from', (string) $l->notes);
             $this->assertStringContainsString('this is ' . User::find($l->owner_user_id)->name . ' from', (string) $l->notes);
         }

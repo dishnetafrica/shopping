@@ -260,7 +260,8 @@ class IspWinbackCommand extends Command
             $l->update([
                 'owner_user_id'    => $u->id,
                 'assigned_to'      => preg_replace('/\D/', '', (string) $u->phone) ?: null,
-                'status'           => 'assigned',
+                // only a new lead becomes "assigned": one a manager already moved on keeps its progress (Codex, #164)
+                'status'           => $l->status === 'new' ? 'assigned' : $l->status,
                 // the first message was written before anyone owned the lead: "this is your salesperson from …"
                 'notes'            => str_replace('this is your salesperson from', 'this is ' . $u->name . ' from', (string) $l->notes),
                 'next_followup_at' => $start->copy()->addDays($days[(string) $l->id] ?? 0),
