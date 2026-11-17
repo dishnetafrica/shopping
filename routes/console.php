@@ -7,6 +7,8 @@ Schedule::command('shopbot:process-scheduled')->everyMinute()->withoutOverlappin
 
 // Smart-bot (n8n) shared, tenant-keyed schedules
 Schedule::command('bot:watchdog')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+// Missed-reply recovery: answer customers whose bot reply never got through (opt-in per business: bot_recover_missed).
+Schedule::command('bot:recover-missed')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 // Travel enquiries (#145): retry staff alerts that were not delivered. A no-op when there are none.
 Schedule::command('travel:retry-handoffs')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 // Travel (#145): delete travellers' passport / ID numbers after each agency's retention period.
