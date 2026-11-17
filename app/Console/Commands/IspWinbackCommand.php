@@ -76,6 +76,7 @@ class IspWinbackCommand extends Command
 
         $skip = [];
         $staff = [];
+        $hiddenWanted = [];
         $picked = [];
         foreach ($chats as $phone => $chat) {
             $phone = (string) $phone;
@@ -90,6 +91,13 @@ class IspWinbackCommand extends Command
             $why ??= $c['skip'];
             if ($why === null && $since && $c['last_in'] < $since) {
                 $why = 'before_since';
+            }
+            // WhatsApp hid the number and Evolution gave none: ShopBot's send path addresses a customer by
+            // digits, which for a hidden id is not their chat. Counted, not imported, until a message to
+            // such a chat is proven to arrive (Codex review on #161).
+            if ($why === null && ! empty($chat['hidden'])) {
+                $why = 'number_hidden_by_whatsapp';
+                $hiddenWanted[$c['segment']] = ($hiddenWanted[$c['segment']] ?? 0) + 1;
             }
             if ($why !== null) {
                 $skip[$why] = ($skip[$why] ?? 0) + 1;
@@ -113,6 +121,10 @@ class IspWinbackCommand extends Command
         ksort($skip);
         foreach ($skip as $why => $n) {
             $this->line(sprintf('  %-22s %4d', $why, $n));
+        }
+        if ($hiddenWanted) {
+            $this->warn('Not imported: past customers whose number WhatsApp hides (' . implode(', ', array_map(fn ($s, $n) => "{$n} {$s}", array_keys($hiddenWanted), $hiddenWanted))
+                . '). ShopBot cannot yet address a reply to them; they are left out until that is proven.');
         }
         if ($staff) {
             $this->warn('These numbers received the old bot\'s STAFF alerts — add them to the muted list so the AI never answers them:');
