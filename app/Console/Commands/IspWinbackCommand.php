@@ -37,7 +37,9 @@ class IspWinbackCommand extends Command
 {
     protected $signature = 'isp:winback {tenant} {--apply : create the leads and tell each salesperson}
         {--per-day=15 : most follow-ups due per salesperson per day} {--since= : only customers who wrote since this date (YYYY-MM-DD)}
-        {--sample=8 : example leads to print}';
+        {--sample=8 : example leads to print}
+        {--assign : give win-back leads that have no salesperson to salespeople in turn (with --apply to write)}
+        {--allow-unassigned : create leads even when the business has no salesperson yet}';
 
     protected $description = 'Internet provider: turn the WhatsApp history into a win-back lead list for salespeople (dry run unless --apply)';
 
@@ -48,6 +50,9 @@ class IspWinbackCommand extends Command
             $this->error('No such Internet-provider business.');
 
             return self::FAILURE;
+        }
+        if ($this->option('assign')) {
+            return $this->assign($tenant, $owners, max(1, (int) $this->option('per-day')), (bool) $this->option('apply'));
         }
         if (! $evo->configured() || (string) $tenant->whatsapp_instance === '') {
             $this->error('This business has no Evolution WhatsApp line to read.');
@@ -139,6 +144,15 @@ class IspWinbackCommand extends Command
             return self::SUCCESS;
         }
 
+        // Live, 17 Nov 2026: --apply ran before any salesperson existed, and all 337 leads were left with no
+        // one to chase them. Refuse unless that is what the owner wants (--assign fixes it afterwards).
+        if (! $owners->salespeople($tenant) && ! $this->option('allow-unassigned')) {
+            $this->error('This business has no salesperson with a WhatsApp number yet, so every lead would be unassigned.');
+            $this->line('Add them first (V3 → Team → Add staff, role Sales, with their WhatsApp number), or pass --allow-unassigned.');
+
+            return self::FAILURE;
+        }
+
         // Owner first (their existing salesperson, or the next in turn), then the follow-up days per owner.
         $owner = [];
         foreach ($picked as $phone => $c) {
@@ -197,6 +211,70 @@ class IspWinbackCommand extends Command
             $this->line('  ' . ($o['user']?->name ?? 'unassigned') . ": {$o['n']} leads");
         }
         $this->info("Created {$made} win-back leads.");
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Win-back leads that have no salesperson (created before any existed) go to salespeople in turn,
+     * through SalesOwnership, with the salesperson's name put into the suggested first message, their
+     * follow-up dates re-spread (best first, at most $perDay a day each) and one summary per salesperson.
+     * Leads that already have a salesperson, or are closed, are not touched. Dry run unless $apply.
+     */
+    private function assign(Tenant $tenant, SalesOwnership $owners, int $perDay, bool $apply): int
+    {
+        if (! $owners->salespeople($tenant)) {
+            $this->error('No salesperson with a WhatsApp number yet. Add them first: V3 → Team → Add staff, role Sales, with their WhatsApp number.');
+
+            return self::FAILURE;
+        }
+        $leads = Lead::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('dedupe_key', 'like', 'winback:%')
+            ->whereNull('owner_user_id')->whereIn('status', Lead::OPEN_STATUSES)->orderByDesc('lead_score')->orderBy('id')->get();
+        $this->info(($apply ? '' : '[DRY RUN — nothing is written] ') . "{$tenant->name}: {$leads->count()} win-back leads without a salesperson.");
+        if ($leads->isEmpty()) {
+            return self::SUCCESS;
+        }
+        if (! $apply) {
+            $this->line('Salespeople who will share them in turn: ' . implode(', ', array_map(fn ($u) => $u->name, $owners->salespeople($tenant))));
+            $this->comment('Run again with --assign --apply to give them out.');
+
+            return self::SUCCESS;
+        }
+
+        $owner = [];
+        foreach ($leads as $l) {
+            $owner[$l->id] = $owners->ownerForEnquiry($tenant, (string) $l->customer_phone, $l->customer_name ?: null);
+        }
+        $plan = [];
+        foreach ($leads as $l) {
+            $plan[(string) $l->id] = ['owner' => (int) ($owner[$l->id]?->id ?? 0), 'score' => (int) $l->lead_score];
+        }
+        $days = Winback::schedule($plan, $perDay);
+        $start = now()->startOfDay()->setTime(9, 0);
+        $perOwner = [];
+        foreach ($leads as $l) {
+            $u = $owner[$l->id];
+            if (! $u) {
+                continue;
+            }
+            $l->update([
+                'owner_user_id'    => $u->id,
+                'assigned_to'      => preg_replace('/\D/', '', (string) $u->phone) ?: null,
+                'status'           => 'assigned',
+                // the first message was written before anyone owned the lead: "this is your salesperson from …"
+                'notes'            => str_replace('this is your salesperson from', 'this is ' . $u->name . ' from', (string) $l->notes),
+                'next_followup_at' => $start->copy()->addDays($days[(string) $l->id] ?? 0),
+            ]);
+            $perOwner[$u->id]['user'] = $u;
+            $perOwner[$u->id]['n'] = ($perOwner[$u->id]['n'] ?? 0) + 1;
+        }
+        foreach ($perOwner as $o) {
+            NotifyOwner::dispatch($tenant->id, "\u{1F4CB} *Win-back list* — {$o['n']} past customers are now yours to contact.\n"
+                . "They are in your Leads (source: winback), best first, at most {$perDay} due each day. Each one has what the customer said and a suggested first message.\n"
+                . 'Message each customer personally from the ShopBot inbox, one at a time — and offer them a quotation.', preg_replace('/\D/', '', (string) $o['user']->phone));
+            $this->line("  {$o['user']->name}: {$o['n']} leads");
+        }
+        $this->info('Assigned ' . array_sum(array_column($perOwner, 'n')) . ' win-back leads.');
 
         return self::SUCCESS;
     }
