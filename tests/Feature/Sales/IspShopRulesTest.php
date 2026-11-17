@@ -78,6 +78,7 @@ class IspShopRulesTest extends TestCase
         $this->assertStringContainsString('INTERNET SALES', $p, 'the internet-provider rules are still there');
         $this->assertStringContainsString('salesperson prepares the quotation', $p);
         $this->assertStringContainsString('ADVERT LEADS', $p, 'advert clicks get the internet-provider welcome');
+        $this->assertStringContainsString('This question is REQUIRED even after a direct price or availability answer', $p, 'the ANSWER FIRST rule does not drop the qualifier');
         $this->assertStringContainsString('Never mention the [NEW AD LEAD] tag', $p, 'the internal tag never reaches a customer');
         $this->assertStringContainsString('Detect the customer\'s language', $p, 'the general rules stay');
         $this->assertStringContainsString('OUR PRICES ARE FIXED', $p);
