@@ -76,6 +76,7 @@ class IspWinbackCommand extends Command
 
         $skip = [];
         $staff = [];
+        $hiddenWanted = [];
         $picked = [];
         foreach ($chats as $phone => $chat) {
             $phone = (string) $phone;
@@ -91,6 +92,13 @@ class IspWinbackCommand extends Command
             if ($why === null && $since && $c['last_in'] < $since) {
                 $why = 'before_since';
             }
+            // WhatsApp hid the number and Evolution gave none: ShopBot's send path addresses a customer by
+            // digits, which for a hidden id is not their chat. Counted, not imported, until a message to
+            // such a chat is proven to arrive (Codex review on #161).
+            if ($why === null && ! empty($chat['hidden'])) {
+                $why = 'number_hidden_by_whatsapp';
+                $hiddenWanted[$c['segment']] = ($hiddenWanted[$c['segment']] ?? 0) + 1;
+            }
             if ($why !== null) {
                 $skip[$why] = ($skip[$why] ?? 0) + 1;
                 if ($why === 'staff_phone') {
@@ -98,7 +106,7 @@ class IspWinbackCommand extends Command
                 }
                 continue;
             }
-            $picked[$phone] = $c + ['name' => (string) ($chat['name'] ?? ''), 'hidden' => (bool) ($chat['hidden'] ?? false)];
+            $picked[$phone] = $c + ['name' => (string) ($chat['name'] ?? '')];
         }
 
         $bySeg = array_count_values(array_column($picked, 'segment'));
@@ -109,11 +117,14 @@ class IspWinbackCommand extends Command
             $this->line(sprintf('  %-18s %4d  %s', $seg, $n, Winback::SEGMENTS[$seg] ?? ''));
         }
         $this->line('  of which we never answered their last message: ' . count(array_filter($picked, fn ($c) => $c['unanswered'])));
-        $this->line('  of which WhatsApp hides the phone number (message from the inbox; cannot be called): ' . count(array_filter($picked, fn ($c) => $c['hidden'])));
         $this->info('Left out:');
         ksort($skip);
         foreach ($skip as $why => $n) {
             $this->line(sprintf('  %-22s %4d', $why, $n));
+        }
+        if ($hiddenWanted) {
+            $this->warn('Not imported: past customers whose number WhatsApp hides (' . implode(', ', array_map(fn ($s, $n) => "{$n} {$s}", array_keys($hiddenWanted), $hiddenWanted))
+                . '). ShopBot cannot yet address a reply to them; they are left out until that is proven.');
         }
         if ($staff) {
             $this->warn('These numbers received the old bot\'s STAFF alerts — add them to the muted list so the AI never answers them:');
@@ -124,7 +135,7 @@ class IspWinbackCommand extends Command
         $this->newLine();
         $this->info('Examples (best first):');
         foreach (array_slice($picked, 0, max(0, (int) $this->option('sample')), true) as $phone => $c) {
-            $this->line('  ' . ($c['hidden'] ? "[hidden number {$phone}] " : "+{$phone} ") . ($c['name'] !== '' ? "({$c['name']}) " : '') . "— {$c['segment']}, {$c['service']}, score {$c['score']}, last wrote " . date('j M Y', $c['last_in']) . ($c['unanswered'] ? ', UNANSWERED' : ''));
+            $this->line("  +{$phone} " . ($c['name'] !== '' ? "({$c['name']}) " : '') . "— {$c['segment']}, {$c['service']}, score {$c['score']}, last wrote " . date('j M Y', $c['last_in']) . ($c['unanswered'] ? ', UNANSWERED' : ''));
             $this->line('     said: ' . mb_substr($c['summary'], 0, 200));
             $this->line('     first message: ' . Winback::opener($c['segment'], $c['service'], $c['unanswered'], $c['name'], '<salesperson>', (string) $tenant->name));
         }
@@ -164,7 +175,6 @@ class IspWinbackCommand extends Command
                 'lead_score'       => $c['score'],
                 'message'          => $c['summary'],
                 'notes'            => "WIN-BACK · {$label} · last wrote " . date('j M Y', $c['last_in']) . ($c['unanswered'] ? ' · WE NEVER ANSWERED' : '')
-                                    . ($c['hidden'] ? "\nWhatsApp hides this customer's phone number: message them from the ShopBot inbox (they cannot be called) and ask for a number to call." : '')
                                     . "\nSuggested first message (edit it, then send it yourself from the inbox):\n{$opener}",
                 'source'           => 'winback',
                 'tag'              => 'winback',
