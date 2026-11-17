@@ -170,7 +170,9 @@ class IspWinbackCommand extends Command
                                     . ($c['hidden'] ? "\nWhatsApp hides this customer's phone number: message them from the ShopBot inbox (they cannot be called) and ask for a number to call." : '')
                                     . "\nSuggested first message (edit it, then send it yourself from the inbox):\n{$opener}",
                 'source'           => 'winback',
-                'tag'              => 'winback',
+                // A hidden number gets its own tag: the legacy Leads page (frozen V2) shows the tag beside the
+                // lead but still offers call / wa.me links built from the digits, which do not reach this customer.
+                'tag'              => $c['hidden'] ? 'winback · number hidden: use inbox' : 'winback',
                 'status'           => $u ? 'assigned' : 'new',
                 'owner_user_id'    => $u?->id,
                 'assigned_to'      => $u ? (preg_replace('/\D/', '', (string) $u->phone) ?: null) : null,

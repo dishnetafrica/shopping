@@ -99,6 +99,7 @@ class IspWinbackTest extends TestCase
         $this->assertEqualsCanonicalizing(['211900000001', '211900000002', '211900000003', '211900000007', '123456789012345'], $leads->keys()->all(),
             'scam-only, staff-alert, muted and "stop" numbers and WhatsApp\'s own account are left out');
         $this->assertStringContainsString('cannot be called', (string) $leads['123456789012345']->notes, 'a hidden number is flagged for the salesperson');
+        $this->assertSame('winback · number hidden: use inbox', $leads['123456789012345']->tag, 'and tagged, so the legacy Leads page shows it beside its call link');
         $this->assertStringNotContainsString('cannot be called', (string) $leads['211900000001']->notes);
         $mary = $leads['211900000001'];
         $this->assertSame(['winback', 'winback', 'Starlink', 'Mary Akech'], [$mary->source, $mary->tag, $mary->interest, $mary->customer_name]);
