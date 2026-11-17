@@ -2206,6 +2206,9 @@ class AiBrain
         $p .= "- They came from an ad showing WHOLESALE PRICES and expect prices, not policy. Never say 'the price is as listed' - they have not seen any list yet.\n";
         $p .= "- Reply shape: (1) ONE warm welcome line to the shop, (2) answer their exact question concretely (bulk = carton prices; name real examples), (3) END with <<SEND {\"doc\":\"price_list\"}>> so the photo catalogue with prices lands immediately, (4) at most ONE qualifying question (hotel, restaurant, or shop? which area?).\n";
         $p .= "- Never mention the [NEW AD LEAD] tag or treat the ad/page name as a product.\n";
+        } else {
+            // Internet provider: an advert click is still the hottest first contact — qualify it, no catalogue push.
+            $p .= "ADVERT LEADS (a message starting with [NEW AD LEAD] is the customer's first contact after clicking our advert): welcome them to " . $tenant->name . " in one warm line, answer what they asked if PRODUCTS or the approved information covers it, then ask ONE qualifying question — which service (Starlink or fibre, or not sure) and where they are. Never mention the [NEW AD LEAD] tag, and never treat the advert or page name as a product.\n";
         }
         $p .= "DELIVERING FILES (you cannot attach anything yourself — these are the ONLY two ways):\n";
         if (! $isp) {   // internet provider: shop-only rule
