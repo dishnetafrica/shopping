@@ -106,6 +106,11 @@ class AiBrain
             $modelText = '[Customer is REPLYING to this earlier message from us: "'
                 . mb_substr($quoted, 0, 240) . '"]' . "\n" . $modelText;
         }
+        // Missed-reply recovery (bot:recover-missed): our reply to this message never reached the customer.
+        // Only the model is told — alerts, product search and reply guards still read the customer's words.
+        if (! empty($media['late'])) {
+            $modelText = '[Our reply to this message did not get through earlier. Begin with ONE short apology for the late reply, then answer normally.]' . "\n" . $modelText;
+        }
         $current = $imageB64 !== ''
             ? ['role' => 'user', 'content' => [
                 ['type' => 'text', 'text' => $text !== '' ? $modelText : '(customer sent an image — look at it and help)'],
@@ -294,7 +299,12 @@ class AiBrain
 
         // 4. send + log exactly like any other bot reply (skip when a sub-step already sent it)
         if (trim($reply) !== '') {
-            $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+            $sent = $gateway->sendText($tenant->whatsapp_instance, $from, $reply);
+            // Missed-reply recovery (opt-in): WhatsApp refused the reply (e.g. line disconnected) — do NOT log it
+            // as answered, so the chat stays unread and bot:recover-missed answers it once the line is back.
+            if (is_array($sent) && ($sent['_ok'] ?? true) === false && (bool) $tenant->setting('bot_recover_missed', false)) {
+                throw new \RuntimeException('WhatsApp did not accept the reply (HTTP ' . ($sent['_status'] ?? '?') . ')');
+            }
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $reply, null, null, ['via' => 'ai']);
         }
 
@@ -1874,11 +1884,25 @@ class AiBrain
     /** Send + log one bot message. */
     private function say(Tenant $tenant, string $from, WhatsAppGateway $gateway, string $text, array $meta = ['via' => 'ai']): void
     {
+        // Missed-reply recovery (opt-in): a holding message WhatsApp refused or timed out on is NOT
+        // delivered — fail the turn so the chat stays unread and bot:recover-missed answers it later.
+        $recover = (bool) $tenant->setting('bot_recover_missed', false);
+        $failed = null;
         try {
-            $gateway->sendText($tenant->whatsapp_instance, $from, $text);
-            MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $text, null, null, $meta);
+            $sent = $gateway->sendText($tenant->whatsapp_instance, $from, $text);
+            if ($recover && is_array($sent) && ($sent['_ok'] ?? true) === false) {
+                $failed = 'WhatsApp did not accept the reply (HTTP ' . ($sent['_status'] ?? '?') . ')';
+            } else {
+                MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $text, null, null, $meta);
+            }
         } catch (\Throwable $e) {
             Log::warning('AiBrain say failed: ' . $e->getMessage());
+            if ($recover) {
+                $failed = $e->getMessage();
+            }
+        }
+        if ($failed !== null) {
+            throw new \RuntimeException($failed);
         }
     }
 

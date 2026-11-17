@@ -61,6 +61,30 @@ class ProcessIncomingMessage implements ShouldQueue
     ) {}
 
     /**
+     * Which number a reply to a message received on $inInst goes out on: that number when it is one of
+     * this business's channels, else the primary — or, when the primary is flagged down, the connected
+     * fallback (setting wa_send_instance). Shared with bot:recover-missed so a late reply uses the same.
+     */
+    public static function replyInstance(Tenant $tenant, string $inInst): string
+    {
+        $primary   = (string) $tenant->whatsapp_instance;
+        $replyInst = $primary;
+        if ($inInst !== '' && $inInst !== $primary
+            && \App\Models\WhatsappChannel::isTenantInstance($tenant->id, $inInst)) {
+            $replyInst = $inInst;
+        }
+        if ($replyInst === $primary) {
+            $fb = trim((string) $tenant->setting('wa_send_instance', ''));
+            if ($fb !== '' && $fb !== $primary
+                && \App\Models\WhatsappChannel::isTenantInstance($tenant->id, $fb)) {
+                $replyInst = $fb;
+            }
+        }
+
+        return $replyInst;
+    }
+
+    /**
      * 2B — Conversation serialization. Only one message per conversation is
      * processed at a time; others release and retry, preserving order.
      */
@@ -89,19 +113,7 @@ class ProcessIncomingMessage implements ShouldQueue
         // Every send/markRead/media read uses $tenant->whatsapp_instance, so setting it here (in
         // memory only, never saved) routes the whole reply — no send-path changes needed.
         $primary   = (string) $tenant->whatsapp_instance;
-        $inInst    = (string) ($this->incoming['instance'] ?? '');
-        $replyInst = $primary;
-        if ($inInst !== '' && $inInst !== $primary
-            && \App\Models\WhatsappChannel::isTenantInstance($tenant->id, $inInst)) {
-            $replyInst = $inInst;
-        }
-        if ($replyInst === $primary) {
-            $fb = trim((string) $tenant->setting('wa_send_instance', ''));
-            if ($fb !== '' && $fb !== $primary
-                && \App\Models\WhatsappChannel::isTenantInstance($tenant->id, $fb)) {
-                $replyInst = $fb;
-            }
-        }
+        $replyInst = self::replyInstance($tenant, (string) ($this->incoming['instance'] ?? ''));
         if ($replyInst !== $primary) {
             $tenant->whatsapp_instance = $replyInst;
         }
