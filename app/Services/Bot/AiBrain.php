@@ -2208,7 +2208,7 @@ class AiBrain
         $p .= "- Never mention the [NEW AD LEAD] tag or treat the ad/page name as a product.\n";
         } else {
             // Internet provider: an advert click is still the hottest first contact — qualify it, no catalogue push.
-            $p .= "ADVERT LEADS (a message starting with [NEW AD LEAD] is the customer's first contact after clicking our advert): welcome them to " . $tenant->name . " in one warm line, answer what they asked if PRODUCTS or the approved information covers it, then ask ONE qualifying question — which service (Starlink or fibre, or not sure) and where they are. Never mention the [NEW AD LEAD] tag, and never treat the advert or page name as a product.\n";
+            $p .= "ADVERT LEADS (a message starting with [NEW AD LEAD] is the customer's first contact after clicking our advert): welcome them to " . $tenant->name . " in one warm line, answer what they asked if PRODUCTS or the approved information covers it, then ask ONE qualifying question — which service (Starlink or fibre, or not sure) and where they are. This question is REQUIRED even after a direct price or availability answer: it is not a suggestion, so the ANSWER FIRST rule below does not remove it. Never mention the [NEW AD LEAD] tag, and never treat the advert or page name as a product.\n";
         }
         $p .= "DELIVERING FILES (you cannot attach anything yourself — these are the ONLY two ways):\n";
         if (! $isp) {   // internet provider: shop-only rule
@@ -2406,7 +2406,7 @@ class AiBrain
                           ->orWhereRaw('LOWER(COALESCE(oem_number, \'\')) LIKE ?', [$like]);
                     }
                 })
-                ->limit(60)->get(['name', 'price', 'base_price', 'stock', 'unit_label', 'oem_number', 'popularity']);
+                ->limit(60)->get(['name', 'price', 'base_price', 'stock', 'unit_label', 'oem_number', 'popularity', 'billing']);
             if ($rows->isEmpty()) return '';
 
             $cur = (string) $tenant->setting('currency', 'UGX');
@@ -2421,7 +2421,8 @@ class AiBrain
             foreach ($scored as $s) {
                 $p = $s['p']; $price = (float) ($p->price ?? $p->base_price ?? 0);
                 $tag = $price > 0 ? ($cur . ' ' . number_format($price, $dec)) : 'ask for price';
-                $stk = (\App\Support\StockPolicy::tracked($tenant) && $p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
+                // A monthly plan (internet provider) is a service: never "[out of stock]", whatever its stock figure.
+                $stk = (\App\Support\StockPolicy::tracked($tenant) && ($p->billing ?? null) !== 'monthly' && $p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
                 $lines[] = '• ' . $p->name . ' — ' . $tag . $stk;
             }
             return "PRODUCTS MATCHING THIS REQUEST (searched across the WHOLE catalogue for this message — "
@@ -2532,6 +2533,11 @@ class AiBrain
                     $size .= $bill === 'monthly' ? ', charged monthly' : ($bill === 'one_off' ? ', one-time charge' : '');
                 }
 
+                // Internet provider: a monthly plan is a service, never stock — no stock verdict at all (a "stock
+                // unknown" tag on a plan was read by the model as "out of stock"). Availability = coverage rules.
+                if ($ispBill && (string) ($p->billing ?? '') === 'monthly') {
+                    return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [subscription plan — a service, never out of stock; where it can be installed follows the coverage rules]{$off}";
+                }
                 return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [" . ($tracked ? $inv->botTag($p) : 'stock not tracked — confirm availability before promising') . "]{$off}";
             })->all();
         });
