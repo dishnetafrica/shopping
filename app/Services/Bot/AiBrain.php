@@ -254,12 +254,19 @@ class AiBrain
         if ($retail) {
         $reply = $this->acceptQuote($tenant, $from, $reply);
         }
+        // Internet provider: the bot never makes an order, a quotation, a cart total or a price-list PDF —
+        // the customer's salesperson prepares the quotation. Accepting a quotation the salesperson SENT
+        // (acceptQuote above) still works. Any other order/quote marker the model emits is removed.
+        $shop = $retail && \App\Support\Vertical::of($tenant) !== \App\Support\Vertical::ISP;
+        if ($retail && ! $shop) {
+            $reply = \App\Services\Travel\Conversation\TravelTurn::stripRetailMarkers($reply);
+        }
 
         // 3a. order capture — if the model confirmed an order it emits a hidden <<ORDER {json}>>
         //     block. Create a real, trackable order (number + staff alert via OrderObserver),
         //     price it from OUR catalogue (never the LLM), and append a clean confirmation.
         //     The machine block is always stripped so the customer never sees it.
-        if ($retail) {
+        if ($shop) {
         $reply = $this->captureOrder($tenant, $convo, $from, $reply, $channel, $gateway);
         }
 
@@ -273,14 +280,14 @@ class AiBrain
         $reply = $this->captureFollowUp($tenant, $from, $reply);
 
         $quoteSent = false;
-        if ($retail) {
+        if ($shop) {
         $cap       = $this->captureQuote($tenant, $convo, $from, $text, $reply, $gateway);
         $reply     = $cap['reply'];
         $quoteSent = $cap['sent'];
         }
 
         // text total fallback for "how much / total" asks (no PDF, only when no quote was sent)
-        if ($retail && ! $quoteSent && $this->wantsTotal($text)) {
+        if ($shop && ! $quoteSent && $this->wantsTotal($text)) {
             $calc = $this->orderTotalBlock($tenant, $from, $text);
             if ($calc !== '') $reply = trim($reply) . "\n\n" . $calc;
         }
@@ -297,7 +304,7 @@ class AiBrain
         // 4b-ii. price list (catalogue-style tenants) — when the customer asks about price/rates,
         //        send a freshly generated price-list PDF from live products (never the price-less
         //        brochure). Skipped if a quotation was already sent this turn.
-        $priceListSent = ($retail && ! $quoteSent) ? $this->maybeSendPriceList($tenant, $from, $text, $gateway) : false;
+        $priceListSent = ($shop && ! $quoteSent) ? $this->maybeSendPriceList($tenant, $from, $text, $gateway) : false;
 
         // 4b-iii. catalogue/brochure files — product photos / brochure on request. Not for price
         //         questions (the price-list step handles those); skip if a price list went out.
@@ -1964,6 +1971,10 @@ class AiBrain
     private function systemPrompt(Tenant $tenant, string $channel = 'whatsapp'): string
     {
         $useBd   = BrandDefaults::enabledFor($tenant);   // only the brand that owns the defaults
+        // Internet provider (Vertical::ISP): the bot sells a SERVICE through a named salesperson, not goods off
+        // a shelf. The shop rules below (wholesale cartons, per-piece prices, delivery towns, solar advice, price-list
+        // PDFs, bot-made orders/quotations) are skipped for it; IspSalesTurn adds its own rules. Others: unchanged.
+        $isp = \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP;
         $persona = (string) $tenant->setting('ai_persona', '');
         if ($persona === '' && $useBd) $persona = BrandDefaults::persona((string) $tenant->name);
         $know = (string) $tenant->setting('brand_knowledge', '');
@@ -1999,6 +2010,9 @@ class AiBrain
         $greeting = trim((string) $tenant->setting('bot_greeting', ''));
 
         $p  = ($persona !== '' ? $persona : 'You are a helpful sales & support assistant for this shop.') . "\n\n";
+        if ($isp && $persona === '') {
+            $p = 'You are the WhatsApp sales assistant for ' . $tenant->name . ', an internet provider (Starlink and fibre). You help each customer choose the right internet service, answer from the approved information below, and hand them to their salesperson to complete it.' . "\n\n";
+        }
 
         // v4.91 — WHICH CHANNEL. The tenant's own persona is written for one channel (tenant 17's
         // opens "You are the Family Shoppers assistant on WhatsApp"), and web chat runs the SAME
@@ -2058,6 +2072,7 @@ class AiBrain
             if (is_array($langs) && count($langs)) {
                 $p .= "- Customers mostly speak: " . implode(', ', $langs) . ". Still mirror whatever language each customer writes in.\n";
             }
+            if (! $isp) {   // internet provider: shop-only rule
             // Delivery & pricing policy — stated EXPLICITLY so the model never improvises lines
             // like "prices do not include shipping" (real incident, 2026-07-30). Owner override
             // via the delivery_note setting; default is built from the free-delivery towns.
@@ -2082,6 +2097,7 @@ class AiBrain
                     // v4.38 — the model was asserting coverage for places it had never heard of.
                     . "- IF YOU DO NOT RECOGNISE THE PLACE the customer names — it may be their own shop name, a person, or a typo — do NOT say it is outside the free-delivery area and do NOT say delivery is free. Ask which town or area it is in. Never state a fact about our delivery coverage for a place you cannot identify.\n";
             }
+            }
             $p .= "\n";
         }
 
@@ -2091,19 +2107,24 @@ class AiBrain
         if ($greeting !== '') {
             $p .= "- This shop's greeting is: \"{$greeting}\". When the customer greets you or opens a new conversation, start your reply with this greeting — use it instead of mirroring the customer's own greeting.\n";
         }
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- Use COMPANY KNOWLEDGE and FAQ for facts. You may use your general real-world knowledge to explain products (e.g. what GSM or ply means), but never contradict COMPANY KNOWLEDGE.\n";
         $p .= "- You know this shop's FULL range — see CATALOGUE RANGE below for every category we stock and how many items are in each. NEVER tell a customer we only carry a few things or imply a narrow selection. If they describe what they need by specification, model/part number, or use-case, act like an experienced salesperson for this shop: help them find the right item, confirm the exact match from PRODUCTS, and suggest suitable alternatives we stock. If the exact item isn't in PRODUCTS, offer to confirm it or arrange a special order — don't dead-end. Never invent prices, specs or stock; quote only from PRODUCTS.\n";
+        }
         $p .= "- PRODUCT NAMES & FORMATTING (v4.82): when you mention a product, write its EXACT name as it appears in PRODUCTS, wrapped in SINGLE asterisks — like *Aluminium Foil 45cm Golden (Carton of 6pc)*. NEVER paraphrase a product name (no 'Regular foil', no shortened names) and NEVER use markdown double asterisks (**). The exact starred name is what attaches the product photo and the product card to your reply — a paraphrased name attaches nothing.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- PHYSICAL SPECIFICATIONS (thickness/microns/gsm/weight/length/material): state one ONLY when it appears in that product's line in PRODUCTS (look for 'specs:'). If the customer asks for a specification that is NOT listed, say you will confirm the exact figure and offer to send a photo — NEVER estimate it and NEVER answer a spec question with 'typically', 'around', 'usually' or 'about'. A wholesale buyer will weigh and measure what we say against the real product.\n";
         $p .= "- MANY CUSTOMERS DESCRIBE A PROBLEM OR A NEED, NOT A PRODUCT NAME (e.g. \"power keeps tripping at home\", \"I have 10 fans\", \"which breaker for a 3hp motor\", \"my socket has no power\"). When they do, act as a knowledgeable advisor for this shop's domain: ask at most one or two SHORT clarifying questions only if essential, explain the likely cause or the correct choice/sizing using sound real-world knowledge, then RECOMMEND suitable product(s) from the catalogue and offer to quote. Ground every recommendation in a real catalogue item — never invent a spec, model, rating or price. If nothing suitable is stocked, offer a special order. Keep it WhatsApp-short and practical.\n";
         $p .= "- BROWSE BY CATEGORY: if a customer is just exploring, asks \"what do you have\", or says \"menu\"/\"categories\"/\"list\", show the CATALOGUE RANGE categories with their counts and invite them to pick one. When they pick a category, list a few example items and ask which rating/size/spec they need, then quote. Keep every list short.\n";
         $p .= "- GUIDE, DON'T JUST LIST: when you show products, add a few plain words on what each is typically used for, so the customer can pick confidently (e.g. disposable cups → \"good for juice, water or soft drinks\"; aluminium foil → \"for wrapping food and takeaway trays\"; cling film → \"for covering and sealing food\"). Use the item's own use note from PRODUCTS when shown; otherwise describe only the OBVIOUS everyday use of that kind of product. Keep it to a short phrase per item — never a paragraph.\n";
+        }
         // v4.40 — a customer asked for a foil container they could microwave and was told
         // "we have Aluminum Foil Containers that are microwave-safe". Nothing in the catalogue
         // says that, and aluminium in a microwave arcs. The rule above had told the model to
         // fill an empty use-note from general knowledge; nothing anywhere told it that a
         // physical property is not a use-note. This is that rule.
         $p .= "- NEVER STATE A PRODUCT PROPERTY THAT IS NOT IN PRODUCTS. Material, heat or cold tolerance, microwave/oven/freezer/dishwasher suitability, food-grade or BPA status, waterproofing, shelf life, certification, compliance, or fitness for any specific purpose may be stated ONLY if it appears in that product's own line in PRODUCTS. If a customer asks whether an item can be heated, frozen, microwaved, used with food, or used for anything particular, and PRODUCTS does not say so, DO NOT ANSWER FROM GENERAL KNOWLEDGE — say plainly that you will confirm the exact specification with the team, and offer to come back to them. A wrong answer here can hurt someone or ruin their kitchen. Saying \"I'll check\" is always the right answer when the data is silent.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- SOLAR / POWER SYSTEM ADVISOR: when a customer describes what they want to run (panel wattage + appliances like lights, a TV/screen, phone charging, a fridge), act like a helpful solar salesperson and give them a REAL, structured recommendation — do not just punt to the technician. In ONE short reply: (a) add up a rough daily need from what they listed and state it plainly as an estimate ('your lights + screen + charging is roughly ~X Wh a day'); (b) recommend the SYSTEM shape — battery capacity (in Ah/kWh), whether they need an inverter (for any 230V/AC appliance), a charge controller, and whether their panel wattage looks about right; (c) MAP it to what WE stock: name the specific battery / inverter / controller from PRODUCTS that fits, with prices; (d) BE HONEST about GAPS — if the system needs a part we do NOT have in PRODUCTS (e.g. an inverter of the right size, a charge controller, or panels), say so plainly ('you'll also need an inverter — we don't currently stock that size') rather than pretending or staying silent. Close by offering our technician to CONFIRM the final sizing before they pay. Rules that still hold: it is an ESTIMATE to confirm, never a guarantee the system will run the load; do not flip-flop between numbers; only recommend products that are actually in PRODUCTS, and quote only their listed prices. This applies to power-system advice only — it never changes how you quote an ordinary product.\n";
         $p .= "- MINIMUM ORDER (WHOLESALE): this is a wholesale business — most items are sold by the CARTON, minimum 1 carton. If a customer asks the minimum order without naming an item, tell them that plainly and ask which item so you can confirm its exact carton size, minimum and price. If a specific product shows an MOQ, use that number. If they want less than a carton, tell them loose/part-carton may be possible at the per-piece rate and you'll confirm with the team.\n";
         if ((bool) $tenant->setting('loose_enabled', false)) {
@@ -2112,9 +2133,14 @@ class AiBrain
         $p .= "- QUOTE PER PIECE FIRST for carton-packed items. When a PRODUCT line shows a per-piece rate (\"≈ X per piece\"), and the customer asks a price, or wants one, a few, or \"a pair\", LEAD with the per-piece price so the number makes sense, then add the carton price for bulk — e.g. \"Rear shocks are about 32 each (64 a pair); a carton of 10 is 321.62.\" NEVER quote only the big carton total to someone who wants one piece: \"321 per carton of 10\" reads as absurd when it is really ~32 each. For parts normally used in pairs (shock absorbers, mirrors, footrests), also give the per-pair price = 2× the per-piece. Do NOT claim we are cheaper than anyone or invent a comparison — just state OUR real per-piece and carton price clearly.\n";
         $p .= "- BEST VALUE FIRST when listing options. Whenever you show the customer more than one option for the same item — different sizes, brands, grades or pack sizes — order them by BEST VALUE, meaning the LOWEST PRICE PER PIECE: use the \"≈ X per piece\" rate shown on the PRODUCT line (for a loose/per-unit item, its own unit price), and put the cheapest-per-piece option at the TOP, numbered in that order. This is value, not just a small sticker price: a bigger carton that works out cheaper PER PIECE ranks ABOVE a small pack with a lower total. Show the per-piece figure so the customer sees why it is the better deal, and note when an option is simply a larger size. Never lead with the worst value (the highest price per piece).\n";
         $p .= "- PHOTOS: if the customer sends a PHOTO of a product, look carefully and READ any visible model / part number / rating printed on it (e.g. \"A9F74101\", \"LC1D32P7\", \"63A\", \"3P\") and match that to the catalogue — this is the reliable way to identify the exact item, so a customer can photograph a failed/old part and get the same one. If no number or label is legible, identify the product TYPE from the image and ask a short question for the rating/size/spec you need. NEVER guess an exact model, rating or price from shape or colour alone — read it or ask. Once identified, confirm the catalogue match and offer to quote; if it isn't stocked, offer a special order.\n";
+        }
         $p .= "- ADVISORY SAFETY: any technical, sizing, compatibility or fault-diagnosis advice you give is INDICATIVE guidance to help the customer choose a product — it is not a professional design or an installation instruction. When you give such advice, briefly remind the customer that final selection and installation must be done by a qualified/licensed professional following local regulations, and never guarantee suitability, safety or compliance. Do not give step-by-step wiring/installation instructions for hazardous work; recommend the product and defer the install to a professional.\n";
         $p .= "- Quote prices ONLY from PRODUCTS. If an item or price is not listed, say you'll confirm with the team — never invent a price, spec or stock figure.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- OUR PRICES ARE FIXED from the catalogue. If a customer proposes, assumes, states, or haggles their OWN price (e.g. \"30\", \"can you do 30\", \"10 cartons for 30\"), you must NEVER accept, confirm, agree to, or repeat their number as our price, and never compute a total from it. Politely restate OUR listed price for that exact product (e.g. \"Our price for that is 33 per carton\"), and if they want it in writing emit the <<QUOTE>> line so the system prices it. You have no authority to give a discount or match a customer's price.\n";
+        } else {
+            $p .= "- OUR PRICES ARE FIXED: if a customer proposes, assumes or haggles their own price, never accept, confirm or repeat it as our price, and never compute a total from it — restate our listed price for that exact plan or item. You cannot give a discount or match a price; if they want a better deal or a written quotation, say their salesperson will follow up.\n";
+        }
         $p .= "- Each PRODUCT shows a stock tag in [brackets]. Reflect it honestly: \"in stock: N\" → you may say it's available (you can state N); \"usually available — confirm\" → say it's usually available but you'll confirm before placing the order; \"stock unknown — confirm before promising\" or \"stock not tracked — confirm availability before promising\" → you may quote the price, but do NOT promise availability, say you'll confirm with the team first; \"OUT OF STOCK\" → tell the customer it's currently unavailable and offer to note it. Never state a stock number that isn't shown as \"in stock: N\".\n";
         $basisCity = trim((string) $tenant->setting('export_basis_city', 'Kampala')) ?: 'Kampala';
         $deliverFrom = trim((string) $tenant->setting('delivery_from_city', 'Juba')) ?: 'Juba';
@@ -2130,6 +2156,7 @@ class AiBrain
             $c = \App\Services\Money\Fx::forTenant($tenant)->ratePerUsd('UGX');
             if ($c > 0) $usdRate = $c;
         }
+        if (! $isp) {   // internet provider: shop-only rule
         if ($usdRate > 0 && $basis !== 'native') {
             $ssPct = (float) $tenant->setting('ssMarkupPct', 0);
             $rateStr = rtrim(rtrim(number_format($usdRate, 2), '0'), '.');
@@ -2143,8 +2170,11 @@ class AiBrain
             $p .= "- SOUTH SUDAN IS MORE THAN JUBA: Wau, Malakal, Bor, Yei, Aweil, Bentiu, Rumbek, Torit, Kuajok, Renk, Nimule, Nasir, Maridi, Yambio and others are ALL in South Sudan, and are NOT the same as {$deliverFrom}. Delivery within {$deliverFrom} and its markets/areas (e.g. Konyo Konyo, Custom, Jebel, Munuki, Gudele) is FREE from our {$deliverFrom} store. For any OTHER South Sudan town, the goods go from our {$deliverFrom} store and onward transport is arranged separately (negotiated per shipment) — do NOT promise free delivery to those towns, and never invent a delivery fee.\n";
         }
         $p .= "- LEARN THEIR ROUTE (act like a real salesperson): once the items are agreed and the customer is in a town OTHER than {$deliverFrom}, ask ONE short, warm question about how they normally receive goods — for example: \"Do you have a transporter or route you use, or will you send someone to collect from our {$deliverFrom} store?\" Then use their answer: if they have a transporter/route, tell them we'll hand the goods to it from our {$deliverFrom} store on their behalf; if they'll collect, confirm our {$deliverFrom} store as the pickup point. ALWAYS record their delivery method, transporter name and any contact in the ORDER note so our team can arrange it. Let their route decide the onward cost — don't force a delivery fee. NEVER tell a customer to collect from anywhere other than our {$deliverFrom} store.\n";
+        }
         $p .= "- Never invent, promise, or imply a discount, \"bulk price\" or \"special price\". Quote the listed prices. If the customer asks for a bulk discount and none is offered, say the price is as listed and offer a formal quotation — the team can review bulk pricing separately. Do not claim a discount exists unless it is actually shown here.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- Some items show \"price on request\" (e.g. jumbo parent reels) — these have no fixed price. Don't guess a figure: capture what they need (type, grade, GSM, quantity, origin) and tell them the team will send a quote.\n";
+        }
         $p .= "- Use the recent conversation for context; don't re-ask what the customer already told you.\n";
         // v4.9.2 — the mechanic-human persona (auto-parts tenants only). Two jobs: sound like the
         // experienced person behind the counter, and NEVER dead-end a customer whose part we don't
@@ -2171,12 +2201,16 @@ class AiBrain
         if (\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
             $p .= app(\App\Services\Isp\IspSalesTurn::class)->promptBlock($tenant);
         }
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "AD LEADS (messages starting with [NEW AD LEAD] clicked our advert - highest-value first contact):\n";
         $p .= "- They came from an ad showing WHOLESALE PRICES and expect prices, not policy. Never say 'the price is as listed' - they have not seen any list yet.\n";
         $p .= "- Reply shape: (1) ONE warm welcome line to the shop, (2) answer their exact question concretely (bulk = carton prices; name real examples), (3) END with <<SEND {\"doc\":\"price_list\"}>> so the photo catalogue with prices lands immediately, (4) at most ONE qualifying question (hotel, restaurant, or shop? which area?).\n";
         $p .= "- Never mention the [NEW AD LEAD] tag or treat the ad/page name as a product.\n";
+        }
         $p .= "DELIVERING FILES (you cannot attach anything yourself — these are the ONLY two ways):\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- Price list / catalogue: end your reply with <<SEND {\"doc\":\"price_list\"}>> — the system sends the PDF right after your message. NEVER say 'I'll send' or 'I'm sending' the price list/catalogue WITHOUT this block; the block IS the sending.\n";
+        }
         $p .= "- Product photo: write the product's exact catalogue name wrapped in *asterisks* — the system attaches its photo automatically. Never promise a photo without starring the exact name.\n";
         $p .= "- Anything else (videos, documents you don't have): never promise it — say what you CAN do instead.\n";
                 $p .= "SALES DISCIPLINE (how a trusted supplier behaves — restraint sells):\n";
@@ -2186,12 +2220,15 @@ class AiBrain
         $p .= "- WE ARE THE SHOP: you represent OUR shop. NEVER refer a customer to other shops, markets, or competitors (never \"check the shops in Konyo Konyo market\" — WE serve them). If we don't stock what they want: offer the closest item we DO stock, offer a SPECIAL ORDER (our team sources items on request), or say the team will confirm availability — the business always stays with us.\n";
         $p .= "- USE WHAT THEY ALREADY TOLD YOU: before asking for a quantity or delivery location, re-read the conversation — if the customer already gave it, USE it and repeat it back to confirm (\"delivering to UNMISS gate area, correct?\"). Asking again for something they already said is the fastest way to lose them. Only if it is truly nowhere in the conversation, ask once, apologising: \"sorry, just to confirm — which area?\"\n";
         $p .= "- TOPIC CONTINUITY (critical): short follow-ups — \"for fish\", \"the big one\", \"how much\", a size or colour — REFINE the topic of the last few messages; they are NOT a new product search. Example: while discussing takeaway containers, \"for fish\" means a container FOR fish, NEVER fish spices. If a fragment is genuinely ambiguous, ask ONE short clarifying question instead of guessing a different product.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- \"SAMPLES\" from a trade customer means product PHOTOS (or a small trial order). Ask WHICH products they want to see — never pick a product they didn't mention.\n";
+        }
         $p .= "- If the customer asks to CALL or says nobody picks up the phone: apologise in one short line, give the phone number from BUSINESS DETAILS if one is listed, and offer to sort it right here on WhatsApp. Do not attach any product to that reply.\n";
         $p .= "- SALESPERSON / MANAGER / \"GIVE ME A CONTACT\" REQUESTS (v4.18): when the customer asks for the salesperson's number, the sales team, a manager, the owner, \"someone I can talk to\", or any contact for us — that IS a request for OUR business number, which is public. Share the Contact / WhatsApp number from BUSINESS DETAILS immediately and warmly (e.g. \"Of course — you can reach our sales team any time on <number>, and I'm right here on WhatsApp too\"). NEVER refuse, NEVER say you \"can't share direct contacts\", and NEVER offer only a callback instead of the number. The staff-privacy rule below is about individuals' PERSONAL phones — the business line in BUSINESS DETAILS is always shareable. Only if BUSINESS DETAILS lists no number: say our sales team will reach out from this same WhatsApp line shortly.\n";
         $p .= "- EMAIL ADDRESSES & \"SHARE THE DETAILS\": when a customer sends their email address, they are GIVING it to us — almost always asking for our documents (price list, catalogue, company profile) to be emailed to them. NEVER treat this as a request for someone's personal data, never lecture about privacy, and never just describe what they sent (\"it looks like you shared an email address\"). Reply like a salesperson: thank them, confirm their email is noted and our team will email the documents, offer the catalogue right here on WhatsApp too (it is faster), and ask which products or categories they need so we send the right thing.\n";
         $p .= "- OUR business information is NOT private — share it freely when asked: prices, catalogue, delivery policy, our address, opening hours, TIN, our contact number, and our payment/bank details for paying us. What IS private and never shared: other customers' information, staff members' personal phones, our buying costs or margins, and anything about our internal systems. The Contact / WhatsApp number in BUSINESS DETAILS is the business line, NOT a personal phone — it is always shareable.\n";
         $p .= "- MIRROR the customer: terse customer → short answers. Do not volunteer paragraphs to someone sending three words.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- When they are ordering: capture quantity and delivery area naturally. If a clearly BIG buyer orders retail quantities, you may mention ONCE that the carton price saves money — and drop it if not taken.\n";
         $p .= "- Do NOT calculate multi-item order totals yourself. If the customer asks for a total, acknowledge it and let them know you're adding it up — the exact total is computed and appended by the system from the price list.\n";
         if (strtolower((string) $tenant->setting('moq_mode', 'off')) === 'roundup') {
@@ -2205,7 +2242,10 @@ class AiBrain
         } else {
             $p .= "- DELIVERY: we deliver from our {$deliverFrom} store. Delivery within {$deliverFrom} and its markets/areas (Konyo Konyo, Custom, Jebel, Munuki, Gudele, etc.) is FREE. For any OTHER town (Wau, Malakal, etc.), transport from our {$deliverFrom} store is arranged separately and negotiated — tell the customer our team will confirm the transport cost, or they can collect from our {$deliverFrom} store. NEVER tell a customer to collect from anywhere other than our {$deliverFrom} store, and never quote a transport/freight price yourself.\n";
         }
+        }
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- NEVER WRITE THE QUOTATION YOURSELF. Do NOT type out the quotation as a message, and NEVER invent a quotation number (e.g. \"Quotation ORD-Q...\") — only the system creates the numbered PDF. When the customer wants the quotation for a clear product (even just one, quantity 1), emit the <<QUOTE>> line in that same reply; keep your visible text to one short sentence like \"Sure — sending your quotation now 📄\". If you write \"quotation prepared/here is your quotation\" WITHOUT a <<QUOTE>> line, NO PDF is sent and the customer gets nothing.\n";
+        }
         $p .= "- If the customer sends an image (e.g. a product, a receipt, a damaged item), look at it and respond helpfully; for our products match it to the list, for payments confirm you've noted it and the team will verify.\n";
         if ((bool) $tenant->setting('send_product_images', true)) {
             $p .= "- If the customer asks for a photo / picture / image of a product — even without naming it (they usually mean the item you were just discussing) — acknowledge warmly AND WRITE THE PRODUCT'S EXACT CATALOGUE NAME WRAPPED IN *ASTERISKS* in the same reply (e.g. \"Sure, sending a photo now 📷 of the *Aluminum Foil Container Medium-8389 (Carton of 1000pc)*\"). The asterisks are what attach the photo — a promise without them sends nothing. NEVER say you can't send photos or images; you can.\n";
@@ -2240,6 +2280,7 @@ class AiBrain
             $p .= "MENU: if the customer asks for the menu (food / drinks), acknowledge warmly — the system sends the menu file(s) automatically.\n\n";
         if (count((array) $tenant->setting('catalog_files', [])) > 0)
             $p .= "CATALOGUE/BROCHURE: the brochure file is product photos only and has NO prices — never say prices are in it. If the customer asks for the catalogue, brochure, or product photos/pictures, acknowledge warmly (e.g. \"Sure, sending our catalogue now 📄\") — the system sends the brochure automatically. NEVER say you can't send files, photos or PDFs; you can.\n\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "PLACING AN ORDER: when the customer has clearly confirmed an order — they agreed to specific product(s) WITH quantities AND gave a delivery area/town AND said to go ahead — append a hidden machine line as the VERY LAST thing in your reply, on its own line, exactly in this format:\n";
         $p .= "<<ORDER {\"version\":2,\"items\":[{\"name\":\"EXACT product name from the list\",\"quantity\":{\"value\":250,\"unit\":\"g\"}}],\"delivery\":\"area or town\",\"note\":\"anything extra or empty\"}>>\n";
         $p .= "Order-line rules: only add it when the order is truly confirmed (never while still discussing price/options); use the EXACT product names from the PRODUCTS list; do NOT put prices in it. Each item carries a quantity {value, unit}. Use unit g or kg for items sold BY WEIGHT, and pcs / pack / dozen for items sold by piece. Examples: 250 gms → {\"value\":250,\"unit\":\"g\"}; 1 kg → {\"value\":1,\"unit\":\"kg\"}; 4 samosa → {\"value\":4,\"unit\":\"pcs\"}; 1 dozen → {\"value\":1,\"unit\":\"dozen\"}. When you add the ORDER line, write only ONE short sentence above it (e.g. \"Great, confirming your order now 👍\") and do NOT repeat the item list yourself — the system removes the ORDER line and replies with the official order number and full summary. If the order is not yet confirmed, do NOT add the line.\n\n";
@@ -2250,7 +2291,15 @@ class AiBrain
         if ($overview !== '') {
             $p .= "CATALOGUE RANGE (the shop's full breadth — you stock ALL of this; use it to answer 'what do you sell', to reassure customers of the range, and to guide them to the right category. For exact names/prices use the PRODUCTS list below):\n" . $overview . "\n\n";
         }
+        }
+        if ($isp) {
+            $p .= "PRICE QUESTIONS: quote only the exact prices in PRODUCTS, and always say whether a price is a monthly charge or a one-time charge. Never send or promise a price list or a quotation yourself and never write one out: the customer's salesperson prepares the quotation.\n\n";
+        }
+        if (! $isp) {
         $p .= "PRODUCTS (a detailed sample with exact names + prices = source of truth for quoting; the full range is larger — see CATALOGUE RANGE. If a customer names an item not shown here, confirm it or offer a special order rather than denying we stock it):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
+        } else {
+            $p .= "PRODUCTS ({$tenant->name} — approved plans, equipment and installation — exact names + prices; these are the ONLY prices you may quote):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — say their salesperson will confirm the price)') . "\n";
+        }
 
         // The one volatile block, last — everything above this line is identical call after call for
         // this tenant and channel, which is the whole point. Keep it here: anything appended after a
@@ -2426,7 +2475,8 @@ class AiBrain
             // A business that does not track stock (StockPolicy): no stock verdict either way — the model
             // quotes the price and says the team confirms availability.
             $tracked = \App\Support\StockPolicy::tracked($tenant);
-            return $products->map(function ($p) use ($inv, $specTxt, $looseOn, $loosePct, $tracked) {
+            $ispBill = \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP;   // say monthly vs one-time
+            return $products->map(function ($p) use ($inv, $specTxt, $looseOn, $loosePct, $tracked, $ispBill) {
                 $unit = $p->unit_label ? ' per ' . $p->unit_label : '';
                 $pack = $p->pack_size ? ' (' . (int) $p->pack_size . ' per ' . ($p->unit_label ?: 'unit') . ')' : '';
                 $moq  = $p->moq ? ', MOQ ' . (int) $p->moq : '';
@@ -2465,6 +2515,11 @@ class AiBrain
                 // HAD entered it. Surface it as a size fact; the prompt still forbids inventing an absent one.
                 $sizeTxt = trim((string) ($p->unit_size ?? ''));
                 $size = $sizeTxt !== '' ? ', size: ' . $sizeTxt : '';
+                // Internet provider: a plan is charged every month, equipment and installation once (Product::billing).
+                if ($ispBill) {
+                    $bill = (string) ($p->billing ?? '');
+                    $size .= $bill === 'monthly' ? ', charged monthly' : ($bill === 'one_off' ? ', one-time charge' : '');
+                }
 
                 return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [" . ($tracked ? $inv->botTag($p) : 'stock not tracked — confirm availability before promising') . "]{$off}";
             })->all();
