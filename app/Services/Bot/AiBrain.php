@@ -2406,7 +2406,7 @@ class AiBrain
                           ->orWhereRaw('LOWER(COALESCE(oem_number, \'\')) LIKE ?', [$like]);
                     }
                 })
-                ->limit(60)->get(['name', 'price', 'base_price', 'stock', 'unit_label', 'oem_number', 'popularity']);
+                ->limit(60)->get(['name', 'price', 'base_price', 'stock', 'unit_label', 'oem_number', 'popularity', 'billing']);
             if ($rows->isEmpty()) return '';
 
             $cur = (string) $tenant->setting('currency', 'UGX');
@@ -2421,7 +2421,8 @@ class AiBrain
             foreach ($scored as $s) {
                 $p = $s['p']; $price = (float) ($p->price ?? $p->base_price ?? 0);
                 $tag = $price > 0 ? ($cur . ' ' . number_format($price, $dec)) : 'ask for price';
-                $stk = (\App\Support\StockPolicy::tracked($tenant) && $p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
+                // A monthly plan (internet provider) is a service: never "[out of stock]", whatever its stock figure.
+                $stk = (\App\Support\StockPolicy::tracked($tenant) && ($p->billing ?? null) !== 'monthly' && $p->stock !== null && (float) $p->stock <= 0) ? ' [out of stock]' : '';
                 $lines[] = '• ' . $p->name . ' — ' . $tag . $stk;
             }
             return "PRODUCTS MATCHING THIS REQUEST (searched across the WHOLE catalogue for this message — "
@@ -2532,6 +2533,11 @@ class AiBrain
                     $size .= $bill === 'monthly' ? ', charged monthly' : ($bill === 'one_off' ? ', one-time charge' : '');
                 }
 
+                // Internet provider: a monthly plan is a service, never stock — no stock verdict at all (a "stock
+                // unknown" tag on a plan was read by the model as "out of stock"). Availability = coverage rules.
+                if ($ispBill && (string) ($p->billing ?? '') === 'monthly') {
+                    return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [subscription plan — a service, never out of stock; where it can be installed follows the coverage rules]{$off}";
+                }
                 return "• {$p->name}{$brand}{$pack} — {$price}{$unit}{$perPiece}{$moq}{$orig}{$size}{$spec}{$use} [" . ($tracked ? $inv->botTag($p) : 'stock not tracked — confirm availability before promising') . "]{$off}";
             })->all();
         });

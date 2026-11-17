@@ -116,4 +116,33 @@ class IspShopRulesTest extends TestCase
         $this->assertStringNotContainsString('charged monthly', $p);
         $this->assertStringNotContainsString('one-time charge', $p);
     }
+
+    /**
+     * Real chat, 17 Nov 2026: with stock tracking on (the default) and the plan at stock 0, the AI told a
+     * customer "the Starlink Residential Plan is currently out of stock". A monthly plan is a service.
+     */
+    public function test_a_monthly_plan_is_never_out_of_stock_even_when_stock_is_tracked(): void
+    {
+        $t = $this->business('isp');   // track_stock not set → tracked (the default)
+        $plan = app(ProductWriteService::class)->create($t, ['name' => 'Test Residential Plan', 'price' => 50, 'stock' => 0, 'billing' => 'monthly', 'service_line' => 'starlink']);
+        $kit = app(ProductWriteService::class)->create($t, ['name' => 'Test Kit Counted', 'price' => 400, 'stock' => 0, 'billing' => 'one_off', 'service_line' => 'starlink']);
+        app(\App\Services\Inventory\InventoryState::class)->recordCount($plan, 0);
+        app(\App\Services\Inventory\InventoryState::class)->recordCount($kit, 0);
+
+        $lines = collect(explode("\n", $this->prompt($t)));
+        $planLine = $lines->first(fn ($l) => str_starts_with(ltrim($l), "\u{2022} Test Residential Plan"));
+        $kitLine = $lines->first(fn ($l) => str_starts_with(ltrim($l), "\u{2022} Test Kit Counted"));
+        $this->assertNotNull($planLine);
+        $this->assertStringContainsString('never out of stock', $planLine);
+        $this->assertStringNotContainsString('OUT OF STOCK', $planLine);
+        $this->assertStringNotContainsString('stock unknown', $planLine);
+        $this->assertStringContainsString('OUT OF STOCK', (string) $kitLine, 'hardware keeps its honest stock tag while stock is tracked');
+
+        $m = new \ReflectionMethod(AiBrain::class, 'relevantProductsBlock');
+        $m->setAccessible(true);
+        $block = (string) $m->invoke(app(AiBrain::class), $t, 'I need test residential plan and test kit');
+        $this->assertStringContainsString('Test Residential Plan', $block);
+        $this->assertDoesNotMatchRegularExpression('/Test Residential Plan[^\n]*\[out of stock\]/', $block, 'a plan is never tagged out of stock');
+        $this->assertMatchesRegularExpression('/Test Kit Counted[^\n]*\[out of stock\]/', $block, 'hardware search tag unchanged');
+    }
 }
