@@ -34,7 +34,8 @@ final class Winback
         'stop'      => '/\b(stop|unsubscribe|not interested|no longer interested|don\'?t (?:message|text|call|contact) me|remove my number|wrong number)\b/u',
         'support'   => '/\b((?:network|internet|connection|wi-?fi) is (?:really |very |so )?(?:down|slow|bad|off)|no signal|not connecting|can\'?t (?:connect|browse|load|provide internet)|reset|red light|no internet|not working|stopped working|disconnect(?:ed|ing)?|offline|slow (?:internet|network|connection|speed)|internet is slow|is very slow|wi-?fi password|change (?:the |my )?password|reset (?:the |my )?router|my (?:kit|dish|starlink|fib(?:er|re)|account|subscription|router)|subscription (?:expired|ended|is over)|renew(?:al)?)\b/u',
         'paid'      => '/\b(i (?:have )?paid|already paid|sent (?:the |you )?money|payment (?:done|sent|made|is done)|transferred|here is the receipt|proof of payment)\b/u',
-        'visit'     => '/\b(office|visit you|come (?:to|over)|where are you (?:located|found)?|your (?:location|address)|where is your)\b/u',
+        // OUR office: "where is your office", "office hours" — not "fiber for my office"
+        'visit'     => '/\b((?:your|the|dishnet\'?s?) office|office (?:location|address|hours)|visit you|come (?:to|over)|where are you (?:located|found)?|your (?:location|address)|where is your)\b/u',
         'callback'  => '/\b(call me|call back|callback|phone me|ring me|give me a call|your (?:phone|contact) number|speak to (?:an? )?(?:agent|person|someone|human|staff))\b/u',
         'buy'       => '/\b(i want|i need|i would like|i\'d like|buy|purchase|order|install(?:ation)?|ready to|how (?:do|can) i (?:get|pay|buy)|i (?:will|would|can) pay|proceed|go ahead|book)\b/u',
         'price'     => '/(\b(price|prices|cost|how much|charges?|fees?|rates?|quotation|quote|proforma|usd|ssp|dollars?)\b|\$)/u',

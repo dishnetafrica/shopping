@@ -33,6 +33,8 @@ chk('asked for a $30 plan: wanted cheaper', $c([[$d(40), false, 'is there a $30 
 chk('asked a price: warm', $c([[$d(40), false, 'How much is it']])['segment'], 'warm');
 chk('only the advert question and hello: cold', $c([[$d(5), false, 'Hello! Can I get more info on this?'], [$d(5), false, 'Hi'], [$d(5), true, 'Welcome']])['segment'], 'cold');
 chk('anything of their own beyond hello is at least warm', $c([[$d(5), false, 'Can you bring it to Akobo?']])['segment'], 'warm');
+chk('"fiber for my office" is not a visit to OUR office: warm, not hot', $c([[$d(5), false, 'fiber price for my office please']])['segment'], 'warm');
+chk('"office hours?" is a visit: hot', $c([[$d(5), false, 'what are your office hours?']])['segment'], 'hot');
 chk('"speak to an agent" is a callback: hot', $c([[$d(5), false, 'Can I speak to an agent please']])['segment'], 'hot');
 chk('Fiber words: Fiber; both: both', [$c([[$d(5), false, 'fibre 20 mbps price?']])['service'], $c([[$d(5), false, 'starlink or fiber which is better?']])['service']], ['fiber', 'both']);
 chk('"DishNet" is not the word "dish" (not Starlink)', $c([[$d(5), false, 'is dishnet available in wau?']])['service'], 'unsure');
