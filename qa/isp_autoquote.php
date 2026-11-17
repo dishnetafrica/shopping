@@ -87,11 +87,36 @@ chk('Evolution refused', A::delivered(['status' => 400, 'error' => 'Bad Request'
 chk('the gateway flagged a failed send', A::delivered(['_ok' => false, '_status' => 500]), false);
 chk('nothing back', A::delivered(null), false);
 
+echo "== what the customer said about their setup (decorative letters included)\n";
+chk('decorative Unicode letters read as plain text', P::plain("\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E}"), 'Not like 250 people');
+chk('…also without the intl extension', P::plainByHand("\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E} \u{1D7F8}\u{1D7F6}"), 'Not like 250 people 20');
+chk('"Not like 250 people" in decorative letters = 250 users', P::users(["\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E}"]), 250);
+chk('"3o users" typed with a letter o = 30', P::users(['it can hold 3o users']), 30);
+chk('the largest number across messages', P::users(['for 20+ users', 'actually about 300 active users', 'for 1,000 students next year']), 1000);
+chk('"users: 60" = 60', P::users(['users: 60']), 60);
+chk('speeds, money and plain numbers are not users', P::users(['Fiber 50 Mbps please', '$250 budget', 'I have 2 kits']), 0);
+chk('the customer\'s name from the hidden line', [P::customerName('<<QUOTE {"customer_name":"peter","items":[]}>>'), P::customerName('<<QUOTE {"customer_name":"mary  akech","items":[]}>>')], ['Peter', 'Mary Akech']);
+chk('…not a phone number or nothing', [P::customerName('<<QUOTE {"customer_name":"+211 92","items":[]}>>'), P::customerName('<<QUOTE {"items":[]}>>')], ['', '']);
+
+echo "== when no quotation is sent, the reply does not claim one\n";
+chk('"here is your quotation" is removed, the rest kept', A::withoutQuoteClaims("Thank you, Peter! I will prepare your quotation for the kit and plan. Sure — here is your quotation \u{1F4C4}"), 'Thank you, Peter!');
+chk('ordinary sentences stay', A::withoutQuoteClaims('Great choice. Which area are you in?'), 'Great choice. Which area are you in?');
+chk('the large-setup line names the size, no amount', [sprintf(A::LARGE, 250), preg_match('/\$|USD/', A::LARGE)], ['For a setup of about 250 users you need a business plan, which your salesperson prices for you. They will prepare a custom quotation and contact you shortly.', 0]);
+
+echo "== the bot promised a follow-up (someone must be told)\n";
+chk('live: "I will confirm the prices … with the team. Please hold on"', S::promisesFollowUp('I will confirm the prices and availability for the MikroTik router and any necessary cables with the team. Please hold on for a moment.'), true);
+chk('"your salesperson will confirm the exact price" (the guard\'s own note)', S::promisesFollowUp('Your salesperson will confirm the exact price in a written quotation.'), true);
+chk('"we\'ll get back to you"', S::promisesFollowUp("Thanks! We'll get back to you shortly."), true);
+chk('a question or an answer is not a promise', [S::promisesFollowUp('Which area are you in?'), S::promisesFollowUp('The Starlink Standard kit is a one-time charge.')], [false, false]);
+
 echo "== the rules the model is given\n";
 $r = S::quoteRules();
 chk('the model writes the hidden line, never the quotation', [str_contains($r, '<<QUOTE'), str_contains($r, 'Never type a quotation')], [true, true]);
 chk('exact catalogue names; Starlink kit + plan; Fiber installation automatic', [str_contains($r, 'EXACT names from PRODUCTS'), str_contains($r, 'kit AND the monthly plan'), str_contains($r, 'installation is added automatically')], [true, true, true]);
 chk('large and custom jobs go to the salesperson', str_contains($r, 'more than 5 kits'), true);
+chk('50+ users on Starlink: no Residential, a Priority quotation from the salesperson', str_contains($r, 'do NOT recommend the Residential plan'), true);
+chk('the hidden line carries the customer\'s name', str_contains($r, 'customer_name'), true);
+chk('accessories: price what is in PRODUCTS, salesperson quotes the rest, never "I will check"', [str_contains($r, 'ACCESSORIES'), str_contains($r, 'never say you will check yourself')], [true, true]);
 chk('no discount on a price objection', str_contains($r, 'do not offer a discount'), true);
 chk('no amounts and no Uganda defaults in the rules', [preg_match('/\$\s?\d/', $r), stripos($r, 'UGX'), stripos($r, 'Kampala')], [0, false, false]);
 chk('the general rules no longer say "salesperson takes it from here" (that line is used only when quotations are off)', str_contains(S::rules(), 'take it from here'), false);

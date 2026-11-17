@@ -145,6 +145,74 @@ final class IspQuotePlan
         return $out(true, '', $added);
     }
 
+    /**
+     * PURE. Text as plain letters and digits. Customers write in decorative Unicode letters
+     * (live, 17 Nov 2026: "𝙽𝚘𝚝 𝚕𝚒𝚔𝚎 250 𝚙𝚎𝚘𝚙𝚕𝚎"), which no word match can read. NFKC turns
+     * those into ordinary letters; without the intl extension the mathematical letter and digit
+     * blocks are mapped by hand.
+     */
+    public static function plain(string $s): string
+    {
+        if (class_exists(\Normalizer::class)) {
+            $n = \Normalizer::normalize($s, \Normalizer::FORM_KC);
+            if (is_string($n)) {
+                return $n;
+            }
+        }
+
+        return self::plainByHand($s);
+    }
+
+    /** PURE. plain() without the intl extension: the mathematical letter and digit blocks only. */
+    public static function plainByHand(string $s): string
+    {
+        return (string) preg_replace_callback('/[\x{1D400}-\x{1D6A3}\x{1D7CE}-\x{1D7FF}]/u', function ($m) {
+            $cp = mb_ord($m[0], 'UTF-8');
+            if ($cp >= 0x1D7CE) {
+                return (string) (($cp - 0x1D7CE) % 10);
+            }
+            $i = ($cp - 0x1D400) % 52;
+
+            return $i < 26 ? chr(65 + $i) : chr(97 + $i - 26);
+        }, $s);
+    }
+
+    /**
+     * PURE. The largest number of users the customer has mentioned ("250 people", "about 300 users",
+     * "for 100 students"), or 0. A setup this size is a custom (Priority) job for the salesperson,
+     * not an automatic Residential quotation.
+     *
+     * @param string[] $texts the customer's own messages
+     */
+    public static function users(array $texts): int
+    {
+        $max = 0;
+        $who = 'users?|people|persons?|pple|ppl|devices?|clients?|customers?|connections?|staff|employees?|students?|rooms?|members?|guests?|subscribers?';
+        foreach ($texts as $t) {
+            $t = mb_strtolower(self::plain((string) $t));
+            $t = preg_replace('/(?<=\d)o|o(?=\d)/u', '0', $t) ?? $t;   // "3o users" typed with a letter o
+            preg_match_all('/(\d[\d,]*)\s*\+?\s*(?:\w+\s+){0,2}?(?:' . $who . ')\b/u', $t, $a);
+            preg_match_all('/\b(?:' . $who . ')\s*(?:of|about|around|:|=|is|are)?\s*(\d[\d,]*)/u', $t, $b);
+            foreach (array_merge($a[1], $b[1]) as $n) {
+                $max = max($max, (int) str_replace(',', '', $n));
+            }
+        }
+
+        return $max;
+    }
+
+    /** PURE. The customer's name the model put in the hidden line, if any (letters only, short). */
+    public static function customerName(string $block): string
+    {
+        $a = strpos($block, '{');
+        $b = strrpos($block, '}');
+        $data = ($a !== false && $b !== false && $b > $a) ? json_decode(substr($block, $a, $b - $a + 1), true) : null;
+        $name = trim(self::plain((string) (is_array($data) ? ($data['customer_name'] ?? '') : '')));
+        $name = preg_replace('/\s+/u', ' ', $name) ?? '';
+
+        return preg_match('/^[\p{L}][\p{L}\'\. -]{0,58}$/u', $name) ? mb_convert_case($name, MB_CASE_TITLE) : '';
+    }
+
     private static function norm(string $s): string
     {
         $s = mb_strtolower($s);

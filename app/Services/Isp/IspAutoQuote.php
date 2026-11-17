@@ -32,6 +32,8 @@ class IspAutoQuote
 {
     public const HANDOFF = 'Your salesperson will prepare your quotation and send it to you shortly.';
 
+    public const LARGE = 'For a setup of about %d users you need a business plan, which your salesperson prices for you. They will prepare a custom quotation and contact you shortly.';
+
     public function __construct(private QuotationService $quotes, private OrderCalculator $calc, private SalesOwnership $owners) {}
 
     public static function enabled(Tenant $tenant): bool
@@ -49,7 +51,9 @@ class IspAutoQuote
         $end = strpos($reply, '>>', $pos);
         $block = $end === false ? substr($reply, $pos) : substr($reply, $pos, $end + 2 - $pos);
         $clean = trim(substr($reply, 0, $pos) . ($end === false ? '' : substr($reply, $end + 2)));
-        $name = trim((string) ($convo->customer_name ?? ''));
+        // The name the customer gave in the chat travels in the hidden line (live, 17 Nov 2026: "My name
+        // is peter" was said, and the quotation was billed to a bare phone number).
+        $name = trim((string) ($convo->customer_name ?? '')) ?: IspQuotePlan::customerName($block);
 
         try {
             $catalogue = $this->catalogue($tenant);
@@ -59,6 +63,19 @@ class IspAutoQuote
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', $plan['reason'] . ': ' . mb_substr($asked, 0, 200));
 
                 return ['reply' => $this->handoff($tenant, $from, $name, $clean, "asked for a quotation ({$asked}) — prepare it ({$plan['reason']})"), 'sent' => false];
+            }
+            // A large setup is a custom (Priority) job for the salesperson, whatever the model chose.
+            // Live, 17 Nov 2026: "not like 250 people" was quoted the Residential plan (published for about
+            // 50 users). Read from the customer's own messages, not from the model.
+            // Only a Starlink plan has this ceiling (Residential "up to about 50 active users"; Priority above,
+            // priced by Sales). Fiber's published guidance has no upper limit.
+            $starlinkPlan = (bool) array_filter($plan['lines'], fn ($l) => ($catalogue[$l['name']]['service_line'] ?? null) === 'starlink' && ($catalogue[$l['name']]['billing'] ?? null) === 'monthly');
+            $users = $starlinkPlan ? IspQuotePlan::users($this->customerTexts($tenant, $from)) : 0;
+            $maxUsers = (int) $tenant->setting('isp_auto_quote_max_users', 50);
+            if ($maxUsers > 0 && $users >= $maxUsers) {
+                QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', "large setup: {$users} users");
+
+                return ['reply' => $this->handoff($tenant, $from, $name, $clean, "has a large setup (about {$users} users) — prepare a custom (Priority) quotation", sprintf(self::LARGE, $users)), 'sent' => false];
             }
             if (! $this->quotes->available() || ! method_exists($gateway, 'sendDocument')) {
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', 'no PDF engine / gateway cannot send documents');
@@ -83,6 +100,7 @@ class IspAutoQuote
 
             // The customer's salesperson owns the quotation (prepared-by on the PDF) and is alerted.
             $owner = $this->owners->ownerForEnquiry($tenant, $from, $name !== '' ? $name : null);
+            $this->rememberName($tenant, $from, $name);
             $doc = $this->quotes->generate($tenant, $from, $name, $quote);
             if (! $doc) {
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', 'generate() returned null');
@@ -215,17 +233,49 @@ class IspAutoQuote
     }
 
     /** No automatic quotation: tell the customer plainly and give the salesperson the request. */
-    private function handoff(Tenant $tenant, string $from, string $name, string $clean, string $what): string
+    private function handoff(Tenant $tenant, string $from, string $name, string $clean, string $what, string $line = self::HANDOFF): string
     {
         $owner = null;
         try {
             $owner = $this->owners->ownerForEnquiry($tenant, $from, $name !== '' ? $name : null);
+            $this->rememberName($tenant, $from, $name);
         } catch (\Throwable $e) {
             report($e);
         }
         $this->alert($tenant, $owner, "\u{1F4DD} " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} {$what}.");
 
-        return trim($clean . "\n\n" . self::HANDOFF);
+        return trim(self::withoutQuoteClaims($clean) . "\n\n" . $line);
+    }
+
+    /** PURE. The model's text minus any sentence saying a quotation is here or on its way (none is). */
+    public static function withoutQuoteClaims(string $text): string
+    {
+        $kept = [];
+        foreach (preg_split('/(?<=[.!?\x{1F4C4}])\s+/u', trim($text)) ?: [] as $sentence) {
+            if (preg_match('/\b(here is|here\'s|sending|attached|i will prepare|i\'ll prepare|preparing)\b.{0,40}\bquotation\b/iu', $sentence)) {
+                continue;
+            }
+            $kept[] = $sentence;
+        }
+
+        return trim(implode(' ', $kept));
+    }
+
+    /** The customer's own recent messages (for what they said about their setup). */
+    private function customerTexts(Tenant $tenant, string $from): array
+    {
+        return \App\Models\Message::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)
+            ->where('direction', 'in')->orderByDesc('id')->limit(20)->pluck('body')->map(fn ($b) => (string) $b)->all();
+    }
+
+    /** Keep the name the customer gave on their record when it has none yet. */
+    private function rememberName(Tenant $tenant, string $from, string $name): void
+    {
+        if ($name === '') {
+            return;
+        }
+        \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('phone', $this->digits($from))
+            ->where(fn ($q) => $q->whereNull('name')->orWhere('name', ''))->update(['name' => mb_substr($name, 0, 120)]);
     }
 
     private function alert(Tenant $tenant, ?\App\Models\User $owner, string $text): void

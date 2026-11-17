@@ -146,6 +146,58 @@ class IspAutoQuoteTest extends TestCase
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'did not deliver the PDF'));
     }
 
+    /** Live, 17 Nov 2026: "not like 250 people" (in decorative letters) was quoted the Residential plan. */
+    public function test_a_large_starlink_setup_goes_to_the_salesperson_even_if_the_model_quotes_it(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        \App\Models\Message::create(['tenant_id' => $t->id, 'customer_phone' => self::CUSTOMER, 'instance' => $t->whatsapp_instance, 'direction' => 'in', 'sender' => 'customer',
+            'body' => "\u{1D67D}\u{1D698}\u{1D69D} \u{1D695}\u{1D692}\u{1D694}\u{1D68E} 250 \u{1D699}\u{1D68E}\u{1D698}\u{1D699}\u{1D695}\u{1D68E}"]);
+        $gw = $this->gateway();
+
+        $r = $this->capture($t, $gw, "Thank you, Peter! I will prepare your quotation. Sure — here is your quotation \u{1F4C4}\n<<QUOTE {\"customer_name\":\"peter\",\"items\":[{\"name\":\"Test Starlink Kit\",\"qty\":1},{\"name\":\"Test Starlink Plan\",\"qty\":1}]}>>");
+
+        $this->assertFalse($r['sent']);
+        $this->assertSame([], $gw->docs, 'no Residential quotation for 250 users');
+        $this->assertSame("Thank you, Peter!\n\n" . sprintf(IspAutoQuote::LARGE, 250), $r['reply'], 'and the reply no longer claims a quotation is here');
+        $this->assertSame(0, Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->count());
+        Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'about 250 users') && str_contains($j->text, 'Peter'));
+
+        // Fiber has no such ceiling: the same customer can still get a Fiber quotation.
+        $this->assertTrue($this->capture($t, $gw, "<<QUOTE {\"items\":[{\"name\":\"Fiber Test 20 Mbps\",\"qty\":1}]}>>")['sent'], $this->steps($t));
+    }
+
+    /** Live, 17 Nov 2026: "My name is peter" — and the quotation was billed to a bare phone number. */
+    public function test_the_name_the_customer_gave_goes_on_the_quotation_and_their_record(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+
+        $r = $this->capture($t, $this->gateway(), "<<QUOTE {\"customer_name\":\"peter\",\"items\":[{\"name\":\"Fiber Test 20 Mbps\",\"qty\":1}]}>>");
+
+        $this->assertTrue($r['sent'], $this->steps($t));
+        $this->assertSame('Peter', (string) Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->value('customer_name'));
+        $this->assertSame('Peter', (string) \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', self::CUSTOMER)->value('name'));
+    }
+
+    /** Live, 17 Nov 2026: "I will confirm … with the team. Please hold on" — and nobody was told. */
+    public function test_a_promise_to_follow_up_alerts_the_salesperson_once(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        $turn = app(\App\Services\Isp\IspSalesTurn::class);
+        $promise = 'I will confirm the prices for the router and cables with the team. Please hold on for a moment.';
+
+        $this->assertSame($promise, $turn->afterReply($t, self::CUSTOMER, 'Check for me', $promise), 'the reply itself is unchanged');
+        Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'Bot promised a follow-up') && str_contains($j->text, 'Check for me'));
+
+        $turn->afterReply($t, self::CUSTOMER, 'Any news?', 'Our team will get back to you shortly.');
+        Bus::assertDispatchedTimes(NotifyOwner::class, 1);   // once per customer per 2 hours
+
+        $turn->afterReply($t, '211911000088', 'Which area?', 'Which area are you in?');
+        Bus::assertDispatchedTimes(NotifyOwner::class, 1);   // a question is not a promise
+    }
+
     public function test_switched_off_the_line_is_left_for_removal_and_nothing_is_sent(): void
     {
         Bus::fake([NotifyOwner::class]);

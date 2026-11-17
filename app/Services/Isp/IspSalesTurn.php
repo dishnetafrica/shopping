@@ -52,12 +52,52 @@ class IspSalesTurn
                 }
             }
 
+            $this->alertPromise($tenant, $from, $customerText, $g['reply']);
+
             return $g['reply'];
         } catch (\Throwable $e) {
             report($e);
 
             return $reply;
         }
+    }
+
+    /**
+     * The bot told the customer someone will check, confirm or get back: make sure a person knows.
+     * Live, 17 Nov 2026: "I will confirm the prices … with the team. Please hold on" — and nobody was
+     * told. (The old n8n bot sent its "BOT PROMISED FOLLOW-UP" alert for exactly this.) Goes to the
+     * customer's salesperson, or the owner alert numbers when there is none; at most once per customer
+     * per 2 hours. A quotation line is left to IspAutoQuote, which alerts on its own.
+     */
+    private function alertPromise(Tenant $tenant, string $from, string $customerText, string $reply): void
+    {
+        if (stripos($reply, '<<QUOTE') !== false || ! self::promisesFollowUp($reply)) {
+            return;
+        }
+        if (! \Illuminate\Support\Facades\Cache::add("isp_promise:{$tenant->id}:{$from}", 1, now()->addHours(2))) {
+            return;
+        }
+        $owner = app(\App\Services\Sales\SalesOwnership::class)->ownerForEnquiry($tenant, $from);
+        $digits = fn (string $s) => preg_replace('/\D/', '', $s) ?? '';
+        $to = $owner && $digits((string) $owner->phone) !== '' ? [$digits((string) $owner->phone)] : $tenant->ownerAlertNumbers();
+        $visible = trim((string) preg_replace('/<<[A-Z_]+.*?>>/s', '', $reply));
+        $text = "\u{1F514} *Bot promised a follow-up* — +" . $digits($from) . "\n"
+            . 'Customer: "' . mb_substr(IspQuotePlan::plain($customerText), 0, 200) . "\"\n"
+            . 'Bot: "' . mb_substr($visible, 0, 250) . "\"\n"
+            . 'Please contact them' . ($owner ? '' : ' (no salesperson assigned yet)') . '.';
+        foreach ($to as $n) {
+            \App\Jobs\NotifyOwner::dispatch($tenant->id, $text, (string) $n);
+        }
+        BotTrace::log($tenant->id, 'isp', $from, 'isp_promise_alert', $owner ? 'to user ' . $owner->id : 'to owner numbers');
+    }
+
+    /** PURE. Does the reply promise that someone will check, confirm, contact or get back to the customer? */
+    public static function promisesFollowUp(string $reply): bool
+    {
+        $r = mb_strtolower(IspQuotePlan::plain(trim((string) preg_replace('/<<[A-Z_]+.*?>>/s', '', $reply))));
+
+        return (bool) preg_match('/\b(i will|i\'ll|we will|we\'ll|let me|our team will|the team will|(?:your|our|the) (?:sales ?person|sales team|team|colleague) will)\b.{0,60}\b(confirm|check|get back|contact|call|reach out|follow up|send you|let you know|prepare)\b'
+            . '|\b(please hold on|hold on a moment|get back to you|confirm (?:it |this |that )?with the team|check with (?:the|our) team)\b/u', $r);
     }
 
     /** PURE. The standing rules for an Internet-provider sales conversation. */
@@ -82,9 +122,11 @@ class IspSalesTurn
         return "QUOTATION (the system prices it from PRODUCTS and sends the PDF from the customer's salesperson — you never write one):\n"
             . "- Once you know what fits the customer and where they are, RECOMMEND one option in a sentence (why it suits them) and OFFER a written quotation: \"Shall I send you a quotation?\"\n"
             . "- Ask for their name first if you do not have it — it goes on the quotation.\n"
-            . "- When they ask for a quotation, a proforma or the price in writing, or say yes to your offer, write ONE short visible sentence (e.g. \"Sure — here is your quotation 📄\") and append the hidden line <<QUOTE {\"items\":[{\"name\":\"<exact PRODUCT name>\",\"qty\":1}]}>> as the VERY LAST thing in your reply.\n"
+            . "- When they ask for a quotation, a proforma or the price in writing, or say yes to your offer, write ONE short visible sentence (e.g. \"Sure — here is your quotation 📄\") and append the hidden line <<QUOTE {\"customer_name\":\"<their name as they gave it>\",\"items\":[{\"name\":\"<exact PRODUCT name>\",\"qty\":1}]}>> as the VERY LAST thing in your reply.\n"
             . "- Items: use the EXACT names from PRODUCTS. Starlink = the kit AND the monthly plan they chose (ask which plan if unsure; if they already own a kit, only the plan). Fiber = the monthly plan (its installation is added automatically). Add a router, adaptor, power bank or public IP only if they asked for it.\n"
             . "- Do NOT write the line for Starlink Priority, more than 5 kits, 50 or more users, a custom network or anything not in PRODUCTS: say their salesperson will prepare a custom quotation.\n"
+            . "- 50 OR MORE USERS (people, devices, clients) on Starlink: do NOT recommend the Residential plan; say a business (Priority) plan is needed and their salesperson will prepare a custom quotation.\n"
+            . "- ACCESSORIES: if they ask about equipment that IS in PRODUCTS (for example a router), give its exact price and offer an updated quotation that includes it. For anything NOT in PRODUCTS (cables, access points, installation work), say their salesperson will quote it — never say you will check yourself.\n"
             . "- Never type a quotation, its total or a quotation number yourself: the PDF shows the exact one-time and monthly amounts.\n"
             . "- After the quotation: answer questions about it. If the price is a concern, do not offer a discount; explain what is included and that their salesperson will call to go through the options.\n";
     }
