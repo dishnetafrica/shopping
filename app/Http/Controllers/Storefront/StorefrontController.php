@@ -67,7 +67,7 @@ class StorefrontController extends Controller
         $tenant = Tenant::byCustomDomain(request()->getHost());
         if ($tenant && ($tenant->status ?? 'active') !== 'suspended') {
             app(TenantContext::class)->set($tenant->id);
-            if ($this->ispEnabled($tenant)) { return TenantSiteController::home($tenant) ?? $this->isp($tenant, ''); }   // ISP: own home page, else plans
+            if ($this->ispEnabled($tenant)) { return $this->isp($tenant, ''); }                     // ISP: no cart
             if ($this->technologyEnabled($tenant)) { return $this->technology('', $tenant, ''); }   // TECHNOLOGY
             if ($this->autoPartsEnabled($tenant)) { return $this->autoParts('', $tenant, ''); } // AUTO_PARTS
             return $this->brandSiteEnabled($tenant) ? $this->brand('', $tenant, '') : $this->renderShop($tenant, '');
