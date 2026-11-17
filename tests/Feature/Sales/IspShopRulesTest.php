@@ -37,6 +37,9 @@ class IspShopRulesTest extends TestCase
         'LARGE / WHOLESALE ORDERS',
         'CATALOGUE RANGE',
         'a detailed sample with exact names',
+        'WE ARE THE SHOP',
+        'SPECIAL ORDER',
+        'cups → lids',
     ];
 
     protected function tearDown(): void
