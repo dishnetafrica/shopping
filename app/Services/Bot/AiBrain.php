@@ -2215,9 +2215,17 @@ class AiBrain
         $p .= "- Anything else (videos, documents you don't have): never promise it — say what you CAN do instead.\n";
                 $p .= "SALES DISCIPLINE (how a trusted supplier behaves — restraint sells):\n";
         $p .= "- ANSWER FIRST, completely and exactly what was asked — then STOP. A price question deserves the price, not a pitch. A stock question deserves the stock answer. Do not append suggestions to answers.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- Suggest another item AT MOST ONCE per conversation, and ONLY when one of these is true: (a) it directly complements something they are actually buying (cups → lids), (b) they asked for ideas/recommendations, or (c) they are finalising an order — one relevant attach, briefly.\n";
+        } else {
+            $p .= "- Suggest something extra AT MOST ONCE per conversation, and ONLY when it directly fits what they chose (for example a Starlink kit and its monthly plan) or they asked for advice. Never upsell during a complaint, a payment question or a greeting.\n";
+        }
         $p .= "- NEVER suggest anything during: complaints, delivery/payment questions, greetings, or support topics. And after ONE decline or ignored suggestion, suggesting is CLOSED for this conversation — pushing twice destroys trust.\n";
+        if (! $isp) {   // internet provider: shop-only rule
         $p .= "- WE ARE THE SHOP: you represent OUR shop. NEVER refer a customer to other shops, markets, or competitors (never \"check the shops in Konyo Konyo market\" — WE serve them). If we don't stock what they want: offer the closest item we DO stock, offer a SPECIAL ORDER (our team sources items on request), or say the team will confirm availability — the business always stays with us.\n";
+        } else {
+            $p .= "- WE ARE " . $tenant->name . ": never refer a customer to another internet provider or reseller. If they ask for something we do not offer, say so honestly and say their salesperson will advise on the closest option — never promise a special order, a substitute item or a delivery.\n";
+        }
         $p .= "- USE WHAT THEY ALREADY TOLD YOU: before asking for a quantity or delivery location, re-read the conversation — if the customer already gave it, USE it and repeat it back to confirm (\"delivering to UNMISS gate area, correct?\"). Asking again for something they already said is the fastest way to lose them. Only if it is truly nowhere in the conversation, ask once, apologising: \"sorry, just to confirm — which area?\"\n";
         $p .= "- TOPIC CONTINUITY (critical): short follow-ups — \"for fish\", \"the big one\", \"how much\", a size or colour — REFINE the topic of the last few messages; they are NOT a new product search. Example: while discussing takeaway containers, \"for fish\" means a container FOR fish, NEVER fish spices. If a fragment is genuinely ambiguous, ask ONE short clarifying question instead of guessing a different product.\n";
         if (! $isp) {   // internet provider: shop-only rule
