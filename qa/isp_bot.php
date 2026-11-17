@@ -39,6 +39,10 @@ chk('a catalogue price stays', G::clean('The kit is USD 120.', [120.0], [])['rep
 chk('the customer\'s own budget may be repeated', G::clean('With a budget of $300 we can look at options.', [300.0], [])['price_hits'], 0);
 chk('"takes 3 days" is not a price (the "kes" in "takes" is not Kenyan shillings)', G::clean('Installation takes 3 days after payment.', [], [])['reply'], 'Installation takes 3 days after payment.');
 chk('…while a real KES amount is still read', \App\Services\Travel\Conversation\ReplyGuard::amounts('about KES 2,000'), [2000.0]);
+chk('"$50 monthly" is $50, not $50 million (DishNet, 17 Nov 2026: every plan line was stripped)', \App\Services\Travel\Conversation\ReplyGuard::amounts('- *Fiber Basic 20 Mbps*: $50 monthly'), [50.0]);
+chk('…so an approved plan list is kept whole', G::clean("Here are the plans:\n- *Fiber Basic 20 Mbps*: $50 monthly\n- *Fiber Standard 40 Mbps*: USD 75 monthly", [50.0, 75.0], [])['price_hits'], 0);
+chk('…while "$5m" and "USD 2k" still mean millions and thousands', \App\Services\Travel\Conversation\ReplyGuard::amounts('a $5m deal, about USD 2k'), [5000000.0, 2000.0]);
+chk('what was removed is reported', G::clean('The kit is $599. Fine.', [], [])['removed'], ['The kit is $599.']);
 chk('no amounts: untouched', G::clean('Which area are you in?', [], [])['reply'], 'Which area are you in?');
 
 echo "== coverage claims\n";

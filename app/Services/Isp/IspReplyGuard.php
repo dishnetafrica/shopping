@@ -28,12 +28,13 @@ final class IspReplyGuard
     /**
      * @param float[]  $allowedAmounts  catalogue prices, amounts in published knowledge, amounts the customer wrote
      * @param string[] $coveredPlaces   lower-case names and place names of areas published as covered
-     * @return array{reply:string,price_hits:int,coverage_hits:int}
+     * @return array{reply:string,price_hits:int,coverage_hits:int,removed:list<string>}
      */
     public static function clean(string $reply, array $allowedAmounts, array $coveredPlaces): array
     {
         $price = 0;
         $coverage = 0;
+        $removed = [];                                      // what was taken out, for the step log
         $parts = preg_split('/(<<[A-Z_]+.*?>>)/s', $reply, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$reply];
         foreach ($parts as $i => $part) {
             if ($i % 2 === 1) {
@@ -45,10 +46,12 @@ final class IspReplyGuard
                 foreach (self::sentences($line) as $sentence) {
                     if (self::unknownAmount($sentence, $allowedAmounts)) {
                         $price++;
+                        $removed[] = trim($sentence);
                         continue;
                     }
                     if (self::claimsCoverage($sentence, $coveredPlaces)) {
                         $coverage++;
+                        $removed[] = trim($sentence);
                         continue;
                     }
                     $kept[] = $sentence;
@@ -65,7 +68,7 @@ final class IspReplyGuard
             $out = trim($out . "\n\n" . self::COVERAGE_NOTE);
         }
 
-        return ['reply' => $out, 'price_hits' => $price, 'coverage_hits' => $coverage];
+        return ['reply' => $out, 'price_hits' => $price, 'coverage_hits' => $coverage, 'removed' => $removed];
     }
 
     /**

@@ -47,7 +47,8 @@ class IspSalesTurn
             $g = IspReplyGuard::clean($reply, array_merge($amounts, $this->cataloguePrices($tenant), ReplyGuard::amounts($customerText)), $places);
             foreach (['isp_price_stripped' => $g['price_hits'], 'isp_cover_stripped' => $g['coverage_hits']] as $stage => $n) {
                 if ($n > 0) {
-                    BotTrace::log($tenant->id, 'isp', $from, $stage, 'x' . $n);
+                    // what was removed, so a wrong removal can be seen in the step log (detail holds 300)
+                    BotTrace::log($tenant->id, 'isp', $from, $stage, mb_substr('x' . $n . ': ' . implode(' | ', $g['removed']), 0, 290));
                 }
             }
 
