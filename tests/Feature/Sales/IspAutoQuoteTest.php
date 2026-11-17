@@ -198,6 +198,25 @@ class IspAutoQuoteTest extends TestCase
         Bus::assertDispatchedTimes(NotifyOwner::class, 1);   // a question is not a promise
     }
 
+    /** DishNet, 17 Nov 2026: "if the bot replied at night, tell them our team member will call in the morning". */
+    public function test_at_night_the_customer_is_told_the_call_comes_when_the_office_opens(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business(['business_hours' => 'Mon–Sat 9 AM – 6 PM (closed Sundays)']);
+        \Illuminate\Support\Carbon::setTestNow(\Illuminate\Support\Carbon::parse('2026-11-17 22:30', 'Africa/Juba'));   // a Tuesday night
+        try {
+            $r = $this->capture($t, $this->gateway(), "<<QUOTE {\"items\":[{\"name\":\"Fiber Test 20 Mbps\",\"qty\":1}]}>>");
+            $this->assertTrue($r['sent'], $this->steps($t));
+            $this->assertStringContainsString('will call you when our office opens (tomorrow at 9:00 AM)', $r['reply']);
+            Bus::assertDispatched(NotifyOwner::class, fn ($j) => str_contains($j->text, 'call them when the office opens (tomorrow at 9:00 AM)'));
+
+            \Illuminate\Support\Carbon::setTestNow(\Illuminate\Support\Carbon::parse('2026-11-18 11:00', 'Africa/Juba'));   // open
+            $this->assertNull(\App\Services\Isp\IspSalesTurn::opensAt($t), 'in office hours nothing about timing is added');
+        } finally {
+            \Illuminate\Support\Carbon::setTestNow();
+        }
+    }
+
     public function test_switched_off_the_line_is_left_for_removal_and_nothing_is_sent(): void
     {
         Bus::fake([NotifyOwner::class]);

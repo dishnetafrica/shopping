@@ -5,6 +5,7 @@
 //   php qa/isp_autoquote.php
 require __DIR__ . '/../app/Services/Travel/Conversation/ReplyGuard.php';
 require __DIR__ . '/../app/Services/Sales/Brain/Knowledge.php';
+require __DIR__ . '/../app/Services/Bot/TimeContext.php';
 require __DIR__ . '/../app/Services/Isp/IspQuotePlan.php';
 require __DIR__ . '/../app/Services/Isp/IspSalesTurn.php';
 require __DIR__ . '/../app/Services/Isp/IspAutoQuote.php';
@@ -108,6 +109,27 @@ chk('live: "I will confirm the prices … with the team. Please hold on"', S::pr
 chk('"your salesperson will confirm the exact price" (the guard\'s own note)', S::promisesFollowUp('Your salesperson will confirm the exact price in a written quotation.'), true);
 chk('"we\'ll get back to you"', S::promisesFollowUp("Thanks! We'll get back to you shortly."), true);
 chk('a question or an answer is not a promise', [S::promisesFollowUp('Which area are you in?'), S::promisesFollowUp('The Starlink Standard kit is a one-time charge.')], [false, false]);
+
+echo "== outside office hours: the call is promised for when the office opens\n";
+$T = App\Services\Bot\TimeContext::class;
+$week = $T::parseHours('Mon–Sat 9 AM – 6 PM (closed Sundays)');
+chk('DishNet\'s published hours are understood (the bracketed "closed Sundays" no longer hides them)', [$week['mon'] ?? null, $week['sat'] ?? null, $week['sun'] ?? null], [[[540, 1080]], [[540, 1080]], []]);
+$z = new DateTimeZone('Africa/Juba');
+$at = fn (string $d) => new DateTimeImmutable($d, $z);
+$next = fn (string $d) => ($n = $T::nextOpen($week, $at($d))) ? $n->format('D H:i') : null;
+chk('Tuesday 22:30 → Wednesday 9:00', $next('2026-11-17 22:30'), 'Wed 09:00');
+chk('Wednesday 07:10 → the same morning, 9:00', $next('2026-11-18 07:10'), 'Wed 09:00');
+chk('open (Wednesday noon) → now', $next('2026-11-18 12:00'), 'Wed 12:00');
+chk('Saturday 19:00 and Sunday → Monday 9:00', [$next('2026-11-21 19:00'), $next('2026-11-22 10:00')], ['Mon 09:00', 'Mon 09:00']);
+chk('unknown hours → nothing is said about timing', $T::nextOpen($T::parseHours(''), $at('2026-11-17 22:30')), null);
+chk('the customer reads "tomorrow at 9:00 AM" / "today at 9:00 AM" / "on Monday at 9:00 AM"', [S::opensPhrase($at('2026-11-18 09:00'), $at('2026-11-17 22:30')), S::opensPhrase($at('2026-11-18 09:00'), $at('2026-11-18 07:10')), S::opensPhrase($at('2026-11-23 09:00'), $at('2026-11-21 19:00'))], ['tomorrow at 9:00 AM', 'today at 9:00 AM', 'on Monday at 9:00 AM']);
+chk('the model is told the next opening when closed', str_contains($T::block($at('2026-11-17 22:30'), 'Africa/Juba', 'Mon–Sat 9 AM – 6 PM (closed Sundays)'), '- Next opening: Wednesday, 18 November, 9:00 AM'), true);
+chk('…and not when open', str_contains($T::block($at('2026-11-18 12:00'), 'Africa/Juba', 'Mon–Sat 9 AM – 6 PM'), 'Next opening'), false);
+chk('after the PDF at night: "will call you when our office opens (tomorrow at 9:00 AM)"', str_contains(A::afterText('Justus', null, 'tomorrow at 9:00 AM'), '*Justus*, your salesperson, will call you when our office opens (tomorrow at 9:00 AM) to confirm coverage'), true);
+chk('…in office hours, unchanged', str_contains(A::afterText('Justus', null), 'your salesperson, will call you to confirm coverage'), true);
+chk('hand-off at night: "shortly" becomes the opening time', A::timed(A::HANDOFF, 'tomorrow at 9:00 AM'), 'Your salesperson will prepare your quotation and send it to you when our office opens (tomorrow at 9:00 AM).');
+chk('…in office hours, unchanged', A::timed(A::HANDOFF, null), A::HANDOFF);
+chk('the rules tell the model not to promise a call now when closed', str_contains(S::rules(), 'when CURRENT TIME says "Open right now: NO", never say anyone will call'), true);
 
 echo "== the rules the model is given\n";
 $r = S::quoteRules();

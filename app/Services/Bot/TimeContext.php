@@ -65,6 +65,9 @@ final class TimeContext
             return null;
         }
         $t = str_replace(['–', '—', ' to '], ['-', '-', '-'], $t);
+        // "Mon–Sat 9 AM – 6 PM (closed Sundays)": a bracketed note is its own segment, so its
+        // "closed" does not discard the hours before it (DishNet's published hours, 17 Nov 2026).
+        $t = str_replace(['(', ')'], [',', ','], $t);
         $t = (string) preg_replace('/\b(a\.m\.|am\.)/', 'am', $t);
         $t = (string) preg_replace('/\b(p\.m\.|pm\.)/', 'pm', $t);
 
@@ -186,6 +189,37 @@ final class TimeContext
     }
 
     /**
+     * When the business next opens: $now itself when open, else the start of the next opening range
+     * within a week; null when the hours are unknown or never open.
+     */
+    public static function nextOpen(?array $week, \DateTimeImmutable $now): ?\DateTimeImmutable
+    {
+        if ($week === null) {
+            return null;
+        }
+        if (self::isOpen($week, $now)) {
+            return $now;
+        }
+        $nowMin = (int) $now->format('G') * 60 + (int) $now->format('i');
+        for ($i = 0; $i <= 7; $i++) {
+            $day = $now->modify("+{$i} day");
+            $starts = [];
+            foreach ($week[self::DAYS[(int) $day->format('N') - 1]] ?? [] as [$s, $e]) {
+                if ($i > 0 || $s > $nowMin) {
+                    $starts[] = $s;
+                }
+            }
+            if ($starts) {
+                $s = min($starts);
+
+                return $day->setTime(intdiv($s, 60), $s % 60);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The prompt block. Everything in it is computed HERE, server-side — the model is told
      * this is the only source of truth for time and that unknown hours stay unknown.
      */
@@ -201,6 +235,9 @@ final class TimeContext
         $b .= '- Today: ' . $nowLocal->format('Y-m-d') . ' · Tomorrow: ' . $nowLocal->modify('+1 day')->format('Y-m-d') . "\n";
         $b .= '- Business hours: ' . ($hoursText !== '' ? $hoursText : 'not configured') . "\n";
         $b .= '- Open right now: ' . $openTxt . "\n";
+        if ($open === false && ($next = self::nextOpen($week, $nowLocal)) !== null) {
+            $b .= '- Next opening: ' . $next->format('l, j F, g:i A') . "\n";
+        }
 
         return $b;
     }

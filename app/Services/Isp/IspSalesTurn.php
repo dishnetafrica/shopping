@@ -81,10 +81,11 @@ class IspSalesTurn
         $digits = fn (string $s) => preg_replace('/\D/', '', $s) ?? '';
         $to = $owner && $digits((string) $owner->phone) !== '' ? [$digits((string) $owner->phone)] : $tenant->ownerAlertNumbers();
         $visible = trim((string) preg_replace('/<<[A-Z_]+.*?>>/s', '', $reply));
+        $opens = self::opensAt($tenant);
         $text = "\u{1F514} *Bot promised a follow-up* — +" . $digits($from) . "\n"
             . 'Customer: "' . mb_substr(IspQuotePlan::plain($customerText), 0, 200) . "\"\n"
             . 'Bot: "' . mb_substr($visible, 0, 250) . "\"\n"
-            . 'Please contact them' . ($owner ? '' : ' (no salesperson assigned yet)') . '.';
+            . 'Please contact them' . ($opens !== null ? " when the office opens ({$opens}) \u{1F319}" : '') . ($owner ? '' : ' (no salesperson assigned yet)') . '.';
         foreach ($to as $n) {
             \App\Jobs\NotifyOwner::dispatch($tenant->id, $text, (string) $n);
         }
@@ -107,7 +108,42 @@ class IspSalesTurn
             . "- QUALIFY before recommending, ONE question at a time, using what the customer already said: which service (Starlink, Fiber, or not sure), WHERE exactly (area and a landmark), home or business, and how many people or devices will use it and for what.\n"
             . "- ONLY APPROVED INFORMATION: prices, packages, speeds, installation fees, contract terms, coverage and timelines come ONLY from APPROVED SALES KNOWLEDGE and PRODUCTS. If something is not written there, do not guess and do not use general knowledge about other countries or providers: say their salesperson will confirm it.\n"
             . "- COVERAGE: say a place is covered ONLY if COVERAGE below lists it as covered. Anywhere else, say a site survey is needed to confirm. Never say \"we cover your area\" otherwise.\n"
-            . "- Never promise a discount, free installation, a speed, an uptime figure or an installation date that is not written below.\n";
+            . "- Never promise a discount, free installation, a speed, an uptime figure or an installation date that is not written below.\n"
+            . "- OFFICE HOURS: when CURRENT TIME says \"Open right now: NO\", never say anyone will call, reply or visit now, shortly or today. Say their salesperson will contact them when the office opens, giving the day and time from \"Next opening\" (e.g. \"tomorrow at 9:00 AM\"). You keep answering their questions meanwhile.\n";
+    }
+
+    /**
+     * When the office next opens, as the customer reads it ("tomorrow at 9:00 AM"), or null when it is
+     * open now or its hours are not set or not understood (then nothing about timing is said).
+     * Reads the business_hours and timezone settings through TimeContext.
+     */
+    public static function opensAt(Tenant $tenant, ?\DateTimeImmutable $now = null): ?string
+    {
+        try {
+            $tz = \App\Services\Bot\TimeContext::zone((string) $tenant->setting('timezone', ''), (string) $tenant->setting('city', ''));
+            $now = ($now ?? now()->toDateTimeImmutable())->setTimezone(new \DateTimeZone($tz));
+            $week = \App\Services\Bot\TimeContext::parseHours((string) $tenant->setting('business_hours', ''));
+            $next = \App\Services\Bot\TimeContext::nextOpen($week, $now);
+
+            return ($next === null || $next == $now) ? null : self::opensPhrase($next, $now);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** PURE. "today at 9:00 AM" / "tomorrow at 9:00 AM" / "on Monday at 9:00 AM". */
+    public static function opensPhrase(\DateTimeImmutable $next, \DateTimeImmutable $now): string
+    {
+        $days = (int) $now->setTime(0, 0)->diff($next->setTime(0, 0))->format('%a');
+        $day = match ($days) {
+            0 => 'today',
+            1 => 'tomorrow',
+            default => 'on ' . $next->format('l'),
+        };
+
+        return $day . ' at ' . $next->format('g:i A');
     }
 
     /** Used when automatic quotations are switched off (isp_auto_quote = false). */

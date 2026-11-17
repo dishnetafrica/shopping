@@ -114,7 +114,8 @@ class IspAutoQuote
             $dec = \App\Services\Pricing::decimalsForCurrency($cur);
             $days = ((int) $tenant->setting('quote_validity_days', 14)) ?: 14;
             $caption = self::caption((string) $doc['no'], $cur, (float) $doc['total'], (float) ($doc['monthly_total'] ?? 0), $days, $dec);
-            $after = self::afterText($owner?->name, $owner?->phone);
+            $opens = IspSalesTurn::opensAt($tenant);
+            $after = self::afterText($owner?->name, $owner?->phone, $opens);
 
             if ($clean !== '') {
                 $gateway->sendText((string) $tenant->whatsapp_instance, $from, $clean);
@@ -134,13 +135,13 @@ class IspAutoQuote
                 QuotationPipeline::stage($tenant->id, $from, 'isp_not_delivered', false, (string) $doc['no'], mb_substr(json_encode($res) ?: '', 0, 200));
                 $this->alert($tenant, $owner, "\u{26A0}\u{FE0F} Quotation {$doc['no']} for " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} was saved but WhatsApp did not deliver the PDF — please send it from Quotations.");
 
-                return ['reply' => self::HANDOFF, 'sent' => false];
+                return ['reply' => self::timed(self::HANDOFF, IspSalesTurn::opensAt($tenant)), 'sent' => false];
             }
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
 
             $this->alert($tenant, $owner, "\u{1F4C4} *Quotation {$doc['no']} sent* by the bot to " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)}\n"
                 . implode("\n", array_map(fn ($l) => '• ' . $l['qty'] . ' x ' . $l['name'], $plan['lines'])) . "\n"
-                . str_replace("\n", ' • ', $caption) . "\nCall them today: confirm coverage at their location and book the installation.");
+                . str_replace("\n", ' • ', $caption) . "\n" . ($opens !== null ? "\u{1F319} Sent after office hours: call them when the office opens ({$opens})" : 'Call them today') . ': confirm coverage at their location and book the installation.');
 
             return ['reply' => $after, 'sent' => true];
         } catch (\Throwable $e) {
@@ -182,14 +183,26 @@ class IspAutoQuote
     }
 
     /** PURE. What the customer reads after the PDF: who will call them, and how to go ahead. */
-    public static function afterText(?string $salesName, ?string $salesPhone): string
+    public static function afterText(?string $salesName, ?string $salesPhone, ?string $opens = null): string
     {
         $digits = preg_replace('/[^0-9]/', '', (string) $salesPhone) ?? '';
         $who = trim((string) $salesName) !== ''
             ? '*' . trim((string) $salesName) . '*' . ($digits !== '' ? ' (+' . $digits . ')' : '') . ', your salesperson,'
             : 'Your salesperson';
 
-        return "Here is your quotation \u{1F446}\n\n{$who} will call you to confirm coverage at your exact location and book the installation.\n\nIf you're happy with it, just reply *YES* and we'll take it from there. Any question about it, ask me here.";
+        $when = $opens !== null ? " when our office opens ({$opens})" : '';
+
+        return "Here is your quotation \u{1F446}\n\n{$who} will call you{$when} to confirm coverage at your exact location and book the installation.\n\nIf you're happy with it, just reply *YES* and we'll take it from there. Any question about it, ask me here.";
+    }
+
+    /**
+     * PURE. A hand-off line, timed: outside office hours "shortly" becomes "when our office opens
+     * (tomorrow at 9:00 AM)" (DishNet, 17 Nov 2026: "if the bot replied at night, tell them our team
+     * member will call in the morning during office hours").
+     */
+    public static function timed(string $line, ?string $opens): string
+    {
+        return $opens === null ? $line : str_replace('shortly', "when our office opens ({$opens})", $line);
     }
 
     /** Visible, priced products by exact name, with how each is billed and which service it belongs to. */
@@ -242,9 +255,11 @@ class IspAutoQuote
         } catch (\Throwable $e) {
             report($e);
         }
-        $this->alert($tenant, $owner, "\u{1F4DD} " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} {$what}.");
+        $opens = IspSalesTurn::opensAt($tenant);
+        $this->alert($tenant, $owner, "\u{1F4DD} " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} {$what}."
+            . ($opens !== null ? "\n\u{1F319} Sent after office hours: contact them when the office opens ({$opens})." : ''));
 
-        return trim(self::withoutQuoteClaims($clean) . "\n\n" . $line);
+        return trim(self::withoutQuoteClaims($clean) . "\n\n" . self::timed($line, $opens));
     }
 
     /** PURE. The model's text minus any sentence saying a quotation is here or on its way (none is). */
