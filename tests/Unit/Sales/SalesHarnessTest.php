@@ -29,6 +29,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('isp_quote.php');
     }
 
+    public function test_the_bot_quotation_uses_only_visible_catalogue_products(): void
+    {
+        $this->harness('isp_autoquote.php');
+    }
+
     public function test_sales_knowledge_is_governed_and_coverage_defaults_to_survey(): void
     {
         $this->harness('sales_brain.php');

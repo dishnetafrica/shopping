@@ -259,11 +259,15 @@ class AiBrain
         if ($retail) {
         $reply = $this->acceptQuote($tenant, $from, $reply);
         }
-        // Internet provider: the bot never makes an order, a quotation, a cart total or a price-list PDF —
-        // the customer's salesperson prepares the quotation. Accepting a quotation the salesperson SENT
-        // (acceptQuote above) still works. Any other order/quote marker the model emits is removed.
+        // Internet provider: the bot never makes an order, a cart total or a price-list PDF. A quotation is
+        // made only through IspAutoQuote below (catalogue prices, sent from the customer's salesperson).
+        // Accepting a quotation (acceptQuote above) still works. Any other order marker is removed.
         $shop = $retail && \App\Support\Vertical::of($tenant) !== \App\Support\Vertical::ISP;
         if ($retail && ! $shop) {
+            // Internet provider (DishNet, 17 Nov 2026): once the customer has chosen, the model writes a
+            // <<QUOTE>> line and IspAutoQuote sends a catalogue-priced quotation from their salesperson
+            // (or hands the request to the salesperson when it cannot). Every other marker is removed.
+            $reply = app(\App\Services\Isp\IspAutoQuote::class)->capture($tenant, $convo, $from, $reply, $gateway)['reply'];
             $reply = \App\Services\Travel\Conversation\TravelTurn::stripRetailMarkers($reply);
         }
 
@@ -2328,7 +2332,10 @@ class AiBrain
         }
         }
         if ($isp) {
-            $p .= "PRICE QUESTIONS: quote only the exact prices in PRODUCTS, and always say whether a price is a monthly charge or a one-time charge. Never send or promise a price list or a quotation yourself and never write one out: the customer's salesperson prepares the quotation.\n\n";
+            // Automatic quotations on (IspAutoQuote, the default): the QUOTATION rules say how to ask the system for one.
+            $p .= \App\Services\Isp\IspAutoQuote::enabled($tenant)
+                ? "PRICE QUESTIONS: quote only the exact prices in PRODUCTS, and always say whether a price is a monthly charge or a one-time charge. Never send a price list and never write a quotation out yourself: for a written quotation follow the QUOTATION rules (the system prices and sends it).\n\n"
+                : "PRICE QUESTIONS: quote only the exact prices in PRODUCTS, and always say whether a price is a monthly charge or a one-time charge. Never send or promise a price list or a quotation yourself and never write one out: the customer's salesperson prepares the quotation.\n\n";
         }
         if (! $isp) {
         $p .= "PRODUCTS (a detailed sample with exact names + prices = source of truth for quoting; the full range is larger — see CATALOGUE RANGE. If a customer names an item not shown here, confirm it or offer a special order rather than denying we stock it):\n" . ($lines !== '' ? $lines : '(catalogue unavailable right now — ask the customer to hold; staff have been alerted)') . "\n";
