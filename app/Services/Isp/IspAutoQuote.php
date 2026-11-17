@@ -99,7 +99,7 @@ class IspAutoQuote
             $after = self::afterText($owner?->name, $owner?->phone);
 
             if ($clean !== '') {
-                $gateway->sendText($tenant->whatsapp_instance, $from, $clean);
+                $gateway->sendText((string) $tenant->whatsapp_instance, $from, $clean);
                 MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $clean, null, null, ['via' => 'ai']);
             }
             if ($gateway instanceof \App\Services\Bot\CollectorGateway) {
@@ -109,7 +109,7 @@ class IspAutoQuote
                 $media = $gateway instanceof \App\Services\WhatsApp\CloudApiGateway
                     ? ($row ? $row->canonicalPortalUrl() . '/pdf' : '')
                     : (string) (($doc['b64'] ?? '') !== '' ? $doc['b64'] : ($doc['url'] ?? ''));
-                $res = $media !== '' ? $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, (string) $doc['fileName'], $caption) : ['error' => 'no_media'];
+                $res = $media !== '' ? $gateway->sendDocument((string) $tenant->whatsapp_instance, $from, $media, (string) $doc['fileName'], $caption) : ['error' => 'no_media'];
             }
             if (! self::delivered($res)) {
                 // Saved but not delivered: never tell the customer it is there. Their salesperson sends it.
