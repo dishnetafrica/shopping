@@ -49,7 +49,7 @@ class StorefrontController extends Controller
      *
      * @return array{0:Tenant,1:string}
      */
-    private function resolveShop(?string $shop): array
+    public function resolveShop(?string $shop): array      // public: TenantSiteController resolves the same way
     {
         if ($shop !== null && $shop !== '') {
             return [$this->tenant($shop), '/' . strtolower(trim($shop))];
@@ -67,6 +67,7 @@ class StorefrontController extends Controller
         $tenant = Tenant::byCustomDomain(request()->getHost());
         if ($tenant && ($tenant->status ?? 'active') !== 'suspended') {
             app(TenantContext::class)->set($tenant->id);
+            if ($this->ispEnabled($tenant)) { return $this->isp($tenant, ''); }                     // ISP: no cart
             if ($this->technologyEnabled($tenant)) { return $this->technology('', $tenant, ''); }   // TECHNOLOGY
             if ($this->autoPartsEnabled($tenant)) { return $this->autoParts('', $tenant, ''); } // AUTO_PARTS
             return $this->brandSiteEnabled($tenant) ? $this->brand('', $tenant, '') : $this->renderShop($tenant, '');
@@ -130,6 +131,7 @@ class StorefrontController extends Controller
     {
         [$tenant, $base] = $this->resolveShop($shop);
         if ($this->travelEnabled($tenant)) { return $this->travel($tenant, $base); }   // TRAVEL: no retail shop to show
+        if ($this->ispEnabled($tenant)) { return $this->isp($tenant, $base); }         // ISP: plans + enquiry, no cart
         return $this->renderShop($tenant, $base);
     }
 
@@ -147,6 +149,9 @@ class StorefrontController extends Controller
         // On a custom domain the route has one segment; on the platform it is /{shop}/p/{slugId}.
         if ($slugId === null) { $slugId = (string) $shop; $shop = null; }
         [$tenant, $base] = $this->resolveShop($shop);
+        if ($this->ispEnabled($tenant)) {                       // ISP: no product pages with a basket — the plans page
+            return redirect(($base === '' ? '/' : $base) . '#plans', 301);
+        }
 
         // trailing digits are the id — "sugar-2kg-kakira-412" → 412
         $id = preg_match('/(\d+)$/', (string) $slugId, $m) ? (int) $m[1] : 0;
@@ -440,6 +445,7 @@ class StorefrontController extends Controller
     {
         [$tenant, $base] = $this->resolveShop($shop);
         if ($this->travelEnabled($tenant)) { return $this->travel($tenant, $base); }                   // TRAVEL
+        if ($this->ispEnabled($tenant)) { return $this->isp($tenant, $base); }                         // ISP
         if ($this->technologyEnabled($tenant)) { return $this->technology($shop, $tenant, $base); }   // TECHNOLOGY
         if ($this->autoPartsEnabled($tenant)) { return $this->autoParts($shop, $tenant, $base); } // AUTO_PARTS
         return $this->brandSiteEnabled($tenant) ? $this->brand($shop, $tenant, $base) : $this->renderShop($tenant, $base);
@@ -459,6 +465,14 @@ class StorefrontController extends Controller
         [$tenant, $base] = $this->resolveShop($shop);
         if ($this->travelEnabled($tenant)) {                                                            // TRAVEL
             return $this->travel($tenant, $base, [
+                'openChat' => true,
+                'source'   => $this->ctxWord($request->query('source', $request->query('utm_source', ''))),
+                'campaign' => $this->ctxWord($request->query('campaign', $request->query('utm_campaign', ''))),
+            ]);
+        }
+
+        if ($this->ispEnabled($tenant)) {                                                               // ISP
+            return $this->isp($tenant, $base, [
                 'openChat' => true,
                 'source'   => $this->ctxWord($request->query('source', $request->query('utm_source', ''))),
                 'campaign' => $this->ctxWord($request->query('campaign', $request->query('utm_campaign', ''))),
@@ -561,6 +575,108 @@ class StorefrontController extends Controller
             [$name, $meta, $name, (string) json_encode($cfg, $jf)],
             $html
         );
+
+        return response($html, 200)
+            ->header('Content-Type', 'text/html; charset=utf-8')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** An internet provider sells a service through a salesperson: plans, coverage and an enquiry — never a cart. */
+    private function ispEnabled($tenant): bool
+    {
+        return \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP;
+    }
+
+    /**
+     * Internet-provider website (resources/storefront/isp.html), styled after DishNet's own site. Everything
+     * on it is APPROVED data only: prices from the switched-on catalogue (monthly vs one-time), coverage
+     * from the PUBLISHED Sales Brain areas marked covered, and a chat that runs the same governed brain as
+     * WhatsApp. No cart, no checkout: the customer's salesperson prepares the quotation.
+     */
+    private function isp($tenant, string $base, array $chat = [])
+    {
+        $cur   = $this->currency($tenant);
+        $dec   = \App\Services\Pricing::decimalsForCurrency($cur);
+        $hidden = \App\Services\Catalog\Visibility::hiddenCategories($tenant);
+
+        $plans = [];
+        foreach (Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('active', true)->whereNull('archived_at')
+            ->orderBy('display_order')->orderBy('price')->limit(60)->get() as $p) {
+            if (\App\Services\Catalog\Visibility::isHidden((string) ($p->category ?? ''), $p->hidden ?? null, $hidden)) {
+                continue;
+            }
+            $price = (float) ($p->price ?? $p->base_price ?? 0);
+            $plans[] = [
+                'name'    => (string) $p->name,
+                'price'   => $price > 0 ? (floor($price) == $price ? (int) $price : round($price, $dec)) : null,   // null → "price from our team"
+                'billing' => in_array($p->billing, ['monthly', 'one_off'], true) ? $p->billing : '',
+                'line'    => mb_strtolower((string) ($p->service_line ?? '')),
+                'group'   => mb_substr((string) ($p->category ?? ''), 0, 40),
+                'desc'    => mb_substr(trim(preg_replace('/\s+/', ' ', (string) ($p->description ?? ''))), 0, 180),
+                'image'   => $p->image_url ? $this->imageUrl((string) $p->image_url) : '',
+            ];
+        }
+
+        $covered = [];
+        try {
+            foreach (app(\App\Services\Sales\Brain\SalesBrain::class)->published($tenant, 'coverage') as $entry) {
+                foreach ((array) (($entry['data'] ?? [])['areas'] ?? []) as $a) {
+                    if (mb_strtolower((string) ($a['status'] ?? '')) === 'covered' && trim((string) ($a['name'] ?? '')) !== '') {
+                        $covered[] = ['name' => mb_substr(trim((string) $a['name']), 0, 60), 'line' => mb_strtolower((string) ($a['service_line'] ?? ''))];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);                                                        // a website never fails on coverage
+        }
+
+        // The business's own website pages (site bundle), when it has them — only pages served as-is.
+        $pages = [];
+        if ($dir = TenantSiteController::bundleDir($tenant)) {
+            $hold = (array) (TenantSiteController::manifest($dir)['hold'] ?? []);
+            foreach (['about.html' => 'About', 'tutorials/index.html' => 'Help & tutorials', 'guides.html' => 'Guides', 'blog.html' => 'Blog',
+                'gallery.html' => 'Gallery', 'get-the-app.html' => 'Get the app', 'careers.html' => 'Careers', 'contact.html' => 'Contact',
+                'privacy.html' => 'Privacy'] as $file => $label) {
+                if (is_file($dir . '/' . $file) && ! array_key_exists($file, $hold)) {
+                    $pages[] = ['href' => ($base === '' ? '/' : $base . '/') . $file, 'label' => $label];
+                }
+            }
+        }
+
+        $cfg = [
+            'name'           => (string) $tenant->name,
+            'slug'           => (string) $tenant->slug,
+            'base'           => $base,
+            'pages'          => $pages,
+            'initials'       => $this->initials((string) $tenant->name),
+            'logo'           => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
+            // The business's own colours when it set them; otherwise the internet-provider look (DishNet red).
+            'accent'         => (string) ($tenant->setting('theme_accent', '') ?: '#C8102E'),
+            'accentDark'     => (string) ($tenant->setting('theme_accent_dark', '') ?: ($tenant->setting('theme_accent', '') ? '' : '#A00D24')),
+            'tagline'        => mb_substr(trim((string) $tenant->setting('isp_tagline', '')), 0, 140),
+            'where'          => trim((string) $tenant->setting('city', '') . ((string) $tenant->setting('city', '') !== '' && (string) $tenant->setting('country', '') !== '' ? ', ' : '') . (string) $tenant->setting('country', '')),
+            'currency'       => $cur,
+            'decimals'       => $dec,
+            'plans'          => $plans,
+            'covered'        => array_slice($covered, 0, 200),
+            'waNumber'       => preg_replace('/[^0-9]/', '', (string) ($tenant->setting('public_phone', '') ?: ($tenant->whatsapp_number ?? ''))),
+            'webChat'        => (bool) $tenant->setting('web_chat', false),
+            'webChatContact' => (bool) $tenant->setting('web_chat_contact', true),
+            'openChat'       => (bool) ($chat['openChat'] ?? false),
+            'ctx'            => ['source' => (string) ($chat['source'] ?? ''), 'campaign' => (string) ($chat['campaign'] ?? '')],
+        ];
+
+        $path = resource_path('storefront/isp.html');
+        $html = is_file($path) ? file_get_contents($path) : '<h1>Unavailable</h1>';
+        $name = e((string) $tenant->name);
+        $url  = $base === '' ? url('/') : url($base);
+        $desc = e((string) $tenant->name . ' — internet plans for home and business. Ask our team for a quotation.');
+        $meta = '<meta name="description" content="' . $desc . '">' . "\n"
+              . '<link rel="canonical" href="' . e($url) . '">' . "\n"
+              . '<meta property="og:title" content="' . $name . '">' . "\n"
+              . '<meta property="og:description" content="' . $desc . '">';
+        $jf   = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_INVALID_UTF8_SUBSTITUTE;
+        $html = str_replace(['__TITLE__', '__META__', '__NAME__', '__ISP_CFG__'], [$name, $meta, $name, (string) json_encode($cfg, $jf)], $html);
 
         return response($html, 200)
             ->header('Content-Type', 'text/html; charset=utf-8')
@@ -2288,6 +2404,9 @@ class StorefrontController extends Controller
             ? Tenant::byCustomDomain(request()->getHost())
             : Tenant::where('slug', $slugOrShop)->first();
         abort_unless($tenant, 404);
+        if ($this->ispEnabled($tenant)) {                       // ISP: no category pages with a basket — the plans page
+            return redirect(($slug === null ? '/' : '/' . strtolower($slugOrShop)) . '#plans', 301);
+        }
         $want = $slug ?? $slugOrShop;
         foreach (array_keys($this->liveCategories($tenant)) as $cat) {
             if (\Illuminate\Support\Str::slug($cat) === $want) {
@@ -2304,6 +2423,22 @@ class StorefrontController extends Controller
         $tenant = Tenant::byCustomDomain(request()->getHost());
         abort_unless($tenant, 404);
         $urls = ['<url><loc>'.e(url('/')).'</loc><changefreq>daily</changefreq></url>'];
+        if ($this->ispEnabled($tenant)) {
+            // ISP: the plans page plus the business's own website pages served as-is (never held ones,
+            // never product or category pages — those redirect to the plans page).
+            if ($dir = TenantSiteController::bundleDir($tenant)) {
+                $hold = (array) (TenantSiteController::manifest($dir)['hold'] ?? []);
+                foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $f) {
+                    $rel = ltrim(str_replace('\\', '/', substr($f->getPathname(), strlen($dir))), '/');
+                    if (str_ends_with($rel, '.html') && ! array_key_exists($rel, $hold) && preg_match('#^' . TenantSiteController::PAGE . '$#', $rel)) {
+                        $urls[] = '<url><loc>'.e(url('/' . $rel)).'</loc><changefreq>monthly</changefreq></url>';
+                    }
+                }
+            }
+
+            return response('<?xml version="1.0" encoding="UTF-8"?>'."\n".'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'.implode('', $urls).'</urlset>', 200)
+                ->header('Content-Type', 'application/xml; charset=utf-8');
+        }
         foreach (array_keys($this->liveCategories($tenant)) as $cat) {
             $urls[] = '<url><loc>'.e(url('/c/'.\Illuminate\Support\Str::slug($cat))).'</loc><changefreq>weekly</changefreq></url>';
         }

@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>__TITLE__</title>
+__META__
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Internet-provider storefront (DishNet South Sudan plan). Styled after DishNet's own site: red accent, deep navy,
+   Outfit headings, DM Sans body. EVERYTHING shown is approved data from ShopBot: the switched-on catalogue
+   (monthly vs one-time), the coverage areas published in the Sales Brain, and a chat that runs the same governed
+   brain as WhatsApp. No basket and no payment on this page: the customer's salesperson prepares the quotation.
+   Self-contained by design, like the other per-vertical storefront pages. */
+:root{--ac:#C8102E;--acd:#A00D24;--acg:rgba(200,16,46,.12);--ink:#1A1A1A;--mut:#5A5A58;--line:#E5E4E0;--bg:#FAFAF8;--alt:#F3F2EE;--card:#fff;
+  --navy:#0B1120;--navy2:#131B2E;--ok:#16A34A;--bad:#B3261E;--r:14px;--rs:8px;--sh:0 4px 20px rgba(0,0,0,.08);
+  --fd:'Outfit',system-ui,sans-serif;--fb:'DM Sans',system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0}
+html{scroll-behavior:smooth}
+body{font:16px/1.6 var(--fb);color:var(--ink);background:var(--bg);-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased}
+a{color:var(--ac)}
+h1,h2,h3{font-family:var(--fd);line-height:1.15;margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+/* header */
+header.top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:12px;min-height:64px}
+.logo{width:40px;height:40px;border-radius:10px;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font:700 16px var(--fd);flex:none;overflow:hidden}
+.logo.img{background:transparent}
+.logo img{width:100%;height:100%;object-fit:contain}
+.brand{font:700 18px var(--fd);overflow-wrap:anywhere;flex:1;min-width:0}
+nav.links{display:flex;gap:18px;align-items:center}
+nav.links a{color:var(--ink);text-decoration:none;font-weight:500;font-size:15px}
+nav.links a:hover{color:var(--ac)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:100px;background:var(--ac);color:#fff;font:600 15px var(--fb);padding:11px 20px;cursor:pointer;text-decoration:none;transition:background .2s}
+.btn:hover{background:var(--acd)}
+.btn.ghost{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.4)}
+.btn.ghost:hover{background:rgba(255,255,255,.08)}
+.btn.wa{background:#128C4B}
+.btn.wa:hover{background:#0E7A40}
+.btn.sm{padding:8px 14px;font-size:14px}
+/* hero */
+.hero{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);color:#fff;padding:64px 0 56px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,var(--acg),transparent 70%)}
+.eyebrow{display:inline-block;font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#FCA5A5;background:rgba(200,16,46,.18);padding:5px 12px;border-radius:100px;margin-bottom:16px}
+.hero h1{font-size:44px;font-weight:800;max-width:720px}
+.hero p{color:rgba(255,255,255,.78);font-size:18px;max-width:620px;margin:16px 0 26px}
+.hero .cta{display:flex;flex-wrap:wrap;gap:12px;position:relative;z-index:1}
+/* sections */
+section.s{padding:56px 0}
+section.alt{background:var(--alt)}
+.sh{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px;margin-bottom:22px}
+.sh h2{font-size:30px;font-weight:700}
+.sh p{margin:6px 0 0;color:var(--mut)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tab{border:1px solid var(--line);background:var(--card);border-radius:100px;padding:8px 16px;font:500 14px var(--fb);color:var(--ink);cursor:pointer}
+.tab[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+h3.grp{font-size:18px;margin:26px 0 12px;color:var(--mut);font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:box-shadow .2s,transform .2s}
+.card:hover{box-shadow:var(--sh);transform:translateY(-2px)}
+.card img{width:100%;height:140px;object-fit:contain;border-radius:var(--rs);background:var(--alt)}
+.card .tag{align-self:flex-start;font-size:12px;font-weight:600;color:var(--ac);background:var(--acg);padding:3px 10px;border-radius:100px}
+.card h4{font:600 18px var(--fd);margin:0}
+.price{font:700 26px var(--fd)}
+.price small{font:500 14px var(--fb);color:var(--mut)}
+.price.ask{font-size:17px;color:var(--mut)}
+.card p{margin:0;color:var(--mut);font-size:14px;flex:1}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:var(--r);padding:20px;color:var(--mut)}
+/* coverage */
+.cov{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.search{width:100%;border:1px solid var(--line);border-radius:100px;padding:12px 18px;font:inherit;background:#fff}
+.search:focus{outline:2px solid var(--ac);outline-offset:1px}
+.areas{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.area{background:var(--card);border:1px solid var(--line);border-radius:100px;padding:6px 12px;font-size:14px}
+.area b{color:var(--ok);margin-right:4px}
+.covnote{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;color:var(--mut)}
+/* chat */
+.chat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-height:460px;max-height:78vh;overflow:hidden;box-shadow:var(--sh)}
+.chat .hd{padding:14px 16px;border-bottom:1px solid var(--line);font:600 17px var(--fd)}
+.chat .hd small{display:block;font:400 13px var(--fb);color:var(--mut)}
+.bd{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex}
+.row.me{justify-content:flex-end}
+.bub{max-width:86%;padding:9px 12px;border-radius:14px;background:var(--alt);white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}
+.row.me .bub{background:var(--ac);color:#fff}
+.bub.err{background:#FDECEA;color:var(--bad)}
+.ft{border-top:1px solid var(--line);padding:10px;display:flex;gap:8px}
+.ft input,.form input{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;background:#fff;color:var(--ink)}
+.ft input:focus,.form input:focus{outline:2px solid var(--ac);outline-offset:1px}
+.ft .btn,.form .btn{border-radius:10px}
+.form{padding:14px;display:grid;gap:10px}
+.form label{font-size:14px;color:var(--mut);display:grid;gap:4px}
+.form .hint{font-size:13px;color:var(--mut)}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:28px;align-items:start}
+.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.steps li{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;gap:12px}
+.steps b{flex:none;width:28px;height:28px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
+footer{background:var(--navy);color:rgba(255,255,255,.7);padding:28px 0 36px;font-size:14px}
+footer a{color:#fff}
+.fl{display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:14px}
+.fl a{text-decoration:none;font-weight:500}
+.fl a:hover{text-decoration:underline}
+@media (max-width:860px){
+  nav.links a.nl{display:none}
+  .hero{padding:44px 0 40px}.hero h1{font-size:32px}.hero p{font-size:16px}
+  section.s{padding:40px 0}.sh h2{font-size:25px}
+  .cov,.split{grid-template-columns:minmax(0,1fr)}
+  .chat{max-height:none;min-height:420px}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="logo" id="logo"></div><div class="brand" id="brand">__NAME__</div>
+  <nav class="links"><a class="nl" href="#plans">Plans</a><a class="nl" href="#coverage">Coverage</a><a class="btn sm" href="#chat" id="navChat">Talk to us</a></nav>
+</div></header>
+
+<section class="hero"><div class="wrap">
+  <span class="eyebrow" id="eyebrow">Internet for home &amp; business</span>
+  <h1 id="h1">Get connected with __NAME__</h1>
+  <p id="lead">Choose a plan, check your area, and our sales team will prepare your quotation and arrange installation.</p>
+  <div class="cta"><a class="btn" href="#plans">See plans</a><a class="btn ghost" href="#chat">Ask a question</a><a class="btn wa" id="heroWa" target="_blank" rel="noopener" hidden>WhatsApp us</a></div>
+</div></section>
+
+<section class="s" id="plans"><div class="wrap">
+  <div class="sh"><div><h2>Plans &amp; equipment</h2><p>Prices from our current price list. Monthly plans are charged every month; equipment and installation are paid once.</p></div>
+    <div class="tabs" id="tabs" role="group" aria-label="Filter by service"></div></div>
+  <div id="planList"></div>
+</div></section>
+
+<section class="s alt" id="coverage"><div class="wrap">
+  <div class="sh"><div><h2>Coverage</h2><p>Areas where our service is confirmed.</p></div></div>
+  <div class="cov">
+    <div><input class="search" id="covQ" type="search" placeholder="Type your area, e.g. a neighbourhood or landmark" aria-label="Search coverage areas"><div class="areas" id="areas"></div></div>
+    <div class="covnote" id="covNote">Not on the list? That does not mean we cannot connect you — our team will arrange a site survey. Ask us in the chat or on WhatsApp with your area and a nearby landmark.</div>
+  </div>
+</div></section>
+
+<section class="s" id="talk"><div class="wrap"><div class="split">
+  <div>
+    <div class="sh"><div><h2>How it works</h2></div></div>
+    <ol class="steps">
+      <li><b>1</b><span>Tell us which service you are interested in, where you are, and how many people or devices will use it.</span></li>
+      <li><b>2</b><span>Your salesperson confirms coverage and prepares your quotation.</span></li>
+      <li><b>3</b><span>Once you accept, we schedule your installation.</span></li>
+    </ol>
+  </div>
+  <aside class="chat" id="chat" aria-label="Sales chat">
+    <div class="hd">Talk to our sales team<small>Our assistant answers from our approved information; your salesperson prepares the quotation.</small></div>
+    <div class="bd" id="bd" aria-live="polite"></div>
+    <div id="foot"></div>
+  </aside>
+</div></div></section>
+
+<footer><div class="wrap" id="foottxt"></div></footer>
+
+<script>
+var ISP = __ISP_CFG__;
+(function(){
+  var T = ISP || {}, slug = T.slug || 'isp', bd = document.getElementById('bd'), foot = document.getElementById('foot'), busy = false;
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fmt(s){ return esc(s).replace(/\*([^*\n]+)\*/g, '<b>$1</b>'); }
+  function ls(k, v){ try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(e){ return null; } }
+  function sid(){
+    var k = 'cb_chat_sid_' + slug, v = ls(k);
+    if(!v || !/^[A-Za-z0-9][A-Za-z0-9_-]{15,63}$/.test(v)){
+      v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      ls(k, v);
+    }
+    return v;
+  }
+  function contact(){ try{ var c = JSON.parse(ls('cb_chat_ctc_' + slug) || 'null'); return (c && c.name && c.phone) ? c : null; }catch(e){ return null; } }
+  function paint(cls, html, err){ var r = document.createElement('div'); r.className = 'row ' + cls; r.innerHTML = '<div class="bub' + (err ? ' err' : '') + '">' + html + '</div>'; bd.appendChild(r); bd.scrollTop = bd.scrollHeight; return r; }
+  function waHref(text){ return 'https://wa.me/' + String(T.waNumber || '').replace(/[^0-9]/g, '') + (text ? '?text=' + encodeURIComponent(text) : ''); }
+  function lineName(l){ l = String(l || '').toLowerCase(); return l === 'starlink' ? 'Starlink' : (l === 'fiber' || l === 'fibre') ? 'Fibre' : l ? l.charAt(0).toUpperCase() + l.slice(1) : 'Other'; }
+  function money(v){ var d = Number(T.decimals); if(!(d >= 0)) d = 2; var n = Number(v); var s = n.toFixed(d); if(d > 0 && /\.0+$/.test(s)) s = n.toFixed(0); return (T.currency || '') + ' ' + s.replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  // ---- page furniture -------------------------------------------------------------------------
+  document.documentElement.style.setProperty('--ac', T.accent || '#C8102E');
+  document.documentElement.style.setProperty('--acd', T.accentDark || T.accent || '#A00D24');
+  var lg = document.getElementById('logo');
+  if(T.logo){ lg.className = 'logo img'; lg.innerHTML = '<img alt="" src="' + esc(T.logo) + '">'; } else { lg.textContent = T.initials || ''; }
+  document.getElementById('brand').textContent = T.name || '';
+  if(T.where){ document.getElementById('eyebrow').textContent = 'Internet for home & business · ' + T.where; }
+  if(T.tagline){ document.getElementById('lead').textContent = T.tagline; }
+  if(T.waNumber){ var hw = document.getElementById('heroWa'); hw.href = waHref('Hello ' + (T.name || '') + ', I would like information about your internet plans.'); hw.hidden = false; }
+  var pages = T.pages || [];
+  document.getElementById('foottxt').innerHTML = (pages.length ? '<div class="fl">' + pages.map(function(p){ return '<a href="' + esc(p.href) + '">' + esc(p.label) + '</a>'; }).join('') + '</div>' : '')
+    + esc((T.name || '') + ' — internet for home and business. Prices are from our current price list; your salesperson confirms the final quotation.')
+    + (T.waNumber ? ' <a target="_blank" rel="noopener" href="' + esc(waHref('')) + '">WhatsApp us</a>' : '');
+  // The business's own pages in the header (About / Help / Contact) when it has a website bundle.
+  var nav = document.querySelector('nav.links'), first = nav.firstChild;
+  pages.filter(function(p){ return /^(About|Help & tutorials|Contact)$/.test(p.label); }).forEach(function(p){
+    var a = document.createElement('a'); a.className = 'nl'; a.href = p.href; a.textContent = p.label === 'Help & tutorials' ? 'Help' : p.label; nav.insertBefore(a, first);
+  });
+
+  // ---- plans (approved catalogue only) ---------------------------------------------------------
+  var plans = T.plans || [], current = 'all';
+  function ask(p){
+    var msg = 'I am interested in ' + p.name + '.';
+    if(T.webChat){ document.getElementById('chat').scrollIntoView({behavior:'smooth', block:'start'}); start(msg); }
+    else if(T.waNumber){ window.open(waHref(msg), '_blank', 'noopener'); }
+  }
+  function card(p){
+    var c = document.createElement('div'); c.className = 'card';
+    var price = p.price == null ? '<div class="price ask">Price from our team</div>'
+      : '<div class="price">' + esc(money(p.price)) + (p.billing === 'monthly' ? ' <small>/ month</small>' : p.billing === 'one_off' ? ' <small>one-time</small>' : '') + '</div>';
+    c.innerHTML = (p.image ? '<img alt="" loading="lazy" src="' + esc(p.image) + '">' : '')
+      + (p.line ? '<span class="tag">' + esc(lineName(p.line)) + '</span>' : '')
+      + '<h4>' + esc(p.name) + '</h4>' + price + (p.desc ? '<p>' + esc(p.desc) + '</p>' : '<p></p>');
+    if(T.webChat || T.waNumber){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.textContent = 'Ask about this';
+      b.onclick = function(){ ask(p); }; c.appendChild(b);
+    }
+    return c;
+  }
+  function renderPlans(){
+    var box = document.getElementById('planList'); box.innerHTML = '';
+    var list = plans.filter(function(p){ return current === 'all' || (p.line || 'other') === current; });
+    var groups = [['monthly', 'Monthly plans'], ['one_off', 'Equipment & installation'], ['', 'More']];
+    var shown = 0;
+    groups.forEach(function(g){
+      var items = list.filter(function(p){ return (p.billing || '') === g[0]; });
+      if(!items.length) return;
+      var h = document.createElement('h3'); h.className = 'grp'; h.textContent = g[1]; box.appendChild(h);
+      var grid = document.createElement('div'); grid.className = 'cards';
+      items.forEach(function(p){ grid.appendChild(card(p)); shown++; });
+      box.appendChild(grid);
+    });
+    if(!shown){ box.innerHTML = '<div class="empty">Our current plans are being updated. Please ask our team in the chat or on WhatsApp.</div>'; }
+  }
+  var lines = []; plans.forEach(function(p){ var l = p.line || 'other'; if(lines.indexOf(l) < 0) lines.push(l); });
+  if(lines.length > 1){
+    var tabs = document.getElementById('tabs');
+    ['all'].concat(lines).forEach(function(l){
+      var t = document.createElement('button'); t.type = 'button'; t.className = 'tab'; t.textContent = l === 'all' ? 'All' : lineName(l);
+      t.setAttribute('aria-pressed', l === current ? 'true' : 'false');
+      t.onclick = function(){ current = l; Array.prototype.forEach.call(tabs.children, function(x){ x.setAttribute('aria-pressed', 'false'); }); t.setAttribute('aria-pressed', 'true'); renderPlans(); };
+      tabs.appendChild(t);
+    });
+  }
+  renderPlans();
+
+  // ---- coverage (published areas marked covered) -----------------------------------------------
+  var covered = T.covered || [], areas = document.getElementById('areas'), q = document.getElementById('covQ');
+  function renderAreas(){
+    var term = (q.value || '').trim().toLowerCase(), hits = covered.filter(function(a){ return !term || a.name.toLowerCase().indexOf(term) >= 0; });
+    areas.innerHTML = hits.length
+      ? hits.map(function(a){ return '<span class="area"><b>✓</b>' + esc(a.name) + (a.line ? ' · ' + esc(lineName(a.line)) : '') + '</span>'; }).join('')
+      : (covered.length ? '<span class="area">No confirmed area matches “' + esc(q.value) + '” yet — ask us for a site survey.</span>' : '<span class="area">Ask us about your area — our team will confirm coverage.</span>');
+  }
+  q.addEventListener('input', renderAreas); renderAreas();
+
+  // ---- chat (same /chat endpoint and governed brain as WhatsApp) ------------------------------
+  function composer(){
+    foot.innerHTML = '<form class="ft" id="f"><input id="in" maxlength="2000" autocomplete="off" enterkeyhint="send" placeholder="Ask about plans, coverage or installation" aria-label="Your message"><button class="btn" id="go">Send</button></form>';
+    document.getElementById('f').onsubmit = function(e){ e.preventDefault(); var i = document.getElementById('in'), v = i.value.trim(); if(v){ i.value = ''; send(v); } };
+  }
+  function contactForm(pending){
+    foot.innerHTML = '<form class="form" id="cf"><div class="hint">So your salesperson can reach you with your quotation:</div>'
+      + '<label>Your name<input id="cn" maxlength="60" autocomplete="name" required></label>'
+      + '<label>WhatsApp number, with country code<input id="cp" maxlength="32" inputmode="tel" autocomplete="tel" placeholder="e.g. 211 912 345 678" required></label>'
+      + '<button class="btn">Start</button></form>';
+    document.getElementById('cf').onsubmit = function(e){
+      e.preventDefault();
+      var n = document.getElementById('cn').value.trim(), p = document.getElementById('cp').value.replace(/[^0-9]/g, '');
+      if(n.length < 2 || p.length < 7 || p.length > 15){ paint('bot', 'Please enter your name and a full WhatsApp number with the country code.', true); return; }
+      ls('cb_chat_ctc_' + slug, JSON.stringify({name:n, phone:p}));
+      composer();
+      if(pending){ send(pending); } else { var i = document.getElementById('in'); if(i) i.focus(); }
+    };
+  }
+  function start(text){ if(!T.webChat) return; if(T.webChatContact !== false && !contact()){ contactForm(text); return; } send(text); }
+  function send(text){
+    if(busy) return;
+    if(T.webChatContact !== false && !contact()){ contactForm(text); return; }
+    busy = true; paint('me', esc(text));
+    var typing = paint('bot', '…'), c = contact() || {}, body = {message:text, session_id:sid()};
+    if(c.name){ body.contact_name = c.name; body.contact_phone = c.phone; }
+    if(T.ctx && T.ctx.source) body.source = T.ctx.source;
+    if(T.ctx && T.ctx.campaign) body.campaign = T.ctx.campaign;
+    fetch((T.base || '') + '/chat', {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body:JSON.stringify(body)})
+      .then(function(r){ return r.json().then(function(j){ return {st:r.status, j:j}; }).catch(function(){ return {st:r.status, j:null}; }); })
+      .then(function(x){
+        busy = false; typing.remove();
+        if(x.st === 429){ paint('bot', 'One moment — I am still finishing your last message. Please send it again.', true); return; }
+        if(x.j && x.j.error === 'need_contact'){ try{ localStorage.removeItem('cb_chat_ctc_' + slug); }catch(e){} paint('bot', 'Please share your name and WhatsApp number first.', true); contactForm(text); return; }
+        if(x.j && x.j.error === 'chat_off'){ paint('bot', 'Chat is not switched on right now.', true); offline(); return; }
+        if(!x.j || x.j.ok === false){ paint('bot', 'Something went wrong. Please try again.', true); return; }
+        if(x.j.session_id){ ls('cb_chat_sid_' + slug, x.j.session_id); }
+        (x.j.messages || []).forEach(function(m){
+          if(m.type === 'text'){ paint('bot', fmt(m.text)); }
+          else if(m.url){ paint('bot', '<a target="_blank" rel="noopener" href="' + esc(m.url) + '">' + esc(m.caption || m.fileName || 'Open') + '</a>'); }
+        });
+      })
+      .catch(function(){ busy = false; typing.remove(); paint('bot', 'No connection. Please try again.', true); });
+  }
+  function offline(){
+    foot.innerHTML = T.waNumber ? '<div class="form"><a class="btn wa" target="_blank" rel="noopener" href="' + esc(waHref('Hello ' + (T.name || '') + ', I would like information about your internet plans.')) + '">Message us on WhatsApp</a></div>' : '';
+  }
+
+  if(!T.webChat){
+    paint('bot', 'Website chat is not available at the moment.' + (T.waNumber ? ' Please message us on WhatsApp and our sales team will help you.' : ''));
+    offline();
+  } else {
+    paint('bot', fmt('Hello! 👋 I\'m the ' + (T.name || '') + ' assistant.\nTell me which service you are interested in and where you are, and I will help you choose a plan.'));
+    if(T.webChatContact !== false && !contact()){ contactForm(''); } else { composer(); }
+  }
+  if(T.openChat){ try{ document.getElementById('chat').scrollIntoView(); var i = document.getElementById('in') || document.getElementById('cn'); if(i) i.focus({preventScroll:true}); }catch(e){} }
+})();
+</script>
+</body>
+</html>

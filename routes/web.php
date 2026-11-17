@@ -867,6 +867,11 @@ Route::middleware('web')->group(function () use ($qToken) {
     Route::get('/p/{slugId}',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'productPage'])
         ->where('slugId', '[A-Za-z0-9\-]*[0-9]+');
     Route::get('/sitemap.xml',     [\App\Http\Controllers\Storefront\StorefrontController::class, 'sitemap']);
+    // A business's own multi-page website (site bundle, e.g. DishNet's about/contact/tutorials) on its custom
+    // domain. Only "name.html"/"name.css" (optionally under tutorials/) — never a bare word, so on the platform
+    // host this cannot shadow a shop slug (and there it 404s: no business claims the platform host).
+    Route::get('/{page}', [\App\Http\Controllers\Storefront\TenantSiteController::class, 'onDomain'])
+        ->where('page', \App\Http\Controllers\Storefront\TenantSiteController::PAGE);
     // v4.11 — REAL URLs for the auto-parts SPA (kills the #): the shell is served on every SPA
     // path so deep links, refreshes and Google all work. Constrained to the SPA's view prefixes,
     // so it can never swallow a real endpoint (part-id/part-request differ at the char after
@@ -907,6 +912,8 @@ Route::middleware('web')->group(function () use ($shopSlug, $qToken) {
     Route::get('/{shop}/how',                [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'how'])->where('shop', $shopSlug);
     Route::get('/{shop}/learn/{slug}',       [\App\Http\Controllers\Storefront\StorefrontLearnController::class, 'article'])->where('shop', $shopSlug)->where('slug', '[a-z0-9-]+');
     Route::get('/{shop}/chat',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'chatLanding'])->where('shop', $shopSlug);
+    Route::get('/{shop}/{page}',    [\App\Http\Controllers\Storefront\TenantSiteController::class, 'forShop'])
+        ->where('shop', $shopSlug)->where('page', \App\Http\Controllers\Storefront\TenantSiteController::PAGE);   // site bundle pages
     Route::get('/{shop}',           [\App\Http\Controllers\Storefront\StorefrontController::class, 'landing'])->where('shop', $shopSlug);
     Route::get('/{shop}/shop',      [\App\Http\Controllers\Storefront\StorefrontController::class, 'show'])->where('shop', $shopSlug);
     Route::get('/{shop}/catalogue', [\App\Http\Controllers\Storefront\StorefrontController::class, 'catalogue'])->where('shop', $shopSlug);
