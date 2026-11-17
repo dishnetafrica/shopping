@@ -26,7 +26,9 @@ final class ReplyGuard
 
     private const CURRENCY = '(?:US\$|USD|UGX|UGSHS?|SHS|KSHS?|KES|TZS|RWF|SSP|EUR|GBP|AED|ZAR|\$|€|£)';
     private const UNIT     = '(?:USD|UGX|KES|TZS|RWF|SSP|EUR|GBP|AED|ZAR|dollars?|shillings?|euros?|pounds?|dirhams?|bob|\/=)';
-    private const NUMBER   = '\d[\d,]*(?:\.\d+)?\s?(?:k|m|million|thousand)?';
+    // The k/m/million/thousand suffix must be a whole word: "$50 monthly" is $50, not $50 million
+    // (DishNet, 17 Nov 2026 — every "$50 monthly" plan line was stripped as an invented price).
+    private const NUMBER   = '\d[\d,]*(?:\.\d+)?(?:\s?(?:k|m|million|thousand)(?![a-z]))?';
 
     /**
      * @param  float[] $allowedAmounts  catalogue prices and amounts the customer wrote

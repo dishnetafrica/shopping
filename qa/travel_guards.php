@@ -62,6 +62,7 @@ chk('a sentence mixing a real price with an invented one is removed', $r['fare_h
 $r = G::clean('Understood, your budget is USD 500 per person.', G::amounts('my budget is 500 usd each'));
 chk('the customer\'s own figure may be repeated', [$r['fare_hits'], str_contains($r['reply'], 'USD 500')], [0, true]);
 chk('amount parser', G::amounts('USD 480, 1,750,000 UGX, $45.50, 450k shillings and UGX 1.8m'), [480.0, 1750000.0, 45.5, 450000.0, 1800000.0]);
+chk('a word after the amount is not a multiplier ("$500 more", "USD 40 monthly")', G::amounts('$500 more, USD 40 monthly, 2,000 KES total'), [500.0, 40.0, 2000.0]);
 chk('no amounts in plain text', G::amounts('2 adults on 20 Dec 2026, 23kg bags'), []);
 $r = G::clean("Here you go.\n<<QUOTE {\"items\":[{\"name\":\"Visa service\",\"qty\":1,\"price\":\"USD 90\"}]}>>");
 chk('hidden marker lines are never altered', [str_contains($r['reply'], '"price":"USD 90"'), $r['fare_hits']], [true, 0]);
