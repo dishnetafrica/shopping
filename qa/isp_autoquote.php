@@ -79,6 +79,14 @@ chk('…and how to go ahead', str_contains($t, 'reply *YES*'), true);
 chk('no salesperson yet: still a person, never a blank', str_contains(A::afterText(null, null), 'Your salesperson will call you'), true);
 chk('the follow-up text states no amount', preg_match('/\d/', A::afterText('Justus', null)), 0);
 
+echo "== was the PDF delivered?\n";
+chk('Evolution accepted (status is a word, not an error code)', A::delivered(['key' => ['id' => 'X'], 'status' => 'PENDING']), true);
+chk('Cloud API accepted', A::delivered(['messages' => [['id' => 'wamid.X']]]), true);
+chk('Cloud API refused a non-link', A::delivered(['error' => 'cloud_api_requires_public_url']), false);
+chk('Evolution refused', A::delivered(['status' => 400, 'error' => 'Bad Request']), false);
+chk('the gateway flagged a failed send', A::delivered(['_ok' => false, '_status' => 500]), false);
+chk('nothing back', A::delivered(null), false);
+
 echo "== the rules the model is given\n";
 $r = S::quoteRules();
 chk('the model writes the hidden line, never the quotation', [str_contains($r, '<<QUOTE'), str_contains($r, 'Never type a quotation')], [true, true]);

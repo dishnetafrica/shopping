@@ -46,14 +46,15 @@ class IspAutoQuoteTest extends TestCase
         return $t;
     }
 
-    private function gateway(): object
+    private function gateway(array $docResult = ['key' => ['id' => 'X'], 'status' => 'PENDING']): object
     {
-        return new class implements \App\Contracts\WhatsAppGateway {
+        return new class($docResult) implements \App\Contracts\WhatsAppGateway {
             public array $texts = [];
             public array $docs = [];
+            public function __construct(private array $docResult) {}
             public function sendText(string $i, string $to, string $m, ?array $q = null): array { $this->texts[] = [$to, $m]; return ['ok' => true]; }
             public function sendImage(string $i, string $to, string $m, string $c = ''): array { return ['ok' => true]; }
-            public function sendDocument(string $i, string $to, string $media, string $file, string $caption = ''): array { $this->docs[] = [$to, $file, $caption, strlen($media)]; return ['ok' => true]; }
+            public function sendDocument(string $i, string $to, string $media, string $file, string $caption = ''): array { $this->docs[] = [$to, $file, $caption, strlen($media)]; return $this->docResult; }
             public function markRead(string $i, string $id): void {}
             public function parseIncoming(array $payload): ?array { return null; }
             public function fetchContacts(string $i): array { return []; }
@@ -130,6 +131,19 @@ class IspAutoQuoteTest extends TestCase
         $this->assertSame([], $gw->docs);
         $this->assertSame(0, Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->count(), 'nothing priced');
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'Starlink Priority'));
+    }
+
+    public function test_a_pdf_whatsapp_refused_is_never_reported_as_sent(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        $gw = $this->gateway(['status' => 400, 'error' => 'Bad Request']);
+
+        $r = $this->capture($t, $gw, "<<QUOTE {\"items\":[{\"name\":\"Fiber Test 20 Mbps\",\"qty\":1}]}>>");
+
+        $this->assertFalse($r['sent'], $this->steps($t));
+        $this->assertSame(IspAutoQuote::HANDOFF, $r['reply'], 'the customer is not told a PDF arrived');
+        Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'did not deliver the PDF'));
     }
 
     public function test_switched_off_the_line_is_left_for_removal_and_nothing_is_sent(): void

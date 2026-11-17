@@ -103,12 +103,20 @@ class IspAutoQuote
                 MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', $clean, null, null, ['via' => 'ai']);
             }
             if ($gateway instanceof \App\Services\Bot\CollectorGateway) {
-                if ($row) {
-                    $gateway->sendDocument('', $from, $row->canonicalPortalUrl(), 'Quotation ' . $doc['no'], '');
-                }
+                $res = $row ? $gateway->sendDocument('', $from, $row->canonicalPortalUrl(), 'Quotation ' . $doc['no'], '') : ['error' => 'not_saved'];
             } else {
-                $media = (string) (($doc['b64'] ?? '') !== '' ? $doc['b64'] : ($doc['url'] ?? ''));
-                $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, (string) $doc['fileName'], $caption);
+                // Meta's Cloud API takes only a public link; Evolution takes the PDF itself.
+                $media = $gateway instanceof \App\Services\WhatsApp\CloudApiGateway
+                    ? ($row ? $row->canonicalPortalUrl() . '/pdf' : '')
+                    : (string) (($doc['b64'] ?? '') !== '' ? $doc['b64'] : ($doc['url'] ?? ''));
+                $res = $media !== '' ? $gateway->sendDocument($tenant->whatsapp_instance, $from, $media, (string) $doc['fileName'], $caption) : ['error' => 'no_media'];
+            }
+            if (! self::delivered($res)) {
+                // Saved but not delivered: never tell the customer it is there. Their salesperson sends it.
+                QuotationPipeline::stage($tenant->id, $from, 'isp_not_delivered', false, (string) $doc['no'], mb_substr(json_encode($res) ?: '', 0, 200));
+                $this->alert($tenant, $owner, "\u{26A0}\u{FE0F} Quotation {$doc['no']} for " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} was saved but WhatsApp did not deliver the PDF — please send it from Quotations.");
+
+                return ['reply' => self::HANDOFF, 'sent' => false];
             }
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
 
@@ -124,6 +132,20 @@ class IspAutoQuote
 
             return ['reply' => $this->handoff($tenant, $from, $name, $clean, 'asked for a quotation — the automatic one failed, please send it'), 'sent' => false];
         }
+    }
+
+    /** PURE. Did the gateway accept the document? (Gateways report a refusal in the result; they do not throw.) */
+    public static function delivered($res): bool
+    {
+        if (! is_array($res)) {
+            return false;
+        }
+        if (isset($res['error']) || ($res['_ok'] ?? true) === false) {
+            return false;
+        }
+        $status = $res['status'] ?? null;
+
+        return ! (is_numeric($status) && (int) $status >= 400);
     }
 
     /** PURE. The line under the PDF: one-time and monthly kept apart, like the PDF itself. */
