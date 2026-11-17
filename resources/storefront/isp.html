@@ -100,6 +100,9 @@ h3.grp{font-size:18px;margin:26px 0 12px;color:var(--mut);font-weight:600}
 .steps b{flex:none;width:28px;height:28px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
 footer{background:var(--navy);color:rgba(255,255,255,.7);padding:28px 0 36px;font-size:14px}
 footer a{color:#fff}
+.fl{display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:14px}
+.fl a{text-decoration:none;font-weight:500}
+.fl a:hover{text-decoration:underline}
 @media (max-width:860px){
   nav.links a.nl{display:none}
   .hero{padding:44px 0 40px}.hero h1{font-size:32px}.hero p{font-size:16px}
@@ -184,8 +187,15 @@ var ISP = __ISP_CFG__;
   if(T.where){ document.getElementById('eyebrow').textContent = 'Internet for home & business · ' + T.where; }
   if(T.tagline){ document.getElementById('lead').textContent = T.tagline; }
   if(T.waNumber){ var hw = document.getElementById('heroWa'); hw.href = waHref('Hello ' + (T.name || '') + ', I would like information about your internet plans.'); hw.hidden = false; }
-  document.getElementById('foottxt').innerHTML = esc((T.name || '') + ' — internet for home and business. Prices are from our current price list; your salesperson confirms the final quotation.')
+  var pages = T.pages || [];
+  document.getElementById('foottxt').innerHTML = (pages.length ? '<div class="fl">' + pages.map(function(p){ return '<a href="' + esc(p.href) + '">' + esc(p.label) + '</a>'; }).join('') + '</div>' : '')
+    + esc((T.name || '') + ' — internet for home and business. Prices are from our current price list; your salesperson confirms the final quotation.')
     + (T.waNumber ? ' <a target="_blank" rel="noopener" href="' + esc(waHref('')) + '">WhatsApp us</a>' : '');
+  // The business's own pages in the header (About / Help / Contact) when it has a website bundle.
+  var nav = document.querySelector('nav.links'), first = nav.firstChild;
+  pages.filter(function(p){ return /^(About|Help & tutorials|Contact)$/.test(p.label); }).forEach(function(p){
+    var a = document.createElement('a'); a.className = 'nl'; a.href = p.href; a.textContent = p.label === 'Help & tutorials' ? 'Help' : p.label; nav.insertBefore(a, first);
+  });
 
   // ---- plans (approved catalogue only) ---------------------------------------------------------
   var plans = T.plans || [], current = 'all';

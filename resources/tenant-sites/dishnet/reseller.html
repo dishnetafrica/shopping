@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Become a DishNet Reseller — Sell Fiber or Starlink</title>
+    <meta name="description" content="Become an authorized DishNet reseller. Earn commission on internet hardware and monthly subscriptions across South Sudan. Choose fiber, Starlink, or both.">
+    <link rel="icon" type="image/png" href="https://portal.dishnetss.com/uploads/images/1727669803.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .rs-hero { padding: 130px 0 60px; background: linear-gradient(160deg, #0B1120 0%, #1a2540 100%); color: #fff; position: relative; overflow: hidden; }
+        .rs-hero::after { content: ''; position: absolute; top: -200px; right: -200px; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(200,16,46,0.18) 0%, transparent 70%); pointer-events: none; }
+        .rs-hero::before { content: ''; position: absolute; bottom: -150px; left: -150px; width: 500px; height: 500px; border-radius: 50%; background: radial-gradient(circle, rgba(34,197,94,0.15) 0%, transparent 70%); pointer-events: none; }
+        .rs-hero-inner { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; }
+        /* Two-column hero: text+toggle+CTAs left, earnings card right */
+        .rs-hero-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 64px; align-items: center;
+        }
+        .rs-hero-left { text-align: left; }
+        .rs-hero-left h1 { margin-bottom: 18px; }
+        .rs-hero-left .lead { max-width: 100%; margin-left: 0; margin-right: 0; margin-bottom: 28px; font-size: 17px; }
+        .rs-hero-left .toggle-wrap { justify-content: flex-start; margin-top: 0; display: flex; }
+        .rs-hero-left .rs-cta-row { justify-content: flex-start; margin-top: 24px; }
+        .rs-hero-right .rs-earn-card {
+            margin: 0; max-width: 100%;
+            padding: 32px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        }
+        .rs-hero-right .rs-earn-card h3 { font-size: 14px; }
+        .rs-hero-right .rs-tier-amt { font-size: 24px; }
+
+        @media (max-width: 900px) {
+            .rs-hero-grid { grid-template-columns: 1fr; gap: 28px; }
+            .rs-hero-left { text-align: center; }
+            .rs-hero-left .lead { margin-left: auto; margin-right: auto; max-width: 600px; }
+            .rs-hero-left .toggle-wrap { justify-content: center; }
+            .rs-hero-left .rs-cta-row { justify-content: center; }
+        }
+        .rs-hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; background: rgba(200,16,46,0.20); color: #ff6b88; border-radius: 100px; font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 20px; }
+        .rs-hero-badge::before { content: ''; width: 8px; height: 8px; background: #ff6b88; border-radius: 50%; box-shadow: 0 0 0 4px rgba(255,107,136,0.25); }
+        .rs-hero h1 { font-family: var(--font-display); font-size: clamp(32px, 5vw, 52px); font-weight: 800; line-height: 1.05; margin-bottom: 20px; letter-spacing: -0.02em; }
+        .rs-hero h1 .accent { color: #ff6b88; }
+        .rs-hero .lead { font-size: 18px; color: rgba(255,255,255,0.78); line-height: 1.7; margin-bottom: 32px; max-width: 600px; margin-left: auto; margin-right: auto; }
+
+        .toggle-wrap { display: flex; justify-content: center; margin-top: 8px; position: relative; z-index: 2; }
+        .toggle { display: inline-flex; padding: 6px; background: rgba(255,255,255,0.08); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.12); border-radius: 100px; }
+        .toggle-btn { padding: 12px 28px; border: 0; background: transparent; color: rgba(255,255,255,0.7); font-family: var(--font-display); font-weight: 600; font-size: 14px; cursor: pointer; border-radius: 100px; display: inline-flex; align-items: center; gap: 8px; transition: all 0.25s cubic-bezier(0.4,0,0.2,1); }
+        .toggle-btn svg { width: 16px; height: 16px; }
+        .toggle-btn:hover { color: #fff; }
+        .toggle-btn.active { background: #fff; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        .rs-earn-card { background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 28px; max-width: 540px; margin: 36px auto 0; }
+        .rs-earn-card h3 { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 16px; text-align: center; }
+        .rs-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .rs-tier { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 14px 10px; text-align: center; }
+        .rs-tier-label { font-family: var(--font-display); font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .rs-tier-amt { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: #ff6b88; line-height: 1; margin-bottom: 4px; }
+        .rs-tier-sub { font-size: 11px; color: rgba(255,255,255,0.55); }
+        .rs-earn-note { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 14px; line-height: 1.5; text-align: center; }
+
+        .rs-cta-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 24px; }
+        .rs-cta { display: inline-flex; align-items: center; gap: 8px; padding: 14px 26px; border-radius: 100px; font-family: var(--font-display); font-weight: 600; font-size: 15px; transition: var(--transition); }
+        .rs-cta-primary { background: #25D366; color: #fff; }
+        .rs-cta-primary:hover { background: #1FBE5C; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(37,211,102,0.35); }
+        .rs-cta-ghost { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.18); }
+        .rs-cta-ghost:hover { background: rgba(255,255,255,0.14); }
+        .rs-cta svg { width: 18px; height: 18px; fill: currentColor; }
+
+        .rs-sell { padding: 70px 0; }
+        .rs-sell-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 36px; }
+        .rs-sell-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 28px 24px; transition: var(--transition); }
+        .rs-sell-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+        .rs-sell-icon { width: 52px; height: 52px; border-radius: 14px; background: var(--accent-glow); display: flex; align-items: center; justify-content: center; margin-bottom: 18px; font-size: 26px; }
+        .rs-sell-card h3 { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+        .rs-sell-card p { font-size: 13.5px; color: var(--text-secondary); line-height: 1.65; margin-bottom: 14px; }
+        .rs-sell-card .rs-margin { font-size: 12px; font-weight: 700; color: var(--green); padding: 4px 10px; background: var(--green-glow); border-radius: 100px; display: inline-block; }
+
+        .rs-perks { padding: 70px 0; background: var(--surface-alt); }
+        .rs-perks-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; margin-top: 36px; }
+        .rs-perk { padding: 26px; background: var(--surface); border-radius: 16px; display: flex; gap: 18px; align-items: flex-start; }
+        .rs-perk-icon { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-glow); color: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .rs-perk-icon svg { width: 22px; height: 22px; }
+        .rs-perk h3 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+        .rs-perk p { font-size: 13.5px; color: var(--text-secondary); line-height: 1.65; }
+
+        .rs-req { padding: 70px 0; }
+        .rs-req-box { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 36px; max-width: 720px; margin: 0 auto; }
+        .rs-req-list { list-style: none; padding: 0; }
+        .rs-req-list li { padding: 12px 0 12px 38px; position: relative; border-bottom: 1px dashed var(--border); font-size: 14.5px; line-height: 1.55; }
+        .rs-req-list li:last-child { border-bottom: 0; }
+        .rs-req-list li::before { content: '✓'; position: absolute; left: 0; top: 12px; width: 24px; height: 24px; background: var(--green); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+        .rs-req-list li strong { font-weight: 700; color: var(--text); }
+
+        .rs-apply { padding: 70px 0; }
+        .rs-apply-card { background: var(--dark-bg); border-radius: 24px; padding: 52px 40px; text-align: center; color: #fff; position: relative; overflow: hidden; }
+        .rs-apply-card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, rgba(200,16,46,0.22) 0%, transparent 60%); pointer-events: none; }
+        .rs-apply-card h2 { font-family: var(--font-display); font-size: clamp(24px, 3vw, 34px); font-weight: 800; margin-bottom: 12px; position: relative; }
+        .rs-apply-card p { font-size: 16px; color: rgba(255,255,255,0.7); max-width: 600px; margin: 0 auto 28px; line-height: 1.7; position: relative; }
+
+        @media (max-width: 900px) {
+            .rs-sell-grid { grid-template-columns: 1fr; }
+            .rs-perks-grid { grid-template-columns: 1fr; }
+            .rs-apply-card { padding: 36px 22px; }
+            .rs-tiers { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 540px) {
+            .toggle { width: 100%; max-width: 340px; }
+            .toggle-btn { flex: 1; padding: 12px 14px; font-size: 13px; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="header"><div class="container"><div class="header-inner"><a href="index.html" class="logo"><img src="https://portal.dishnetss.com/uploads/images/1727669803.png" alt="DishNet Africa"></a><nav class="nav"><a href="index.html#products">Products</a><a href="fiber.html">Fiber</a><a href="hotspot.html">Hotspot</a><a href="coverage.html">Coverage</a><a href="get-the-app.html">App</a><a href="contact.html">Contact</a></nav><div class="nav-actions"><a href="https://crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/public.php?page=customer_portal" class="btn btn-outline" style="padding:10px 20px;font-size:14px;">Customer Login</a><a href="https://wa.me/211923400000" class="header-cta">Get a Quote</a></div><button class="mobile-toggle" onclick="document.getElementById('mobileNav').classList.add('open')"><span></span></button></div></div></header>
+<div class="mobile-nav" id="mobileNav"><button class="mobile-nav-close" onclick="this.parentElement.classList.remove('open')">&times;</button><a href="index.html">Home</a><a href="fiber.html">Fiber</a><a href="hotspot.html">Hotspot</a><a href="coverage.html">Coverage</a><a href="get-the-app.html">App</a><a href="contact.html">Contact</a><a href="services.html">Services</a><a href="about.html">About</a><a href="tutorials/index.html">Tutorials</a><a href="portal-preview.html">Live Demo</a><a href="faq.html">FAQ</a><a href="https://crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/public.php?page=customer_portal">Customer Login</a></div>
+
+<section class="rs-hero">
+    <div class="container">
+        <div class="rs-hero-inner">
+            <div class="rs-hero-grid">
+
+                <!-- LEFT: text, toggle, tab-specific CTAs -->
+                <div class="rs-hero-left">
+                    <span class="rs-hero-badge">Authorized reseller program</span>
+                    <h1>Sell DishNet in <span class="accent">your area</span></h1>
+                    <p class="lead">If you run a shop, office, or community business, you can resell DishNet's connectivity products and earn monthly. Better hardware pricing, recurring commission, local backup.</p>
+
+                    <div class="toggle-wrap">
+                        <div class="toggle" role="tablist">
+                            <button class="toggle-btn" data-tab="starlink" role="tab" id="tabStarlink">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h.01M12 12h.01M19 12h.01M5 16h.01M12 16h.01M19 16h.01M5 8h.01M12 8h.01M19 8h.01"/></svg>
+                                Resell Starlink
+                            </button>
+                            <button class="toggle-btn" data-tab="fiber" role="tab" id="tabFiber">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                Resell Fiber
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STARLINK CTAs (left side) -->
+                    <div class="tab-pane" data-tab-pane="starlink">
+                        <div class="rs-cta-row">
+                            <a href="https://wa.me/211923400000?text=Hi%20DishNet%2C%20I%27d%20like%20to%20resell%20Starlink%20kits%20in%20my%20area." target="_blank" rel="noopener" class="rs-cta rs-cta-primary">
+                                <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                Apply to resell
+                            </a>
+                            <a href="#how" class="rs-cta rs-cta-ghost">How it works</a>
+                        </div>
+                    </div>
+
+                    <!-- FIBER CTAs (left side) -->
+                    <div class="tab-pane" data-tab-pane="fiber">
+                        <div class="rs-cta-row">
+                            <a href="https://wa.me/211923400000?text=Hi%20DishNet%2C%20I%27d%20like%20to%20resell%20fiber%20in%20my%20area%20of%20Juba." target="_blank" rel="noopener" class="rs-cta rs-cta-primary">
+                                <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                Apply to resell
+                            </a>
+                            <a href="coverage.html" class="rs-cta rs-cta-ghost">Check coverage</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: earnings card (per-tab) -->
+                <div class="rs-hero-right">
+                    <div class="tab-pane" data-tab-pane="starlink">
+                        <div class="rs-earn-card">
+                            <h3>Indicative reseller earnings · per month</h3>
+                            <div class="rs-tiers">
+                                <div class="rs-tier"><div class="rs-tier-label">Starter</div><div class="rs-tier-amt">~$200</div><div class="rs-tier-sub">2–3 kits/mo</div></div>
+                                <div class="rs-tier"><div class="rs-tier-label">Growing</div><div class="rs-tier-amt">~$800</div><div class="rs-tier-sub">~50 active subs</div></div>
+                                <div class="rs-tier"><div class="rs-tier-label">Established</div><div class="rs-tier-amt">~$2,000</div><div class="rs-tier-sub">~150 active subs</div></div>
+                            </div>
+                            <p class="rs-earn-note">Illustrative — real earnings depend on volume, hardware mix, and subscription retention. We'll model your specific scenario when you apply.</p>
+                        </div>
+                    </div>
+                    <div class="tab-pane" data-tab-pane="fiber">
+                        <div class="rs-earn-card">
+                            <h3>Indicative fiber reseller earnings · per month</h3>
+                            <div class="rs-tiers">
+                                <div class="rs-tier"><div class="rs-tier-label">Starter</div><div class="rs-tier-amt">~$150</div><div class="rs-tier-sub">2–3 installs/mo</div></div>
+                                <div class="rs-tier"><div class="rs-tier-label">Growing</div><div class="rs-tier-amt">~$600</div><div class="rs-tier-sub">~40 active subs</div></div>
+                                <div class="rs-tier"><div class="rs-tier-label">Established</div><div class="rs-tier-amt">~$1,500</div><div class="rs-tier-sub">~120 active subs</div></div>
+                            </div>
+                            <p class="rs-earn-note">Illustrative. Fiber resellers focus on Juba neighborhoods where coverage exists — lower hardware cost but geographically limited.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="rs-sell" id="how">
+    <div class="container">
+        <span class="badge-label badge-accent">What you sell</span>
+        <h2 class="section-title">Products available for resellers</h2>
+        <p class="section-subtitle">DishNet supplies the hardware and the back-end. You sign up customers in your area.</p>
+
+        <div class="tab-pane" data-tab-pane="starlink">
+            <div class="rs-sell-grid">
+                <div class="rs-sell-card">
+                    <div class="rs-sell-icon">📡</div>
+                    <h3>Starlink Mini kits</h3>
+                    <p>The most popular kit at $299. Compact, portable, easy to install. Best for new customers wanting satellite internet at home.</p>
+                    <span class="rs-margin">Hardware margin + monthly commission</span>
+                </div>
+                <div class="rs-sell-card">
+                    <div class="rs-sell-icon">🛰️</div>
+                    <h3>Standard &amp; Performance kits</h3>
+                    <p>For customers needing higher speeds or larger coverage — Standard ($550), Actuated ($650), Flat HP ($2,600 enterprise).</p>
+                    <span class="rs-margin">Higher unit margin</span>
+                </div>
+                <div class="rs-sell-card">
+                    <div class="rs-sell-icon">📋</div>
+                    <h3>Plan subscriptions</h3>
+                    <p>Residential, Roam, and Priority plans (500GB to 5TB). You earn recurring commission on monthly subscriptions while customer is active.</p>
+                    <span class="rs-margin">Recurring revenue share</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane" data-tab-pane="fiber">
+            <div class="rs-sell-grid">
+                <div class="rs-sell-card">
+                    <div class="rs-sell-icon">🌐</div>
+                    <h3>Fiber installations</h3>
+                    <p>Connect homes and offices in Juba to DishNet fiber. $150 installation fee per customer, Wi-Fi router included.</p>
+                    <span class="rs-margin">Install fee share</span>
+                </div>
+                <div class="rs-sell-card">
+                    <div class="rs-sell-icon">📊</div>
+                    <h3>Monthly plans</h3>
+                    <p>Three tiers — Basic 20 Mbps ($50/mo), Standard 40 Mbps ($75/mo), Premium 60 Mbps ($100/mo). Unlimited data with FUP.</p>
+                    <span class="rs-margin">Recurring revenue share</span>
+                </div>
+                <div class="rs-sell-card">
+                    <div class="rs-sell-icon">🔧</div>
+                    <h3>Add-ons &amp; upgrades</h3>
+                    <p>Router upgrades, additional outlets, static IP, mesh extensions. Earn margin on every add-on you sell to existing customers.</p>
+                    <span class="rs-margin">Add-on margin</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="rs-perks">
+    <div class="container">
+        <span class="badge-label badge-accent">Why partner with us</span>
+        <h2 class="section-title">What you get as a reseller</h2>
+        <p class="section-subtitle">Same program whether you sell fiber, satellite, or both.</p>
+
+        <div class="rs-perks-grid">
+            <div class="rs-perk">
+                <div class="rs-perk-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg></div>
+                <div><h3>Better wholesale pricing</h3><p>Discount on hardware orders above minimum quantity. Pricing scales with volume — the more you sell, the better your margin.</p></div>
+            </div>
+            <div class="rs-perk">
+                <div class="rs-perk-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                <div><h3>Recurring monthly commission</h3><p>Earn a share of each customer's monthly subscription for as long as they stay active. Build a base that pays you every month.</p></div>
+            </div>
+            <div class="rs-perk">
+                <div class="rs-perk-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+                <div><h3>Local support &amp; warranty backing</h3><p>Your customers get DishNet support like direct customers. Hardware issues come to us — you don't have to handle technical escalations alone.</p></div>
+            </div>
+            <div class="rs-perk">
+                <div class="rs-perk-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg></div>
+                <div><h3>Co-branded sales materials</h3><p>Brochures, quote sheets, and a reseller portal where you can track your pipeline, commission, and customer activations.</p></div>
+            </div>
+            <div class="rs-perk">
+                <div class="rs-perk-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+                <div><h3>Fast activation</h3><p>Most customer activations complete in 1–3 days from when you submit the order. We handle the back-end paperwork.</p></div>
+            </div>
+            <div class="rs-perk">
+                <div class="rs-perk-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg></div>
+                <div><h3>Trust by association</h3><p>DishNet has been operating since 2013. Customers recognize the name. You're not pushing an unknown brand — you inherit existing trust.</p></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="rs-req">
+    <div class="container">
+        <span class="badge-label badge-accent">Requirements</span>
+        <h2 class="section-title">What we look for in a reseller</h2>
+        <p class="section-subtitle">Same criteria whether you're selling fiber or satellite.</p>
+
+        <div class="rs-req-box">
+            <ul class="rs-req-list">
+                <li><strong>A physical presence in your area</strong> — shop, office, or established business location. Customers need somewhere to find you.</li>
+                <li><strong>Basic reachability</strong> — WhatsApp, working phone, ability to respond to inbound enquiries within a day.</li>
+                <li><strong>Initial commitment</strong> — a minimum starter order to qualify for the program. We'll discuss what makes sense for your market.</li>
+                <li><strong>Honest customer handling</strong> — accurate plan recommendations, no overpromising on speeds or coverage, fair pricing.</li>
+                <li><strong>Knowledge of your area</strong> — you understand local demand, what customers can afford, and where the opportunities are.</li>
+                <li><strong>Compliance with operator terms</strong> — for satellite resellers, respect upstream service terms. For fiber resellers, work within DishNet's coverage areas.</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="rs-apply">
+    <div class="container">
+        <div class="rs-apply-card">
+            <h2>Apply to become a reseller</h2>
+            <p>Message our sales team on WhatsApp. We'll send you program details, current pricing, and a short application form. Most applications are reviewed within 2–3 business days.</p>
+            <div class="rs-cta-row">
+                <a href="https://wa.me/211923400000?text=Hi%20DishNet%2C%20I%27d%20like%20to%20apply%20to%20become%20an%20authorized%20reseller.%20My%20business%20is%20in%3A%20" target="_blank" rel="noopener" class="rs-cta rs-cta-primary">
+                    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    Apply on WhatsApp
+                </a>
+                <a href="mailto:info@dishnetafrica.com?subject=Reseller%20Program%20Application" class="rs-cta rs-cta-ghost">Email us instead</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section style="padding: 24px 0 48px; background: #fff;">
+    <div class="container">
+        <div style="max-width: 820px; margin: 0 auto; padding: 24px 28px; background: #FAFAF8; border: 1px solid #E5E4E0; border-radius: 14px; font-size: 13px; color: #5A5A58; line-height: 1.7;">
+            <strong style="color: #1A1A1A; display: block; margin-bottom: 8px; font-family: var(--font-display);">Important · Please read before applying</strong>
+            All earnings figures on this page are illustrative ranges based on existing partner performance — they are not income guarantees or projections of your individual results. Actual earnings depend on your sales volume, your local market, customer retention, the product mix you sell, and pricing structures that may change over time. Hardware discounts, commission rates, minimum order quantities, and program terms are set by DishNet and may be adjusted with notice. Resellers are responsible for complying with all applicable laws, upstream service terms (where relevant), and the DishNet reseller agreement. DishNet may approve, decline, or terminate reseller status at its discretion.
+        </div>
+    </div>
+</section>
+
+<footer class="footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><img src="https://portal.dishnetss.com/uploads/images/1727669803.png" alt="DishNet"><p>Connecting South Sudan since 2013. Starlink, fiber, and LTE internet across all major cities.</p></div><div><h4>Services</h4><ul class="footer-links"><li><a href="index.html#products">Starlink Kits</a></li><li><a href="fiber.html">Fiber Internet</a></li><li><a href="services.html">All Services</a></li><li><a href="coverage.html">Coverage Map</a></li><li><a href="hotspot.html">Hotspot Setup</a></li><li><a href="reseller.html">Reseller Program</a></li><li><a href="why-dishnet.html">Why DishNet</a></li></ul></div><div><h4>Company</h4><ul class="footer-links"><li><a href="about.html">About Us</a></li><li><a href="contact.html">Contact</a></li><li><a href="faq.html">FAQ</a></li><li><a href="blog.html">Blog</a></li><li><a href="testimonials.html">Reviews</a></li><li><a href="gallery.html">Gallery</a></li><li><a href="careers.html">Careers</a></li></ul></div><div><h4>Support &amp; Legal</h4><ul class="footer-links"><li><a href="get-the-app.html">Get the App</a></li><li><a href="portal-preview.html"><strong style="color:#fff">▸ Live Portal Demo</strong></a></li><li><a href="tutorials/index.html">App Tutorials</a></li><li><a href="guides.html">Help Guides</a></li><li><a href="https://crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/public.php?page=customer_portal">Customer Login</a></li><li><a href="whatsapp.html">Chat on WhatsApp</a></li><li><a href="pay.html">Pay a Bill</a></li><li><a href="https://wa.me/211923400000">WhatsApp Support</a></li><li><a href="terms.html">Terms of Use</a></li><li><a href="privacy.html">Privacy Policy</a></li></ul></div></div><div class="footer-bottom"><span>&copy; 2026 DishNet Africa Ltd. All rights reserved.</span></div></div></footer>
+
+<a href="https://wa.me/211923400000" class="wa-float" target="_blank" aria-label="WhatsApp"><svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
+
+<script>
+(function() {
+    var STORAGE_KEY = 'dishnet-reseller-tab';
+    var DEFAULT_TAB = 'starlink';
+
+    function setTab(tab) {
+        document.querySelectorAll('.toggle-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.tab === tab);
+            btn.setAttribute('aria-selected', btn.dataset.tab === tab ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-tab-pane]').forEach(function(p) {
+            p.classList.toggle('active', p.dataset.tabPane === tab);
+        });
+        try { localStorage.setItem(STORAGE_KEY, tab); } catch(e) {}
+    }
+
+    document.querySelectorAll('.toggle-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() { setTab(btn.dataset.tab); });
+    });
+
+    var saved = null;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch(e) {}
+    setTab(saved === 'fiber' ? 'fiber' : DEFAULT_TAB);
+})();
+</script>
+
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Service","name":"DishNet Reseller Program","provider":{"@type":"Organization","name":"DishNet Africa Ltd"},"areaServed":"SS","description":"Authorized reseller program for DishNet's fiber and satellite internet products across South Sudan. Recurring commission, wholesale pricing, local support."}</script>
+</body>
+</html>

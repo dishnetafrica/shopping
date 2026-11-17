@@ -1,0 +1,27 @@
+{
+  "name": "DishNet Africa — website (from the owner's static site, 26 Apr 2026 build)",
+  "home": "index.html",
+  "_hold": "Pages NOT served as-is yet: they show prices, SSP amounts, coverage or terms that differ from what DishNet management approved in ShopBot. Each sends the visitor to the live ShopBot page (plans, coverage) until it is rebuilt with live, approved data. Value = anchor on the live page.",
+  "hold": {
+    "index.html": "",
+    "fiber.html": "#plans",
+    "services.html": "#plans",
+    "device-mini.html": "#plans",
+    "device-v4.html": "#plans",
+    "device-actuated.html": "#plans",
+    "device-hp.html": "#plans",
+    "hotspot.html": "#plans",
+    "reseller.html": "#plans",
+    "faq.html": "#plans",
+    "pay.html": "#chat",
+    "why-dishnet.html": "#plans",
+    "testimonials.html": "",
+    "blog-fiber-vs-starlink.html": "#plans",
+    "blog-starlink-south-sudan.html": "#plans",
+    "blog-setup-starlink.html": "#plans",
+    "coverage.html": "#coverage",
+    "terms.html": "#chat",
+    "tutorials/send-invoice-to-whatsapp.html": "#chat",
+    "tutorials/view-pay-invoice.html": "#chat"
+  }
+}

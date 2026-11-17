@@ -49,7 +49,7 @@ class StorefrontController extends Controller
      *
      * @return array{0:Tenant,1:string}
      */
-    private function resolveShop(?string $shop): array
+    public function resolveShop(?string $shop): array      // public: TenantSiteController resolves the same way
     {
         if ($shop !== null && $shop !== '') {
             return [$this->tenant($shop), '/' . strtolower(trim($shop))];
@@ -627,10 +627,24 @@ class StorefrontController extends Controller
             report($e);                                                        // a website never fails on coverage
         }
 
+        // The business's own website pages (site bundle), when it has them — only pages served as-is.
+        $pages = [];
+        if ($dir = TenantSiteController::bundleDir($tenant)) {
+            $hold = (array) (TenantSiteController::manifest($dir)['hold'] ?? []);
+            foreach (['about.html' => 'About', 'tutorials/index.html' => 'Help & tutorials', 'guides.html' => 'Guides', 'blog.html' => 'Blog',
+                'gallery.html' => 'Gallery', 'get-the-app.html' => 'Get the app', 'careers.html' => 'Careers', 'contact.html' => 'Contact',
+                'privacy.html' => 'Privacy'] as $file => $label) {
+                if (is_file($dir . '/' . $file) && ! array_key_exists($file, $hold)) {
+                    $pages[] = ['href' => ($base === '' ? '/' : $base . '/') . $file, 'label' => $label];
+                }
+            }
+        }
+
         $cfg = [
             'name'           => (string) $tenant->name,
             'slug'           => (string) $tenant->slug,
             'base'           => $base,
+            'pages'          => $pages,
             'initials'       => $this->initials((string) $tenant->name),
             'logo'           => $tenant->setting('logo', '') ? $this->imageUrl((string) $tenant->setting('logo', '')) : '',
             // The business's own colours when it set them; otherwise the internet-provider look (DishNet red).
