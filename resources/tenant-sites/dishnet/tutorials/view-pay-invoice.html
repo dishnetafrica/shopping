@@ -144,7 +144,7 @@
         <div style="width:30px;height:30px;border-radius:9px;background:rgba(179,107,0,0.15);color:var(--app-amber);display:flex;align-items:center;justify-content:center"><svg style="width:13px;height:13px"><use href="#i-clock"/></svg></div>
         <div style="flex:1">
             <div style="font-size:12px;font-weight:700;color:var(--app-dark)">1 invoice due</div>
-            <div style="font-size:10px;color:var(--app-gray-2);margin-top:1px">$80 due in 3 days</div>
+            <div style="font-size:10px;color:var(--app-gray-2);margin-top:1px">{{price:Starlink Residential Plan}} due in 3 days</div>
         </div>
         <span class="chev" style="color:var(--app-amber)">›</span>
     </div>
@@ -183,7 +183,7 @@
         <div class="scr-title">Invoices</div>
         <div style="width:32px"></div>
     </div>
-    <div style="font-size:11px;color:rgba(255,255,255,.55);position:relative;z-index:2">3 invoices &middot; <span style="color:#FAC775">1 unpaid &middot; $80</span></div>
+    <div style="font-size:11px;color:rgba(255,255,255,.55);position:relative;z-index:2">3 invoices &middot; <span style="color:#FAC775">1 unpaid &middot; {{price:Starlink Residential Plan}}</span></div>
 </div>
 <div class="scr-body">
     <div class="sec-lbl">Unpaid</div>
@@ -195,7 +195,7 @@
                 <div class="list-ts">Residential Unlimited &middot; Due 28 Apr</div>
             </div>
             <div style="text-align:right">
-                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--app-dark)">$80</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--app-dark)">{{price:Starlink Residential Plan}}</div>
                 <span class="pill" style="background:#FEF7E6;color:var(--app-amber);font-size:8px;padding:2px 6px;margin-top:2px;display:inline-block">UNPAID</span>
             </div>
         </div>
@@ -210,7 +210,7 @@
                 <div class="list-ts">Residential Unlimited &middot; 28 Mar 2026</div>
             </div>
             <div style="text-align:right">
-                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--app-gray)">$80</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--app-gray)">{{price:Starlink Residential Plan}}</div>
                 <span class="pill green" style="font-size:8px;padding:2px 6px;margin-top:2px;display:inline-block">PAID</span>
             </div>
         </div>
@@ -221,7 +221,7 @@
                 <div class="list-ts">Residential Unlimited &middot; 28 Feb 2026</div>
             </div>
             <div style="text-align:right">
-                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--app-gray)">$80</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;color:var(--app-gray)">{{price:Starlink Residential Plan}}</div>
                 <span class="pill green" style="font-size:8px;padding:2px 6px;margin-top:2px;display:inline-block">PAID</span>
             </div>
         </div>
@@ -260,7 +260,7 @@
 <div class="scr-body">
     <div style="background:#fff;border-radius:14px;padding:18px;margin-top:-22px;position:relative;z-index:3;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.05)">
         <span class="pill" style="background:#FEF7E6;color:var(--app-amber);font-size:9px;padding:3px 10px">UNPAID</span>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:34px;color:var(--app-dark);margin-top:10px;letter-spacing:-1px">$80</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:34px;color:var(--app-dark);margin-top:10px;letter-spacing:-1px">{{price:Starlink Residential Plan}}</div>
         <div style="font-size:11px;color:var(--app-gray);margin-top:3px">Due 28 Apr 2026</div>
     </div>
 
@@ -269,7 +269,7 @@
         <div style="padding:12px 14px">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <div style="font-size:12px;font-weight:600">Residential Unlimited (Apr)</div>
-                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px">$80.00</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px">{{price:Starlink Residential Plan}}</div>
             </div>
         </div>
     </div>
@@ -281,7 +281,7 @@
             Account: <b style="color:var(--app-dark)">DishNet Africa Ltd</b><br>
             Bank: <b style="color:var(--app-dark)">Stanbic / Equity Bank</b><br>
             Reference: <b style="color:var(--app-dark)">INV-2026-0312</b><br>
-            Amount: <b style="color:var(--app-dark)">$80 USD</b>
+            Amount: <b style="color:var(--app-dark)">{{price:Starlink Residential Plan}} USD</b>
         </div>
     </div>
 
@@ -322,7 +322,7 @@
     </div>
 
     <div style="background:#DCF8C6;border-radius:8px;padding:9px 11px;max-width:88%;margin-left:auto;margin-bottom:8px;box-shadow:0 1px 1px rgba(0,0,0,0.07);font-size:11px;line-height:1.5;color:var(--app-dark)">
-        Hi DishNet team, I have paid invoice <b>INV-2026-0312</b> ($80 USD) via bank transfer.
+        Hi DishNet team, I have paid invoice <b>INV-2026-0312</b> ({{price:Starlink Residential Plan}} USD) via bank transfer.
         <div style="font-size:9px;color:var(--app-gray-2);margin-top:6px;text-align:right">10:42 ✓✓</div>
     </div>
 
