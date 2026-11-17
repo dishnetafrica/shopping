@@ -157,6 +157,7 @@ class ArchitecturalDecisionsTest extends TestCase
                 'ThaliMenu', 'IntentRouter', 'LeadService', 'MarketingBrain', 'VisionProductFinder',
                 'VoiceTranscriber', 'Merchant', 'BusinessOpportunityEngine', 'ComboAnalytics',
                 'ComboEngine', 'ProductImageResponder',
+                'MissedReply',   // 2026-11-17: missed-reply recovery rules, used by bot:recover-missed (MODULE-MAP)
             ],
         ];
 

@@ -73,7 +73,7 @@ and listed only for completeness; the closed world applies to domain↔domain ed
 | Ledger | StatementMessenger, OrderLedgerService |
 | Sales | QuotationWriteService, QuotationConvertService, QuotationIntelligence, QuotationReviseService |
 | Inventory | StockLedger, InventoryState, OrderStockIssuer, StockBackfill |
-| Bot | 32 classes (wide legacy surface, frozen as-is in the test; every retirement is progress) |
+| Bot | 33 classes (wide legacy surface, frozen as-is in the test; every retirement is progress). Added 2026-11-17: `MissedReply` — the pure missed-reply recovery rules, used by the `bot:recover-missed` console command. |
 
 Publishing a new class = one line in the registry above AND in the test, in the same
 commit, with the reason. Unpublishing (shrinking) needs no ceremony — delete the line
