@@ -37,12 +37,13 @@ class IspWinbackTest extends TestCase
             'messageTimestamp' => time() - $daysAgo * 86400, 'message' => ['conversation' => $text]];
     }
 
-    private function setUpBusiness(): Tenant
+    private function setUpBusiness(bool $withSales = true): Tenant
     {
         $t = Tenant::factory()->create(['whatsapp_instance' => 'inst_' . uniqid(), 'whatsapp_driver' => 'evolution', 'settings' => ['vertical' => 'isp', 'currency' => 'USD', 'timezone' => 'Africa/Juba', 'bot_muted' => ['211900000009']]]);
         app(TenantContext::class)->set($t->id);
-        User::create(['tenant_id' => $t->id, 'name' => 'Akol Deng', 'role' => 'sales', 'phone' => '211922000001', 'email' => 'a' . $t->id . '@t.test', 'password' => 'secret']);
-        User::create(['tenant_id' => $t->id, 'name' => 'Nyibol Garang', 'role' => 'sales', 'phone' => '211922000002', 'email' => 'n' . $t->id . '@t.test', 'password' => 'secret']);
+        if ($withSales) {
+            $this->addSales($t);
+        }
 
         $records = [
             $this->rec('211900000001', 20, false, 'I want starlink mini, where is your office?', 'Mary Akech'),
@@ -125,6 +126,53 @@ class IspWinbackTest extends TestCase
 
         $this->artisan('isp:winback', ['tenant' => $t->id, '--apply' => true])->assertSuccessful();
         $this->assertSame(5, Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->count(), 're-running adds nothing');
+    }
+
+    private function addSales(Tenant $t): void
+    {
+        User::create(['tenant_id' => $t->id, 'name' => 'Akol Deng', 'role' => 'sales', 'phone' => '211922000001', 'email' => 'a' . $t->id . '@t.test', 'password' => 'secret']);
+        User::create(['tenant_id' => $t->id, 'name' => 'Nyibol Garang', 'role' => 'sales', 'phone' => '211922000002', 'email' => 'n' . $t->id . '@t.test', 'password' => 'secret']);
+    }
+
+    /** Live, 17 Nov 2026: --apply ran before any salesperson existed; all 337 leads had no one to chase them. */
+    public function test_with_no_salesperson_apply_refuses_and_assign_gives_them_out_later(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->setUpBusiness(false);
+
+        $this->artisan('isp:winback', ['tenant' => $t->id, '--apply' => true])->assertFailed();
+        $this->assertSame(0, Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->count(), 'nothing written without a salesperson');
+
+        // What happened live: leads created with no one to own them.
+        $this->artisan('isp:winback', ['tenant' => $t->id, '--apply' => true, '--allow-unassigned' => true])->assertSuccessful();
+        $this->assertSame(5, Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->whereNull('owner_user_id')->count());
+        $this->artisan('isp:winback', ['tenant' => $t->id, '--assign' => true])->assertFailed();   // still nobody to give them to
+
+        // A manager already worked one of them: its progress must survive the assignment.
+        Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', '211900000002')->update(['status' => 'contacted']);
+
+        $this->addSales($t);
+        Bus::fake([NotifyOwner::class]);
+        $this->artisan('isp:winback', ['tenant' => $t->id, '--assign' => true])->expectsOutputToContain('[DRY RUN')->assertSuccessful();
+        $this->assertSame(5, Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->whereNull('owner_user_id')->count(), 'a dry run changes nothing');
+
+        $this->artisan('isp:winback', ['tenant' => $t->id, '--assign' => true, '--apply' => true, '--per-day' => 1])->expectsOutputToContain('Assigned 5 win-back leads.')->assertSuccessful();
+        $leads = Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->get();
+        $this->assertSame(0, $leads->whereNull('owner_user_id')->count());
+        $this->assertSame(2, $leads->pluck('owner_user_id')->unique()->count(), 'shared between the two salespeople');
+        foreach ($leads as $l) {
+            $this->assertSame($l->customer_phone === '211900000002' ? 'contacted' : 'assigned', $l->status, 'new becomes assigned; a lead already contacted stays contacted');
+            $this->assertStringNotContainsString('this is your salesperson from', (string) $l->notes);
+            $this->assertStringContainsString('this is ' . User::find($l->owner_user_id)->name . ' from', (string) $l->notes);
+        }
+        foreach ($leads->groupBy('owner_user_id') as $list) {
+            $this->assertSame($list->count(), $list->pluck('next_followup_at')->map(fn ($d) => $d->toDateString())->unique()->count(), 'at most one due a day');
+        }
+        Bus::assertDispatchedTimes(NotifyOwner::class, 2);   // one summary per salesperson
+        $this->assertSame((int) $leads->firstWhere('customer_phone', '211900000001')->owner_user_id,
+            (int) \App\Models\CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', '211900000001')->value('owner_user_id'), 'the customer is theirs too');
+
+        $this->artisan('isp:winback', ['tenant' => $t->id, '--assign' => true, '--apply' => true])->expectsOutputToContain('0 win-back leads without a salesperson')->assertSuccessful();
     }
 
     public function test_only_an_internet_provider(): void
