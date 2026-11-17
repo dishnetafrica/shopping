@@ -50,6 +50,8 @@ class TenantSiteTest extends TestCase
         $this->assertStringContainsString('"price":"401"', $mini, 'Google product data carries the live price');
         $this->assertStringContainsString('Free in Juba', $mini, 'approved installation wording, not "+$50"');
         $this->assertStringContainsString('$81/mo for Roam or $51/mo for Residential', $mini);
+        // Codex review on #158: the WhatsApp request keeps its line breaks once the old price is gone.
+        $this->assertStringContainsString('Kit%3A*%20Starlink%20Mini%0A*Name%3A*', $mini);
 
         $actuated = $this->get("$s/device-actuated.html")->assertOk()->getContent();
         $this->assertStringContainsString('Ask our sales team', $actuated, 'no approved price → ask our sales team');
@@ -68,7 +70,10 @@ class TenantSiteTest extends TestCase
                 $this->assertStringNotContainsString($old, $html, "$page still shows the old amount $old");
             }
         }
-        $this->assertStringContainsString('$52', $this->get("$s/fiber.html")->getContent(), 'Fibre plans at the live price');
+        $fiber = $this->get("$s/fiber.html")->getContent();
+        $this->assertStringContainsString('$52', $fiber, 'Fibre plans at the live price');
+        $this->assertStringContainsString('Plan%3A*%20Basic%2020Mbps%0A*Name%3A*', $fiber);
+        $this->assertStringContainsString('Plan%3A*%20Residential%0A*Name%3A*', $this->get("$s/index.html")->getContent());
     }
 
     public function test_a_switched_off_or_hidden_product_reads_ask_our_sales_team(): void
