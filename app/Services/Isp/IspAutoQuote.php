@@ -137,13 +137,13 @@ class IspAutoQuote
             if (! self::delivered($res)) {
                 // Saved but not delivered: never tell the customer it is there. Their salesperson sends it.
                 QuotationPipeline::stage($tenant->id, $from, 'isp_not_delivered', false, (string) $doc['no'], mb_substr(json_encode($res) ?: '', 0, 200));
-                $this->alert($tenant, $owner, "\u{26A0}\u{FE0F} Quotation {$doc['no']} for " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} was saved but WhatsApp did not deliver the PDF — please send it from Quotations.");
+                $this->alert($tenant, $owner, "\u{26A0}\u{FE0F} Quotation {$doc['no']} for " . ($name !== '' ? $name . ' ' : '') . CallbackNumber::label($tenant, $from) . " was saved but WhatsApp did not deliver the PDF — please send it from Quotations.");
 
                 return ['reply' => self::timed(self::HANDOFF, IspSalesTurn::opensAt($tenant)), 'sent' => false];
             }
             MessageLog::record($tenant->id, $from, $tenant->whatsapp_instance, 'out', 'bot', "[quotation {$doc['no']}] " . $caption, null, null, ['via' => 'ai', 'kind' => 'quotation', 'quote_no' => $doc['no']]);
 
-            $this->alert($tenant, $owner, "\u{1F4C4} *Quotation {$doc['no']} sent* by the bot to " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)}\n"
+            $this->alert($tenant, $owner, "\u{1F4C4} *Quotation {$doc['no']} sent* by the bot to " . ($name !== '' ? $name . ' ' : '') . CallbackNumber::label($tenant, $from) . "\n"
                 . implode("\n", array_map(fn ($l) => '• ' . $l['qty'] . ' x ' . $l['name'], $plan['lines'])) . "\n"
                 . str_replace("\n", ' • ', $caption) . "\n" . ($opens !== null ? "\u{1F319} Sent after office hours: call them when the office opens ({$opens})" : 'Call them today') . ': confirm coverage at their location and book the installation.');
 
@@ -260,7 +260,7 @@ class IspAutoQuote
             report($e);
         }
         $opens = IspSalesTurn::opensAt($tenant);
-        $this->alert($tenant, $owner, "\u{1F4DD} " . ($name !== '' ? $name . ' ' : '') . "+{$this->digits($from)} {$what}."
+        $this->alert($tenant, $owner, "\u{1F4DD} " . ($name !== '' ? $name . ' ' : '') . CallbackNumber::label($tenant, $from) . " {$what}."
             . ($opens !== null ? "\n\u{1F319} Sent after office hours: contact them when the office opens ({$opens})." : ''));
 
         return trim(self::withoutQuoteClaims($clean) . "\n\n" . self::timed($line, $opens));

@@ -82,19 +82,22 @@ class MissedCall
     }
 
     /** PURE. What the caller reads. No price, no time we cannot keep: "when the office opens" if closed. */
-    public static function customerReply(?string $salesperson, ?string $opensAt): string
+    public static function customerReply(?string $salesperson, ?string $opensAt, bool $askNumber = false): string
     {
         $who = trim((string) $salesperson) !== '' ? trim((string) $salesperson) . ' from our sales team' : 'Our sales team';
 
         return "Sorry we missed your call \u{1F64F} We cannot take calls on this WhatsApp number. "
             . 'Please type your question here and we will answer right away. '
-            . $who . ' will also call you back' . ($opensAt !== null ? " when the office opens ({$opensAt})" : '') . '.';
+            . $who . ' will also call you back' . ($opensAt !== null ? " when the office opens ({$opensAt})" : '') . '.'
+            // WhatsApp hides this caller's number: without one, nobody can call them back.
+            . ($askNumber ? ' Please send us the best phone number to reach you on.' : '');
     }
 
     /** PURE. The salesperson's alert. */
-    public static function alertText(string $phone, ?string $name, bool $video, ?string $opensAt, ?string $lastText, ?string $lastDate, bool $replied, bool $hasOwner): string
+    public static function alertText(string $phone, ?string $name, bool $video, ?string $opensAt, ?string $lastText, ?string $lastDate, bool $replied, bool $hasOwner, ?string $contact = null): string
     {
-        $who = ($name !== null && preg_match('/\p{L}/u', $name) ? trim($name) . ' ' : '') . '+' . $phone;
+        // $contact: CallbackNumber::label() — the number to call, or "WhatsApp hides this customer's number …"
+        $who = ($name !== null && preg_match('/\p{L}/u', $name) ? trim($name) . ' ' : '') . ($contact ?? '+' . $phone);
         $lines = ["\u{1F4DE} *Missed WhatsApp " . ($video ? 'video ' : '') . "call* — {$who}"];
         $lines[] = 'They tried to call the business WhatsApp line.' . ($replied ? ' The bot told them you will call them back.' : '');
         if ($lastText !== null && trim($lastText) !== '') {
@@ -149,7 +152,7 @@ class MissedCall
         $state = is_array($convo?->state) ? $convo->state : [];
         $humanHasIt = $convo && ($convo->agent_active || (int) ($state['human_until'] ?? 0) > time());
         if ((bool) $t->setting('isp_call_reply', true) && ! $humanHasIt) {
-            $text = self::customerReply($owner?->name, $opens);
+            $text = self::customerReply($owner?->name, $opens, CallbackNumber::isHidden($t, $phone) && CallbackNumber::callable($t, $phone) === null);
             try {
                 // From the line the call came in on — the same rule as every live reply.
                 $res = $this->wa->forTenant($t)->sendText(\App\Jobs\ProcessIncomingMessage::replyInstance($t, $instance), $phone, $text);
@@ -171,7 +174,7 @@ class MissedCall
         }
 
         $alert = self::alertText($phone, $name ?: null, (bool) ($call['video'] ?? false), $opens,
-            $last?->body, $last?->created_at?->format('j M'), $replied, $owner !== null);
+            $last?->body, $last?->created_at?->format('j M'), $replied, $owner !== null, CallbackNumber::label($t, $phone));
         $to = $owner && $digits($owner->phone) !== '' ? [$digits($owner->phone)] : $t->ownerAlertNumbers();
         foreach ($to as $n) {
             NotifyOwner::dispatch($t->id, $alert, (string) $n);

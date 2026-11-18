@@ -34,6 +34,7 @@ $open = C::customerReply('Justus', null);
 chk('office open: type here, Justus will call back', $open, "Sorry we missed your call \u{1F64F} We cannot take calls on this WhatsApp number. Please type your question here and we will answer right away. Justus from our sales team will also call you back.");
 chk('office closed: call back when it opens', str_ends_with(C::customerReply('Justus', 'tomorrow at 9:00 AM'), 'Justus from our sales team will also call you back when the office opens (tomorrow at 9:00 AM).'), true);
 chk('no salesperson yet: the sales team', str_contains(C::customerReply(null, null), 'Our sales team will also call you back.'), true);
+chk('WhatsApp hides the caller\'s number: asked for one', str_ends_with(C::customerReply('Justus', null, true), 'Justus from our sales team will also call you back. Please send us the best phone number to reach you on.'), true);
 chk('never a price or a time we cannot keep', preg_match('/\$|USD|SSP|shortly|minutes|today/i', $open . C::customerReply(null, 'tomorrow at 9:00 AM')), 0);
 
 echo "== the salesperson's alert\n";
@@ -41,6 +42,7 @@ $a = C::alertText('211984176391', 'Peter', false, null, "I need internet for 250
 chk('who, number, last message, call back', $a, "\u{1F4DE} *Missed WhatsApp call* — Peter +211984176391\nThey tried to call the business WhatsApp line. The bot told them you will call them back.\nTheir last message (17 Nov): \"I need internet for 250 people in Atlabara\"\nPlease call them back.");
 $b = C::alertText('225683989098601', '225683989098601', true, 'tomorrow at 9:00 AM', null, null, false, false);
 chk('a number as a name is not shown twice; video; closed; no owner', [str_contains($b, '*Missed WhatsApp video call* — +225683989098601'), str_contains($b, 'when the office opens (tomorrow at 9:00 AM)'), str_contains($b, '(no salesperson assigned yet)'), str_contains($b, 'The bot told them'), str_contains($b, 'last message')], [true, true, true, false, false]);
+chk('hidden number: the alert shows the callable label, not the hidden id as "+"', str_contains(C::alertText('234239681409272', 'Jel', false, null, null, null, true, true, "WhatsApp hides this customer's number — reply to them in the ShopBot inbox (chat 234239681409272)"), "Missed WhatsApp call* — Jel WhatsApp hides this customer's number"), true);
 chk('a long last message is cut', mb_strlen(C::alertText('1234567', null, false, null, str_repeat('a', 400), null, false, true)) < 400, true);
 
 echo "\n" . ($fail ? 'FAILURES' : 'ALL PASS') . ": $pass passed, $fail failed\n";
