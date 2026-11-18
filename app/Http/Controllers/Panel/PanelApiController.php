@@ -4327,43 +4327,6 @@ class PanelApiController extends Controller
         ]);
     }
 
-    /**
-     * Pull human-readable text out of any Baileys/Evolution message shape:
-     * plain text, captions, button/list replies, and media (as a labelled
-     * placeholder so the bubble still shows). Returns '' only when truly nothing.
-     */
-    private function waMessageText(array $m): string
-    {
-        $msg = data_get($m, 'message', []);
-        if (! is_array($msg)) return '';
-
-        // unwrap ephemeral / view-once / caption wrappers
-        foreach (['ephemeralMessage.message', 'viewOnceMessage.message', 'viewOnceMessageV2.message', 'documentWithCaptionMessage.message'] as $w) {
-            $inner = data_get($msg, $w);
-            if (is_array($inner)) $msg = $inner;
-        }
-
-        $t = data_get($msg, 'conversation')
-            ?? data_get($msg, 'extendedTextMessage.text')
-            ?? data_get($msg, 'imageMessage.caption')
-            ?? data_get($msg, 'videoMessage.caption')
-            ?? data_get($msg, 'documentMessage.caption')
-            ?? data_get($msg, 'buttonsResponseMessage.selectedDisplayText')
-            ?? data_get($msg, 'listResponseMessage.title')
-            ?? data_get($msg, 'templateButtonReplyMessage.selectedDisplayText')
-            ?? data_get($msg, 'reactionMessage.text');
-        if (is_string($t) && trim($t) !== '') return $t;
-
-        // media with no caption -> labelled placeholder (still shows in thread)
-        if (data_get($msg, 'imageMessage'))    return '📷 Photo';
-        if (data_get($msg, 'videoMessage'))    return '🎬 Video';
-        if (data_get($msg, 'audioMessage'))    return '🎤 Voice message';
-        if (data_get($msg, 'stickerMessage'))  return '🌟 Sticker';
-        if (data_get($msg, 'documentMessage')) return '📄 '.((string) (data_get($msg, 'documentMessage.fileName') ?: 'Document'));
-        if (data_get($msg, 'locationMessage')) return '📍 Location';
-        if (data_get($msg, 'contactMessage'))  return '👤 Contact';
-        return '';
-    }
 
     /**
      * One-time (re-runnable) backfill: pull existing WhatsApp messages out of
@@ -4376,98 +4339,14 @@ class PanelApiController extends Controller
             return response()->json(['ok' => false, 'error' => 'evolution_not_configured'], 400);
         }
         $t = $r->user()->tenant;
-        $instance = (string) ($t->whatsapp_instance ?? '');
-        if ($instance === '') {
+        if ((string) ($t->whatsapp_instance ?? '') === '') {
             return response()->json(['ok' => false, 'error' => 'no_instance'], 400);
         }
+        // The one history writer (also `php artisan wa:sync-history`): original times, marked imported
+        // (never read by the AI as its own replies), no duplicates of live-logged messages, no pushes.
+        $res = app(\App\Services\WhatsApp\HistorySync::class)->run($t);
 
-        $existing  = Message::whereNotNull('wa_message_id')->pluck('wa_message_id')->flip();
-        $imported  = 0;
-        $scanned   = 0;
-        $convoLast = [];
-        $offset    = 200;
-        $maxPages  = 25; // cap ~5000 messages per run; re-run for more (dedup handles it)
-
-        for ($page = 1; $page <= $maxPages; $page++) {
-            $records = $evo->findMessages($instance, $page, $offset);
-            if (! $records) break;
-
-            $rows = [];
-            foreach ($records as $m) {
-                $scanned++;
-                $remote = (string) data_get($m, 'key.remoteJid', '');
-                if ($remote === '' || str_contains($remote, '@g.us') || str_contains($remote, 'broadcast')) continue;
-
-                $waId = (string) data_get($m, 'key.id', '');
-                if ($waId !== '' && $existing->has($waId)) continue;
-
-                $text = $this->waMessageText($m);
-                if (trim($text) === '') continue; // truly nothing (no text, no media)
-
-                $fromMe = (bool) data_get($m, 'key.fromMe', false);
-                $phone  = preg_replace('/[^0-9]/', '', explode('@', $remote)[0]);
-                $ts     = (int) data_get($m, 'messageTimestamp', 0);
-                $when   = $ts > 0 ? date('Y-m-d H:i:s', $ts) : now()->toDateTimeString();
-
-                $rows[] = [
-                    'tenant_id'     => $t->id,
-                    'customer_phone' => $phone,
-                    'instance'      => $instance,
-                    'direction'     => $fromMe ? 'out' : 'in',
-                    'sender'        => $fromMe ? 'bot' : 'customer',
-                    'body'          => $text,
-                    'wa_message_id' => $waId ?: null,
-                    'status'        => null,
-                    'meta'          => null,
-                    'created_at'    => $when,
-                    'updated_at'    => $when,
-                ];
-                if ($waId !== '') $existing[$waId] = true;
-                $imported++;
-                if (! isset($convoLast[$phone]) || $convoLast[$phone] < $when) $convoLast[$phone] = $when;
-            }
-            if ($rows) Message::insert($rows);
-            if (count($records) < $offset) break; // reached the last page
-        }
-
-        foreach ($convoLast as $phone => $when) {
-            $c = Conversation::firstOrCreate(
-                ['customer_phone' => $phone, 'instance' => $instance],
-                ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
-            );
-            if (! $c->last_message_at || $c->last_message_at->lt($when)) {
-                $c->last_message_at = $when;
-                $c->save();
-            }
-        }
-
-        // Also pull the CONTACT/CHAT list so every number shows in the inbox even
-        // if its message bodies aren't in Evolution's store. Names come along too.
-        $contacts = 0;
-        foreach ($evo->findChats($instance) as $ch) {
-            $remote = (string) (data_get($ch, 'remoteJid') ?? data_get($ch, 'id') ?? '');
-            if ($remote === '' || str_contains($remote, '@g.us') || str_contains($remote, 'broadcast')) continue;
-            $phone = preg_replace('/[^0-9]/', '', explode('@', $remote)[0]);
-            if ($phone === '') continue;
-
-            $c = Conversation::firstOrCreate(
-                ['customer_phone' => $phone, 'instance' => $instance],
-                ['tenant_id' => $t->id, 'state' => [], 'cart' => []]
-            );
-            if (! $c->last_message_at) {
-                $c->last_message_at = now();
-                $c->save();
-            }
-            $contacts++;
-
-            $name = trim((string) (data_get($ch, 'pushName') ?? data_get($ch, 'name') ?? ''));
-            if ($name !== '') {
-                $cp = CustomerProfile::firstOrNew(['phone' => $phone]);
-                if (! $cp->name) { $cp->name = $name; $cp->save(); }
-            }
-        }
-
-        return response()->json(['ok' => true, 'imported' => $imported, 'scanned' => $scanned, 'contacts' => $contacts]);
+        return response()->json(['ok' => true] + $res);
     }
 
     /* -------------------------------------------------- self-serve onboarding */

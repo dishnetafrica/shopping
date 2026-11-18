@@ -83,7 +83,8 @@ final class ChatCapability implements ObjectCapability
 
         $msgs = Message::where('tenant_id', $t)
             ->where('customer_phone', $phone)
-            ->orderByDesc('id')->limit(self::THREAD)->get()->reverse()->values();
+            // by time, then id: history copied from the phone (HistorySync) is older than its new ids
+            ->orderByDesc('created_at')->orderByDesc('id')->limit(self::THREAD)->get()->reverse()->values();
 
         $timeline = [];
         foreach ($msgs as $m) {

@@ -44,6 +44,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('isp_followup.php');
     }
 
+    public function test_whatsapp_history_copy_reads_every_time_shape_and_never_duplicates(): void
+    {
+        $this->harness('history_sync.php');
+    }
+
     public function test_sales_knowledge_is_governed_and_coverage_defaults_to_survey(): void
     {
         $this->harness('sales_brain.php');

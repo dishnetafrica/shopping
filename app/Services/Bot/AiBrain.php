@@ -2611,6 +2611,11 @@ class AiBrain
     private function historyMessages(int $tenantId, string $phone, int $limit): array
     {
         return Message::where('tenant_id', $tenantId)->where('customer_phone', $phone)
+            // History copied from the phone (HistorySync) is for people to read, never the AI's own past
+            // replies: an old bot's answers (old prices, old promises) must not become today's. Excluded
+            // IN the query: imported rows get new, higher ids, so filtering afterwards would let them
+            // crowd today's conversation out of the window.
+            ->where(fn ($q) => $q->whereNull('meta')->orWhereNull('meta->imported'))
             ->latest('id')->take($limit + 8)->get()->reverse()->values()
             // Media marker rows ([photo] …) are log entries, not dialogue — they waste history
             // slots the model needs for real facts like the delivery location.
