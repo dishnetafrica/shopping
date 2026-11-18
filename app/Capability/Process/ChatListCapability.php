@@ -50,7 +50,7 @@ final class ChatListCapability implements ProcessCapability
             ->orderBy('id')->pluck('customer_name', 'customer_phone');
         $lastByPhone = Message::where('tenant_id', $t)
             ->whereIn('customer_phone', $phones)
-            ->orderBy('id')
+            ->orderBy('created_at')->orderBy('id')        // by time: imported history has newer ids than its dates
             ->get(['customer_phone', 'direction', 'sender', 'body', 'created_at'])
             ->keyBy('customer_phone');                    // ordered ASC → keyBy keeps the LAST row
 

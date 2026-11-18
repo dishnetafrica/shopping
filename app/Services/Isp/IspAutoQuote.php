@@ -284,7 +284,9 @@ class IspAutoQuote
     private function customerTexts(Tenant $tenant, string $from): array
     {
         return \App\Models\Message::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('customer_phone', $from)
-            ->where('direction', 'in')->orderByDesc('id')->limit(20)->pluck('body')->map(fn ($b) => (string) $b)->all();
+            // the last 30 days by time: history copied from the phone has new ids but old dates
+            ->where('direction', 'in')->where('created_at', '>=', now()->subDays(30))
+            ->orderByDesc('created_at')->limit(20)->pluck('body')->map(fn ($b) => (string) $b)->all();
     }
 
     /** Keep the name the customer gave on their record when it has none yet. */
