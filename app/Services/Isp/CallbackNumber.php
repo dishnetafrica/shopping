@@ -26,9 +26,28 @@ use Illuminate\Support\Facades\Cache;
  */
 class CallbackNumber
 {
-    /** PURE. A phone number the customer typed ("my number is 0912 345 678", "+211 912 345 678"), digits only. */
-    public static function extract(string $text): ?string
+    /** What makes a typed number a PHONE number: the customer says so, or is answering our question for one. */
+    private const PHONE_WORDS = '/\b(phone|number|call|reach|contact|tel|mobile|mob|cell|whatsapp)\b/iu';
+
+    /** Numbers that are NOT for calling, even when the word "number" is there ("my account number is …"). */
+    private const OTHER_NUMBERS = '/\b(account|acc|a\/c|ref|reference|invoice|receipt|order|serial|id|meter|pin)\b/iu';
+
+    /** PURE. Did our message ask for a number to call them on? (The bot's ask, the missed-call message.) */
+    public static function asksForNumber(string $ourMessage): bool
     {
+        return (bool) preg_match('/\b(phone|contact|mobile|call[- ]?back)\s+number\b|\byour\s+(best\s+)?number\b|\bnumber\s+to\s+(call|reach)\b/iu', $ourMessage);
+    }
+
+    /**
+     * PURE. A phone number the customer typed ("my number is 0912 345 678", "+211 912 345 678"), digits only —
+     * only when it is clearly one: they call it a phone number / say call me on it, or $asked (they are
+     * answering our question for one). Never a number they call an account, order, reference or serial number.
+     */
+    public static function extract(string $text, bool $asked = false): ?string
+    {
+        if (preg_match(self::OTHER_NUMBERS, $text) || (! $asked && ! preg_match(self::PHONE_WORDS, $text))) {
+            return null;
+        }
         if (! preg_match_all('/(?<![\d$])(\+|00)?(\d[\d \-.()]{7,20}\d)(?!\d)/u', $text, $m, PREG_SET_ORDER)) {
             return null;
         }
@@ -121,6 +140,25 @@ class CallbackNumber
             }
         } catch (\Throwable $e) {
             report($e);
+        }
+    }
+
+    /** Did our last message to this customer (in the last day) ask for a number to call them on? */
+    public static function askedRecently(Tenant $t, string $chatId): bool
+    {
+        $last = \App\Models\Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', self::digits($chatId))
+            ->where('direction', 'out')->where('created_at', '>', now()->subDay())
+            ->orderByDesc('created_at')->orderByDesc('id')->value('body');
+
+        return $last !== null && self::asksForNumber((string) $last);
+    }
+
+    /** A call or message came from a hidden id that may have no conversation yet: remember it for this number. */
+    public static function markHiddenId(string $chatId): void
+    {
+        $chatId = self::digits($chatId);
+        if ($chatId !== '') {
+            Cache::forever('wa_lid:' . $chatId, 1);         // the key EvolutionGateway also uses: sends go to "@lid" first
         }
     }
 

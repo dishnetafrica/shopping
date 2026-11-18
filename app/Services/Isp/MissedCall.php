@@ -45,7 +45,7 @@ class MissedCall
     /**
      * PURE. The caller in an Evolution "call" webhook, or null when it is not a 1:1 call we act on.
      *
-     * @return array{instance:string,phone:string,call_id:string,status:string,video:bool}|null
+     * @return array{instance:string,phone:string,call_id:string,status:string,video:bool,hidden:bool}|null
      */
     public static function parse(array $payload): ?array
     {
@@ -78,6 +78,7 @@ class MissedCall
             'call_id'  => (string) ($data['id'] ?? ($phone . ':' . ($data['date'] ?? ''))),
             'status'   => $status,
             'video'    => (bool) ($data['isVideo'] ?? false),
+            'hidden'   => str_ends_with($jid, '@lid'),        // WhatsApp hides the caller's number
         ];
     }
 
@@ -139,6 +140,9 @@ class MissedCall
             return;                                         // the same caller again within 15 minutes
         }
 
+        if (! empty($call['hidden'])) {
+            CallbackNumber::markHiddenId($phone);            // a first-time caller has no chat yet to say so
+        }
         $instance = (string) (($call['instance'] ?? '') ?: $t->whatsapp_instance);
         $name = CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', $phone)->value('name');
         $owner = $this->owners->ownerForEnquiry($t, $phone, $name ?: null);

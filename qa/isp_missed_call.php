@@ -18,6 +18,7 @@ echo "== reading the call event\n";
 $c = C::parse($ev(['id' => 'CALL1', 'from' => '211984176391@s.whatsapp.net', 'status' => 'offer', 'isVideo' => false, 'isGroup' => false, 'date' => '2026-11-18T09:00:00Z']));
 chk('a voice call: caller, call id, line', [$c['phone'], $c['call_id'], $c['instance'], $c['video'], $c['status']], ['211984176391', 'CALL1', 'dishnet', false, 'offer']);
 chk('a hidden-number caller is keyed like their chat (lid digits)', C::parse($ev(['id' => 'C2', 'from' => '225683989098601@lid', 'status' => 'offer']))['phone'], '225683989098601');
+chk('Codex #169: and marked hidden, even on a first-time call', [C::parse($ev(['id' => 'C2', 'from' => '225683989098601@lid']))['hidden'], C::parse($ev(['id' => 'C2b', 'from' => '211984176391@s.whatsapp.net']))['hidden']], [true, false]);
 chk('a device suffix is dropped', C::parse($ev(['id' => 'C3', 'from' => '211984176391:12@s.whatsapp.net']))['phone'], '211984176391');
 chk('a video call is marked', C::parse($ev(['id' => 'C4', 'from' => '211984176391@s.whatsapp.net', 'isVideo' => true]))['video'], true);
 chk('event names Evolution uses: CALL, call.upsert', [C::parse($ev(['id' => 'C5', 'from' => '211984176391@s.whatsapp.net'], 'CALL')) !== null, C::parse($ev(['id' => 'C5', 'from' => '211984176391@s.whatsapp.net'], 'call.upsert')) !== null], [true, true]);

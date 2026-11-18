@@ -96,6 +96,24 @@ class CallbackNumberTest extends TestCase
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => str_contains($j->text, 'Bot promised a follow-up* — 0912345678 (WhatsApp hides their number in the chat — call this one)'));
     }
 
+    /** Codex on #169: only a number given as a phone number, or in answer to our question for one, is saved. */
+    public function test_an_account_number_is_never_saved_and_a_bare_number_only_when_we_asked(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        CallbackNumber::fromIncoming($t, $this->convo($t), ['from' => self::HIDDEN, 'hidden' => true, 'phone_alt' => '']);
+        $turn = app(IspSalesTurn::class);
+
+        $turn->afterReply($t, self::HIDDEN, 'My account number is 211912345678', 'Thanks.');
+        $turn->afterReply($t, self::HIDDEN, '0912345678', 'Thanks.');
+        $this->assertNull(CustomerProfile::where('phone', self::HIDDEN)->value('alt_phone'), 'an account number, and a bare number nobody asked for');
+
+        \App\Models\Message::create(['tenant_id' => $t->id, 'customer_phone' => self::HIDDEN, 'instance' => $t->whatsapp_instance, 'direction' => 'out', 'sender' => 'bot',
+            'body' => 'Akol will call you. What is the best phone number to reach you on?']);
+        $turn->afterReply($t, self::HIDDEN, '0912 345 678', 'Thank you!');
+        $this->assertSame('0912345678', CustomerProfile::where('phone', self::HIDDEN)->value('alt_phone'), 'the answer to our question');
+    }
+
     public function test_a_number_staff_typed_is_never_replaced_and_other_businesses_are_untouched(): void
     {
         $t = $this->business();

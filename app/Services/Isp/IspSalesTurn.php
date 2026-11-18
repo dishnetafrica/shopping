@@ -64,8 +64,9 @@ class IspSalesTurn
     {
         // A phone number the customer typed, in a chat where WhatsApp hides theirs: the number to call them on.
         try {
-            $typed = CallbackNumber::extract($customerText);
-            if ($typed !== null && CallbackNumber::isHidden($tenant, $from)) {
+            $typed = CallbackNumber::isHidden($tenant, $from)
+                ? CallbackNumber::extract($customerText, CallbackNumber::askedRecently($tenant, $from)) : null;
+            if ($typed !== null) {
                 CallbackNumber::remember($tenant, $from, $typed, 'typed in chat');
             }
         } catch (\Throwable $e) {
