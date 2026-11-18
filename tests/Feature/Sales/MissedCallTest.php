@@ -68,7 +68,7 @@ class MissedCallTest extends TestCase
         return $t;
     }
 
-    private function call(Tenant $t, string $id, string $from = self::CALLER, string $status = 'offer'): void
+    private function ring(Tenant $t, string $id, string $from = self::CALLER, string $status = 'offer'): void
     {
         $this->postJson('/api/webhook/whatsapp/evolution', ['event' => 'call', 'instance' => $t->whatsapp_instance, 'data' => [
             'id' => $id, 'from' => $from . '@s.whatsapp.net', 'chatId' => $from . '@s.whatsapp.net', 'status' => $status,
@@ -82,7 +82,7 @@ class MissedCallTest extends TestCase
         $t = $this->business();
         Message::create(['tenant_id' => $t->id, 'customer_phone' => self::CALLER, 'instance' => $t->whatsapp_instance, 'direction' => 'in', 'sender' => 'customer', 'body' => 'Starlink for my shop in Munuki']);
 
-        $this->call($t, 'CALL-1');
+        $this->ring($t, 'CALL-1');
 
         $this->assertCount(1, $this->gw->sent);
         $this->assertSame(self::CALLER, $this->gw->sent[0][0]);
@@ -97,8 +97,8 @@ class MissedCallTest extends TestCase
         $this->assertSame(self::SALES, app(SalesOwnership::class)->ownerOf($t, self::CALLER)?->phone, 'a caller with no salesperson now has one');
 
         // The same call's later events, and the caller trying again a minute later: nothing more.
-        $this->call($t, 'CALL-1', self::CALLER, 'terminate');
-        $this->call($t, 'CALL-2');
+        $this->ring($t, 'CALL-1', self::CALLER, 'terminate');
+        $this->ring($t, 'CALL-2');
         $this->assertCount(1, $this->gw->sent);
         Bus::assertDispatchedTimes(NotifyOwner::class, 1);
     }
@@ -109,7 +109,7 @@ class MissedCallTest extends TestCase
         $t = $this->business(['business_hours' => 'Mon-Sat 9 AM - 6 PM']);
         Carbon::setTestNow(Carbon::parse('2026-11-22 10:00', 'Africa/Juba'));   // a Sunday
 
-        $this->call($t, 'CALL-SUN');
+        $this->ring($t, 'CALL-SUN');
 
         $this->assertStringEndsWith('Akol Deng from our sales team will also call you back when the office opens (tomorrow at 9:00 AM).', $this->gw->sent[0][1]);
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => str_contains($j->text, 'Please call them back when the office opens (tomorrow at 9:00 AM)'));
@@ -120,20 +120,20 @@ class MissedCallTest extends TestCase
         Bus::fake([NotifyOwner::class]);
         $t = $this->business();
 
-        $this->call($t, 'CALL-STAFF', self::SALES);
+        $this->ring($t, 'CALL-STAFF', self::SALES);
         $this->assertSame([], $this->gw->sent, 'a salesperson calling the line is not a customer');
         Bus::assertNotDispatched(NotifyOwner::class);
 
         // A person has this chat: they get the alert, the bot does not talk over them.
         Conversation::create(['tenant_id' => $t->id, 'customer_phone' => self::CALLER, 'instance' => $t->whatsapp_instance, 'state' => ['human_until' => time() + 3600], 'cart' => []]);
-        $this->call($t, 'CALL-H');
+        $this->ring($t, 'CALL-H');
         $this->assertSame([], $this->gw->sent);
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === self::SALES && ! str_contains($j->text, 'The bot told them'));
 
         // Not an Internet provider (a shop): a call changes nothing at all.
         Bus::fake([NotifyOwner::class, HandleMissedCall::class]);
         $shop = Tenant::factory()->create(['whatsapp_instance' => 'shop_' . uniqid(), 'whatsapp_driver' => 'evolution', 'settings' => ['vertical' => 'grocery']]);
-        $this->call($shop, 'CALL-SHOP');
+        $this->ring($shop, 'CALL-SHOP');
         Bus::assertNotDispatched(HandleMissedCall::class);
         $this->assertSame([], $this->gw->sent);
     }
@@ -142,12 +142,12 @@ class MissedCallTest extends TestCase
     {
         Bus::fake([NotifyOwner::class]);
         $t = $this->business(['isp_call_alerts' => false]);
-        $this->call($t, 'CALL-OFF');
+        $this->ring($t, 'CALL-OFF');
         $this->assertSame([], $this->gw->sent);
         Bus::assertNotDispatched(NotifyOwner::class);
 
         $t2 = $this->business(['isp_call_reply' => false]);
-        $this->call($t2, 'CALL-NOREPLY');
+        $this->ring($t2, 'CALL-NOREPLY');
         $this->assertSame([], $this->gw->sent, 'alert only, no message to the caller');
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === self::SALES);
     }
