@@ -49,6 +49,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('history_sync.php');
     }
 
+    public function test_a_missed_whatsapp_call_is_read_answered_and_alerted(): void
+    {
+        $this->harness('isp_missed_call.php');
+    }
+
     public function test_sales_knowledge_is_governed_and_coverage_defaults_to_survey(): void
     {
         $this->harness('sales_brain.php');

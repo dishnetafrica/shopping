@@ -65,10 +65,16 @@ class EvolutionAdmin
         }
     }
 
-    /** Point this instance's webhook at our app (best-effort; a global webhook also works). */
-    public function setWebhook(string $instance, string $url): void
+    /** Events ShopBot listens to. CALL: a customer tried to call the line (MissedCall). */
+    public const EVENTS = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE', 'QRCODE_UPDATED', 'CALL'];
+
+    /**
+     * Point this instance's webhook at our app (best-effort; a global webhook also works). $keepEvents: events
+     * the instance already sends that are kept as well (wa:call-handling adds CALL without dropping any).
+     */
+    public function setWebhook(string $instance, string $url, array $keepEvents = []): void
     {
-        $events = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE', 'QRCODE_UPDATED'];
+        $events = array_values(array_unique(array_merge(self::EVENTS, array_map('strval', $keepEvents))));
         // v2 wrapped shape
         try {
             $this->http()->post("/webhook/set/{$instance}", [
@@ -177,6 +183,28 @@ class EvolutionAdmin
             return $this->http()->get("/webhook/find/{$instance}")->json() ?? [];
         } catch (\Throwable $e) {
             return ['error' => $e->getMessage()];
+        }
+    }
+
+    /** The line's own settings (rejectCall, msgCall, …). [] when unreachable. */
+    public function settings(string $instance): array
+    {
+        try {
+            return $this->http()->get("/settings/find/{$instance}")->json() ?? [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** Save the line's settings (send them all: Evolution replaces the set). @return array{status:int,body:array} */
+    public function saveSettings(string $instance, array $settings): array
+    {
+        try {
+            $r = $this->http()->post("/settings/set/{$instance}", $settings);
+
+            return ['status' => $r->status(), 'body' => $r->json() ?? []];
+        } catch (\Throwable $e) {
+            return ['status' => 0, 'body' => ['error' => $e->getMessage()]];
         }
     }
 

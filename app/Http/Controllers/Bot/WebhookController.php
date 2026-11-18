@@ -40,6 +40,7 @@ class WebhookController
             // Not a customer message. Evolution also sends connection.update here —
             // use it to detect a dropped WhatsApp link and alert the shop owner.
             $this->maybeHandleConnection($request->all());
+            $this->maybeHandleCall($request->all());
             $this->maybeHandleSendStatus($request->all());
             $this->maybeHandleCloudStatus($request->all());
             return response()->json(['ok' => true]); // status / presence / group / fromMe — not a customer message
@@ -101,6 +102,26 @@ class WebhookController
             ProcessIncomingMessage::dispatch($tenant->id, $driver, $incoming);
         }
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A customer tried to call the WhatsApp line (Evolution "call" event). Each call sends several events
+     * (offer, then reject/terminate), so it is queued once per call; MissedCall decides what to do
+     * (Internet-provider businesses only — anyone else: nothing happens).
+     */
+    private function maybeHandleCall(array $payload): void
+    {
+        $call = \App\Services\Isp\MissedCall::parse($payload);
+        if ($call === null) return;
+        $t = Tenant::byWhatsappInstance($call['instance']);
+        if (! $t || ! \App\Services\Sales\SalesOwnership::enabled($t)) return;
+        if ($call['status'] === 'accept') {                 // answered on the phone: not missed
+            \App\Services\Isp\MissedCall::markAnswered((int) $t->id, $call);
+            return;
+        }
+        if (! \Illuminate\Support\Facades\Cache::add('wa_call:' . $t->id . ':' . $call['call_id'], 1, now()->addMinutes(30))) return;
+        // After it has stopped ringing: if someone picks it up meanwhile, MissedCall sees the "accept".
+        \App\Jobs\HandleMissedCall::dispatch((int) $t->id, $call)->delay(now()->addSeconds(\App\Services\Isp\MissedCall::RING_SECONDS));
     }
 
     /**
