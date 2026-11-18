@@ -15,6 +15,9 @@ Schedule::command('travel:retry-handoffs')->everyFiveMinutes()->withoutOverlappi
 Schedule::command('travel:purge-documents')->dailyAt('02:17')->withoutOverlapping()->onOneServer();
 // Sales team (Internet-provider businesses): quotations past their validity date become expired.
 Schedule::command('quotes:expire')->dailyAt('03:07')->withoutOverlapping()->onOneServer();
+// Internet providers (DishNet, 18 Nov 2026): follow up open quotations the customer has not answered — day 2 and
+// day 5, in the salesperson's name, only while the business is open by its own hours. Opt-in: isp_quote_followup.
+Schedule::command('isp:quote-followup')->hourlyAt(17)->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:extract')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('relationship:learn')->dailyAt('02:30')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();
 Schedule::command('demand:digest')->dailyAt('08:00')->timezone('Africa/Nairobi')->withoutOverlapping()->onOneServer();

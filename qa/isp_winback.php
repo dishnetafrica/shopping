@@ -79,6 +79,7 @@ chk('a customer text', H::parse(['key' => ['remoteJid' => '211920000001@s.whatsa
     ['211920000001', 1763000000, false, 'hi', 'Ann', false]);
 chk('ours: no contact name taken from it', H::parse(['key' => ['remoteJid' => '211920000001@s.whatsapp.net', 'fromMe' => true], 'pushName' => 'DishNet', 'messageTimestamp' => ['low' => 5], 'message' => ['extendedTextMessage' => ['text' => 'Welcome']]]),
     ['211920000001', 5, true, 'Welcome', '', false]);
+chk('a "name" with no letter (the hidden id itself) is not kept as a name', H::parse(['key' => ['remoteJid' => '225683989098601@lid'], 'pushName' => '225683989098601', 'message' => ['conversation' => 'hi']])[4], '');
 chk('a disappearing message is unwrapped', H::parse(['key' => ['remoteJid' => '211920000001@s.whatsapp.net'], 'message' => ['ephemeralMessage' => ['message' => ['conversation' => 'price?']]]])[3], 'price?');
 chk('a hidden-id chat goes under the real number when Evolution has it', array_values(array_intersect_key(H::parse(['key' => ['remoteJid' => '123456789012345@lid', 'remoteJidAlt' => '211920000002@s.whatsapp.net'], 'message' => ['conversation' => 'x']]), [0 => 1, 5 => 1])), ['211920000002', false]);
 chk('…and with no number is kept under the hidden id, as ShopBot keys it, marked hidden', [H::parse(['key' => ['remoteJid' => '123456789012345@lid'], 'message' => ['conversation' => 'x']])[0], H::parse(['key' => ['remoteJid' => '123456789012345@lid'], 'message' => ['conversation' => 'x']])[5]], ['123456789012345', true]);
