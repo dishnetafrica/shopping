@@ -128,5 +128,38 @@ class IspQuoteFollowUpTest extends TestCase
         $this->quote($t2, 15);
         $this->run1($t2);
         $this->assertSame([], $this->gw->sent, 'older than 14 days');
+
+        // Codex on #165: the customer changed it in the portal — that is an answer, not silence.
+        $t3 = $this->business();
+        $this->quote($t3, 2, 'customer_revised');
+        $this->run1($t3);
+        $this->assertSame([], $this->gw->sent, 'customer_revised is never chased');
+    }
+
+    /** Codex on #165: a resend from the panel today logs a message but does not stamp last_contacted_at. */
+    public function test_anything_we_sent_in_the_last_day_holds_the_follow_up(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        $this->quote($t, 2);
+        Message::create(['tenant_id' => $t->id, 'customer_phone' => self::CUSTOMER, 'instance' => $t->whatsapp_instance, 'direction' => 'out', 'sender' => 'agent', 'body' => 'Here is your quotation again']);
+
+        $this->run1($t);
+
+        $this->assertSame([], $this->gw->sent);
+    }
+
+    /** A quotation sales revised and re-sent is counted from the re-send, not from when it was first made. */
+    public function test_a_revised_quotation_counts_from_when_it_was_sent_again(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        $q = $this->quote($t, 9, 'revised');
+        $q->forceFill(['last_sent_at' => now()->subDays(2)->subHour()])->save();
+
+        $this->run1($t);
+
+        $this->assertCount(1, $this->gw->sent, 'day 2 after the re-send: first touch');
+        $this->assertStringContainsString('Did you get a chance to look at your quotation Q-T9?', $this->gw->sent[0][1]);
     }
 }

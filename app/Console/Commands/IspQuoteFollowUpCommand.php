@@ -34,6 +34,9 @@ class IspQuoteFollowUpCommand extends Command
 {
     protected $signature = 'isp:quote-followup {--tenant= : only this business} {--dry : show what would be sent} {--no-pause : do not wait between sends (tests)}';
 
+    /** Statuses that mean the quotation is waiting on the customer. */
+    public const WAITING = ['sent', 'revised'];
+
     protected $description = 'Internet provider: follow up open quotations the customer has not answered (day 2 and day 5), in office hours';
 
     public function handle(WhatsAppManager $wa, SalesOwnership $owners): int
@@ -63,9 +66,11 @@ class IspQuoteFollowUpCommand extends Command
             (array) $t->setting('bot_muted', []), User::where('tenant_id', $t->id)->pluck('phone')->all(), $t->ownerAlertNumbers()))));
         $cap = max(1, (int) $t->setting('isp_quote_followup_daily_cap', 20));
 
-        $quotes = Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->whereNull('order_id')
-            ->whereNotIn('status', ['accepted', 'converted', 'declined', 'expired', 'archived', 'void'])
-            ->where('created_at', '>=', now()->subDays(QuoteFollowUp::MAX_DAYS))->orderByDesc('id')->get();
+        // Only quotations waiting on the customer: "sent", or "revised" by sales. Never one the customer
+        // changed in the portal (customer_revised), nor accepted, converted, declined, expired or a draft.
+        $quotes = Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->whereNull('order_id')->whereNull('accepted_at')
+            ->whereIn('status', self::WAITING)
+            ->where('created_at', '>=', now()->subDays(60))->orderByDesc('id')->get();
         $today = now()->toDateString();
         $sentToday = $quotes->sum(fn ($q) => count(array_filter((array) (($q->meta ?? [])['isp_followups'] ?? []), fn ($at) => str_starts_with((string) $at, $today))));
 
@@ -80,12 +85,14 @@ class IspQuoteFollowUpCommand extends Command
             if ($q->valid_until && $q->valid_until->isPast() && ! $q->valid_until->isToday()) {
                 continue;
             }
-            $done = count((array) (($q->meta ?? [])['isp_followups'] ?? []));
-            $touch = QuoteFollowUp::touch((int) $q->created_at->diffInDays(now()), $done);
+            // Counted from when it was last sent: a quotation sales revised and re-sent starts again.
+            $sentAt = $q->last_sent_at ?? $q->created_at;
+            $followups = array_values(array_filter((array) (($q->meta ?? [])['isp_followups'] ?? []), fn ($at) => (string) $at >= $sentAt->toIso8601String()));
+            $touch = QuoteFollowUp::touch((int) $sentAt->diffInDays(now()), count($followups));
             if ($touch === null) {
                 continue;
             }
-            $why = $this->blocked($t, $q, $phone, $skip);
+            $why = $this->blocked($t, $sentAt, $phone, $skip);
             if ($why !== null) {
                 BotTrace::log($t->id, 'isp_followup', $phone, 'held_' . $why, (string) $q->quote_no);
                 continue;
@@ -133,7 +140,7 @@ class IspQuoteFollowUpCommand extends Command
     }
 
     /** Why this customer must not get a follow-up now, or null. */
-    private function blocked(Tenant $t, Quotation $q, string $phone, array $skip): ?string
+    private function blocked(Tenant $t, \DateTimeInterface $sentAt, string $phone, array $skip): ?string
     {
         if (isset($skip[$phone])) {
             return 'muted_or_staff';
@@ -152,9 +159,15 @@ class IspQuoteFollowUpCommand extends Command
         if ($p && $p->last_contacted_at && $p->last_contacted_at->gt(now()->subHours(24))) {
             return 'contacted_recently';
         }
-        // They wrote after the quotation: the conversation is live — the bot and their salesperson have it.
+        // Anything we sent them in the last 24 hours (a resend from the panel, a salesperson's message, the
+        // bot) counts as contact: a resend does not stamp last_contacted_at (Codex review on #165).
         if (Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)
-            ->where('direction', 'in')->where('created_at', '>', $q->created_at)->exists()) {
+            ->where('direction', 'out')->where('created_at', '>', now()->subHours(24))->exists()) {
+            return 'contacted_recently';
+        }
+        // They wrote after the quotation was sent: the conversation is live — the bot and their salesperson have it.
+        if (Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)
+            ->where('direction', 'in')->where('created_at', '>', $sentAt)->exists()) {
             return 'customer_replied';
         }
 
