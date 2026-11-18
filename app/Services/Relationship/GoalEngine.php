@@ -90,8 +90,9 @@ class GoalEngine
                 'outcome' => 'Recover the basket into an order'];
         }
 
-        // 1) QUOTE CHASE — a quotation went out, 2-14 days ago, never became an order.
-        $quotes = Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)
+        // 1) QUOTE CHASE — a quotation went out, 2-14 days ago, never became an order. An Internet provider
+        //    with its own quotation follow-up (isp:quote-followup) is left to that, so a customer is never chased twice.
+        $quotes = (bool) $t->setting('isp_quote_followup', false) ? collect() : Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)
             ->whereNull('order_id')
             ->whereBetween('created_at', [now()->subDays(14), now()->subHours(48)])
             ->orderByDesc('created_at')->limit(60)->get();

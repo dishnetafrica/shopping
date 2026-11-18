@@ -39,6 +39,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('isp_winback.php');
     }
 
+    public function test_quotation_follow_ups_carry_no_amount_and_stop_after_two(): void
+    {
+        $this->harness('isp_followup.php');
+    }
+
     public function test_sales_knowledge_is_governed_and_coverage_defaults_to_survey(): void
     {
         $this->harness('sales_brain.php');

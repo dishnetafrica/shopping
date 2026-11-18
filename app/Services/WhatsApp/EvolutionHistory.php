@@ -102,6 +102,13 @@ class EvolutionHistory
         $ts = is_array($ts) ? (int) ($ts['low'] ?? 0) : (int) $ts;
         $me = (bool) ($r['key']['fromMe'] ?? false);
 
-        return [$phone, $ts, $me, trim((string) $text), $me ? '' : trim((string) ($r['pushName'] ?? '')), $hidden];
+        // A contact name with no letter in it is WhatsApp's id or a number, not a name (live, 18 Nov 2026:
+        // hidden-id chats came back with the id itself as the name).
+        $name = $me ? '' : trim((string) ($r['pushName'] ?? ''));
+        if (! preg_match('/\p{L}/u', $name)) {
+            $name = '';
+        }
+
+        return [$phone, $ts, $me, trim((string) $text), $name, $hidden];
     }
 }
