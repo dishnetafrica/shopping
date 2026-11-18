@@ -34,9 +34,10 @@ class IspQuoteFollowUpTest extends TestCase
 
     private function business(array $settings = []): Tenant
     {
-        $t = Tenant::factory()->create(['whatsapp_instance' => 'inst_' . uniqid(), 'whatsapp_driver' => 'evolution', 'settings' => [
+        // $settings first: in PHP's array union the LEFT value wins, so the test's own settings override the defaults
+        $t = Tenant::factory()->create(['whatsapp_instance' => 'inst_' . uniqid(), 'whatsapp_driver' => 'evolution', 'settings' => $settings + [
             'vertical' => 'isp', 'currency' => 'USD', 'timezone' => 'Africa/Juba', 'business_hours' => '24/7', 'isp_quote_followup' => true,
-        ] + $settings]);
+        ]]);
         app(TenantContext::class)->set($t->id);
         User::create(['tenant_id' => $t->id, 'name' => 'Akol Deng', 'role' => 'sales', 'phone' => '211922000001', 'email' => 'a' . $t->id . '@t.test', 'password' => 'secret']);
         app(SalesOwnership::class)->ownerForEnquiry($t, self::CUSTOMER, 'Peter');
