@@ -131,7 +131,7 @@ class IspQuoteFollowUpCommand extends Command
             CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', $phone)->update(['last_contacted_at' => now()]);
             $to = $owner && $digits($owner->phone) !== '' ? [$digits($owner->phone)] : $t->ownerAlertNumbers();
             foreach ($to as $n) {
-                NotifyOwner::dispatch($t->id, "\u{1F4E8} Followed up quotation {$q->quote_no} with " . ($q->customer_name ?: '+' . $phone) . " (touch {$touch} of 2). If they reply, take it from there.", (string) $n);
+                NotifyOwner::dispatch($t->id, "\u{1F4E8} Followed up quotation {$q->quote_no} with " . ($q->customer_name ? $q->customer_name . ' ' : '') . \App\Services\Isp\CallbackNumber::label($t, $phone) . " (touch {$touch} of 2). If they reply, take it from there.", (string) $n);
             }
             BotTrace::log($t->id, 'isp_followup', $phone, 'sent_touch_' . $touch, (string) $q->quote_no);
             $sent++;

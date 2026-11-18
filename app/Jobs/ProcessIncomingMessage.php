@@ -140,6 +140,10 @@ class ProcessIncomingMessage implements ShouldQueue
         if (empty($this->incoming['from_me'])) {
             $from   = (string) $this->incoming['from'];
             $digits = preg_replace('/[^0-9]/', '', $from) ?: '';
+
+            // Internet providers: WhatsApp hides this customer's number (an "@lid" chat). Remember that, and
+            // the real number when WhatsApp attaches it, so salesperson alerts carry a number they can call.
+            \App\Services\Isp\CallbackNumber::fromIncoming($tenant, $convo, $this->incoming);
             $body   = trim((string) ($this->incoming['text'] ?? ''));
 
             if ($body !== '' && \App\Services\Comms\Marketing\OptOutKeywords::isStop($body)) {

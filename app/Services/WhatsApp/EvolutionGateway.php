@@ -389,9 +389,18 @@ class EvolutionGateway implements WhatsAppGateway
             data_get($msg, 'message.base64') ?? data_get($msg, 'base64') ?? data_get($payload, 'data.base64') ?? ''
         ) : '';
 
+        // WhatsApp hides this customer's number: the chat id is a "hidden id" (@lid), not a phone number.
+        // Some messages still carry the real number alongside (remoteJidAlt / senderPn) — keep it, so a
+        // salesperson can call them (App\Services\Isp\CallbackNumber).
+        $hidden = str_ends_with((string) $remote, '@lid');
+        $altJid = $hidden ? (string) (data_get($msg, 'key.remoteJidAlt') ?: data_get($msg, 'key.senderPn') ?: '') : '';
+        $phoneAlt = str_contains($altJid, '@s.whatsapp.net') ? (preg_replace('/\D/', '', explode('@', $altJid)[0]) ?? '') : '';
+
         return [
             'instance'  => (string) $instance,
             'from'      => \App\Services\Bot\Offers\StatusIngestGate::senderNumber((string) $remote, $participant),
+            'hidden'    => $hidden,
+            'phone_alt' => $phoneAlt,
             'text'      => (string) $text,
             'lat'       => $lat !== null ? (float) $lat : null,
             'lng'       => $lng !== null ? (float) $lng : null,

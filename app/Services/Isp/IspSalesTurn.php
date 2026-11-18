@@ -39,8 +39,39 @@ class IspSalesTurn
         return self::rules() . (IspAutoQuote::enabled($tenant) ? self::quoteRules() : self::HANDOFF_RULE) . self::knowledgeBlock($published);
     }
 
+    /**
+     * Per customer, per turn: WhatsApp hides this customer's number and we have no number to call them on.
+     * The bot then asks for one the first time it says someone will call (CallbackNumber). '' otherwise.
+     */
+    public static function contactBlock(Tenant $tenant, string $from): string
+    {
+        try {
+            if (! CallbackNumber::isHidden($tenant, $from) || CallbackNumber::callable($tenant, $from) !== null) {
+                return '';
+            }
+        } catch (\Throwable $e) {
+            report($e);
+
+            return '';
+        }
+
+        return self::CALLBACK_RULE;
+    }
+
+    public const CALLBACK_RULE = "\nCUSTOMER'S PHONE NUMBER: WhatsApp hides this customer's phone number, so their salesperson cannot call them from this chat. The first time you say someone will call, contact or visit them (or they ask for a call), also ask ONE short question: the best phone number to reach them on. Ask only once; if they prefer not to give it, carry on in the chat.\n";
+
     public function afterReply(Tenant $tenant, string $from, string $customerText, string $reply): string
     {
+        // A phone number the customer typed, in a chat where WhatsApp hides theirs: the number to call them on.
+        try {
+            $typed = CallbackNumber::isHidden($tenant, $from)
+                ? CallbackNumber::extract($customerText, CallbackNumber::askedRecently($tenant, $from)) : null;
+            if ($typed !== null) {
+                CallbackNumber::remember($tenant, $from, $typed, 'typed in chat');
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
         try {
             $published = $this->brain->published($tenant);
             [$amounts, $places] = self::allowed($published);
@@ -82,7 +113,7 @@ class IspSalesTurn
         $to = $owner && $digits((string) $owner->phone) !== '' ? [$digits((string) $owner->phone)] : $tenant->ownerAlertNumbers();
         $visible = trim((string) preg_replace('/<<[A-Z_]+.*?>>/s', '', $reply));
         $opens = self::opensAt($tenant);
-        $text = "\u{1F514} *Bot promised a follow-up* — +" . $digits($from) . "\n"
+        $text = "\u{1F514} *Bot promised a follow-up* — " . CallbackNumber::label($tenant, $from) . "\n"
             . 'Customer: "' . mb_substr(IspQuotePlan::plain($customerText), 0, 200) . "\"\n"
             . 'Bot: "' . mb_substr($visible, 0, 250) . "\"\n"
             . 'Please contact them' . ($opens !== null ? " when the office opens ({$opens}) \u{1F319}" : '') . ($owner ? '' : ' (no salesperson assigned yet)') . '.';

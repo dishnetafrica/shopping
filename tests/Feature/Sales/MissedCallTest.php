@@ -156,6 +156,33 @@ class MissedCallTest extends TestCase
         Bus::assertNotDispatched(NotifyOwner::class);
     }
 
+    /** WhatsApp hides the caller's number: the caller is asked for one, the alert says so instead of a fake "+" number. */
+    public function test_a_hidden_number_caller_is_asked_for_a_number(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        Conversation::create(['tenant_id' => $t->id, 'customer_phone' => self::CALLER, 'instance' => $t->whatsapp_instance, 'state' => ['wa_hidden' => true], 'cart' => []]);
+
+        $this->ring($t, 'CALL-LID');
+
+        $this->assertStringEndsWith('Akol Deng from our sales team will also call you back. Please send us the best phone number to reach you on.', $this->gw->sent[0][1]);
+        Bus::assertDispatched(NotifyOwner::class, fn ($j) => str_contains($j->text, "Missed WhatsApp call* — WhatsApp hides this customer's number — reply to them in the ShopBot inbox (chat " . self::CALLER . ')'));
+    }
+
+    /** Codex on #169: a first-time caller with a hidden number has no chat yet — the call itself says so. */
+    public function test_a_first_time_hidden_number_caller_is_asked_for_a_number(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+
+        $this->postJson('/api/webhook/whatsapp/evolution', ['event' => 'call', 'instance' => $t->whatsapp_instance, 'data' => [
+            'id' => 'CALL-NEW-LID', 'from' => self::CALLER . '@lid', 'status' => 'offer', 'isVideo' => false, 'isGroup' => false,
+        ]])->assertOk();
+
+        $this->assertStringEndsWith('Please send us the best phone number to reach you on.', $this->gw->sent[0][1]);
+        Bus::assertDispatched(NotifyOwner::class, fn ($j) => str_contains($j->text, "WhatsApp hides this customer's number") && ! str_contains($j->text, '+' . self::CALLER));
+    }
+
     public function test_switched_off(): void
     {
         Bus::fake([NotifyOwner::class]);
