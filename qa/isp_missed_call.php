@@ -24,7 +24,8 @@ chk('event names Evolution uses: CALL, call.upsert', [C::parse($ev(['id' => 'C5'
 chk('a list of calls: the first', C::parse($ev([['id' => 'C6', 'from' => '211984176391@s.whatsapp.net']]))['call_id'], 'C6');
 chk('no call id: caller + time instead', C::parse($ev(['from' => '211984176391@s.whatsapp.net', 'date' => 'D1']))['call_id'], '211984176391:D1');
 chk('a group call: ignored', [C::parse($ev(['id' => 'G', 'from' => '120363@g.us'])), C::parse($ev(['id' => 'G', 'from' => '211984176391@s.whatsapp.net', 'isGroup' => true]))], [null, null]);
-chk('answered (accept): not a missed call', C::parse($ev(['id' => 'A', 'from' => '211984176391@s.whatsapp.net', 'status' => 'accept'])), null);
+chk('answered (accept) is read, so the webhook can mark the call answered', C::parse($ev(['id' => 'A', 'from' => '211984176391@s.whatsapp.net', 'status' => 'accept']))['status'], 'accept');
+chk('it waits for the call to stop ringing before calling it missed', C::RING_SECONDS >= 45, true);
 chk('WhatsApp\'s own account (0@): ignored', C::parse($ev(['id' => 'Z', 'from' => '0@s.whatsapp.net'])), null);
 chk('a message or connection event: not a call', [C::parse(['event' => 'messages.upsert', 'data' => ['key' => []]]), C::parse(['event' => 'connection.update', 'data' => ['state' => 'open']]), C::parse([])], [null, null, null]);
 

@@ -115,8 +115,13 @@ class WebhookController
         if ($call === null) return;
         $t = Tenant::byWhatsappInstance($call['instance']);
         if (! $t || ! \App\Services\Sales\SalesOwnership::enabled($t)) return;
+        if ($call['status'] === 'accept') {                 // answered on the phone: not missed
+            \App\Services\Isp\MissedCall::markAnswered((int) $t->id, $call);
+            return;
+        }
         if (! \Illuminate\Support\Facades\Cache::add('wa_call:' . $t->id . ':' . $call['call_id'], 1, now()->addMinutes(30))) return;
-        \App\Jobs\HandleMissedCall::dispatch((int) $t->id, $call);
+        // After it has stopped ringing: if someone picks it up meanwhile, MissedCall sees the "accept".
+        \App\Jobs\HandleMissedCall::dispatch((int) $t->id, $call)->delay(now()->addSeconds(\App\Services\Isp\MissedCall::RING_SECONDS));
     }
 
     /**

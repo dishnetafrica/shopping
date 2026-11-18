@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Cache;
  *   - the customer's salesperson (or, with none, the owner alert numbers) gets an alert with the caller's
  *     name, number and their last message, to call them back.
  *   - staff and muted numbers are ignored; one alert per caller per 15 minutes (a caller who retries).
+ *   - it waits RING_SECONDS first: a call someone answers on the phone ("accept") is not a missed call.
  *
  * Internet-provider businesses only (SalesOwnership::enabled); switch off with isp_call_alerts = false,
  * or keep the alert and drop the customer message with isp_call_reply = false. Whether calls are also
@@ -35,6 +36,9 @@ class MissedCall
 {
     /** One alert per caller in this window: a caller who tries three times is one missed call. */
     public const WINDOW_MINUTES = 15;
+
+    /** How long a call may ring before it counts as missed: someone may answer it on the phone. */
+    public const RING_SECONDS = 60;
 
     public function __construct(private WhatsAppManager $wa, private SalesOwnership $owners) {}
 
@@ -63,8 +67,8 @@ class MissedCall
         // Keyed exactly as live messages are: the digits before "@" (an "@lid" id included), no ":device".
         $phone = preg_replace('/\D/', '', explode(':', explode('@', $jid)[0])[0]) ?? '';
         $status = strtolower((string) ($data['status'] ?? ''));
-        if (strlen($phone) < 6 || $status === 'accept') {
-            return null;                                    // 0@…: WhatsApp itself; accept: someone answered
+        if (strlen($phone) < 6) {
+            return null;                                    // 0@…: WhatsApp itself
         }
         $instance = (string) ($payload['instance'] ?? $data['instance'] ?? '');
 
@@ -101,7 +105,14 @@ class MissedCall
         return implode("\n", $lines);
     }
 
-    /** Reply to the caller and alert their salesperson (see the class comment). */
+    /** Someone picked the call up on the phone (its "accept" event): it is not a missed call. */
+    public static function markAnswered(int $tenantId, array $call): void
+    {
+        Cache::put("wa_call_answered:{$tenantId}:" . ($call['call_id'] ?? ''), 1, now()->addMinutes(30));
+        Cache::put("wa_call_answered:{$tenantId}:phone:" . ($call['phone'] ?? ''), 1, now()->addSeconds(self::RING_SECONDS * 2));
+    }
+
+    /** Reply to the caller and alert their salesperson (see the class comment). Runs RING_SECONDS after the call. */
     public function handle(Tenant $t, array $call): void
     {
         if (! SalesOwnership::enabled($t) || ! (bool) $t->setting('isp_call_alerts', true)) {
@@ -113,6 +124,11 @@ class MissedCall
             (array) $t->setting('bot_muted', []), User::where('tenant_id', $t->id)->pluck('phone')->all(), $t->ownerAlertNumbers()))));
         if ($phone === '' || isset($skip[$phone])) {
             BotTrace::log($t->id, 'call', $phone, 'call_ignored', 'staff or muted number');
+
+            return;
+        }
+        if (Cache::has("wa_call_answered:{$t->id}:" . ($call['call_id'] ?? '')) || Cache::has("wa_call_answered:{$t->id}:phone:{$phone}")) {
+            BotTrace::log($t->id, 'call', $phone, 'call_answered', 'someone took the call');
 
             return;
         }
@@ -135,7 +151,8 @@ class MissedCall
         if ((bool) $t->setting('isp_call_reply', true) && ! $humanHasIt) {
             $text = self::customerReply($owner?->name, $opens);
             try {
-                $res = $this->wa->forTenant($t)->sendText((string) $t->sendInstance(), $phone, $text);
+                // From the line the call came in on — the same rule as every live reply.
+                $res = $this->wa->forTenant($t)->sendText(\App\Jobs\ProcessIncomingMessage::replyInstance($t, $instance), $phone, $text);
                 $replied = ! (is_array($res) && ((($res['_ok'] ?? true) === false) || isset($res['error'])));
             } catch (\Throwable $e) {
                 BotTrace::log($t->id, 'call', $phone, 'call_reply_failed', mb_substr($e->getMessage(), 0, 120));

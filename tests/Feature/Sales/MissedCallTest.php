@@ -138,6 +138,24 @@ class MissedCallTest extends TestCase
         $this->assertSame([], $this->gw->sent);
     }
 
+    /** Codex on #167: with calls ringing the phone (--off), a call someone picks up is not a missed call. */
+    public function test_a_call_answered_on_the_phone_is_not_missed(): void
+    {
+        Bus::fake([NotifyOwner::class, HandleMissedCall::class]);
+        $t = $this->business();
+
+        $this->ring($t, 'CALL-A');                          // offer: queued to run after the ringing
+        $this->ring($t, 'CALL-A', self::CALLER, 'accept');  // picked up on the phone
+        $jobs = Bus::dispatched(HandleMissedCall::class);
+        $this->assertCount(1, $jobs, 'one job for the call, none for its accept');
+        $this->assertNotNull($jobs->first()->delay, 'it waits for the call to stop ringing');
+
+        $jobs->first()->handle(app(TenantContext::class), app(\App\Services\Isp\MissedCall::class));
+
+        $this->assertSame([], $this->gw->sent);
+        Bus::assertNotDispatched(NotifyOwner::class);
+    }
+
     public function test_switched_off(): void
     {
         Bus::fake([NotifyOwner::class]);
