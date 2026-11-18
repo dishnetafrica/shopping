@@ -25,12 +25,58 @@ class EvolutionGateway implements WhatsAppGateway
         return str_contains($to, '@') ? $to : $to.'@s.whatsapp.net';
     }
 
+    /**
+     * POST a send to Evolution, addressed so WhatsApp accepts it. A customer whose number WhatsApp hides is
+     * known to us only by a "hidden id" (LID) — the digits we key the chat by. Sent as plain digits,
+     * Evolution reads them as a phone number, finds none and refuses (HTTP 400, exists:false): the bot's
+     * replies to such a customer never arrived (DishNet, 18 Nov 2026 — "Jel Kuot": 6 refused replies).
+     * The same digits addressed as "<digits>@lid" are accepted. So: on that refusal, send once more as
+     * "@lid", and remember it for this chat so later sends go there first (and back to plain digits if
+     * the remembered form is ever refused). Any other failure is returned as it is.
+     */
+    protected function deliver(string $path, string $to, array $fields): \Illuminate\Http\Client\Response
+    {
+        if (str_ends_with($to, '@lid')) {                 // already addressed as a hidden id
+            return $this->http()->post($path, ['number' => $to] + $fields);
+        }
+        $digits = preg_replace('/[^0-9]/', '', $to) ?? '';
+        $key = 'wa_lid:' . $digits;
+        $lidFirst = $digits !== '' && \Illuminate\Support\Facades\Cache::has($key);
+        $first = $lidFirst ? $digits . '@lid' : $digits;
+        $resp = $this->http()->post($path, ['number' => $first] + $fields);
+        if ($digits === '' || $resp->successful() || ! self::unknownNumber((array) ($resp->json() ?? []))) {
+            return $resp;
+        }
+        $retry = $this->http()->post($path, ['number' => $lidFirst ? $digits : $digits . '@lid'] + $fields);
+        if ($retry->successful()) {
+            $lidFirst ? \Illuminate\Support\Facades\Cache::forget($key) : \Illuminate\Support\Facades\Cache::forever($key, 1);
+            Log::info('evolution.send addressed ' . ($lidFirst ? 'as a number' : 'as a hidden id (@lid)'), ['to' => $digits]);
+
+            return $retry;
+        }
+
+        return $resp;
+    }
+
+    /** PURE. Did Evolution refuse because WhatsApp has no such number ({"response":{"message":[{"exists":false…}]}})? */
+    public static function unknownNumber(array $body): bool
+    {
+        $list = $body['response']['message'] ?? null;
+        if (! is_array($list)) {
+            return false;
+        }
+        foreach ($list as $m) {
+            if (is_array($m) && array_key_exists('exists', $m) && $m['exists'] === false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function sendText(string $instance, string $to, string $message, ?array $quoted = null): array
     {
-        $payload = [
-            'number' => preg_replace('/[^0-9]/', '', $to),
-            'text'   => $message,
-        ];
+        $payload = ['text' => $message];
         if ($quoted) {
             $payload['quoted'] = $quoted;   // e.g. ['key' => ['id' => '<wa msg id>']]
         }
@@ -42,7 +88,7 @@ class EvolutionGateway implements WhatsAppGateway
         //
         // Additive on purpose: callers reading $res['key']['id'] are unaffected and callers that
         // ignore the return value are unchanged. Only a caller that ASKS is told.
-        $resp = $this->http()->post("/message/sendText/{$instance}", $payload);
+        $resp = $this->deliver("/message/sendText/{$instance}", $to, $payload);
         $body = $resp->json() ?? [];
         if (! $resp->successful()) {
             \Illuminate\Support\Facades\Log::warning('evolution.sendText http', [
@@ -58,8 +104,7 @@ class EvolutionGateway implements WhatsAppGateway
 
     public function sendImage(string $instance, string $to, string $media, string $caption = ''): array
     {
-        return $this->http()->post("/message/sendMedia/{$instance}", [
-            'number'    => preg_replace('/[^0-9]/', '', $to),
+        return $this->deliver("/message/sendMedia/{$instance}", $to, [
             'mediatype' => 'image',
             'media'     => $media,
             'caption'   => $caption,
@@ -75,8 +120,7 @@ class EvolutionGateway implements WhatsAppGateway
      *  callers guard with method_exists() (same pattern as getMediaBase64). */
     public function sendDocument(string $instance, string $to, string $media, string $fileName, string $caption = ''): array
     {
-        return $this->http()->post("/message/sendMedia/{$instance}", [
-            'number'    => preg_replace('/[^0-9]/', '', $to),
+        return $this->deliver("/message/sendMedia/{$instance}", $to, [
             'mediatype' => 'document',
             'media'     => $media,
             'fileName'  => $fileName,
@@ -88,8 +132,7 @@ class EvolutionGateway implements WhatsAppGateway
      *  callers guard with method_exists() (same additive pattern as sendDocument). */
     public function sendLocation(string $instance, string $to, float $lat, float $lng, string $name = '', string $address = ''): array
     {
-        return $this->http()->post("/message/sendLocation/{$instance}", [
-            'number'    => preg_replace('/[^0-9]/', '', $to),
+        return $this->deliver("/message/sendLocation/{$instance}", $to, [
             'latitude'  => $lat,
             'longitude' => $lng,
             'name'      => $name,
