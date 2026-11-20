@@ -230,10 +230,14 @@ class IspQuoteFollowUpCommand extends Command
         usort($due, fn ($a, $b) => [ChatFollowUp::rank($a['c']['segment']), -$a['last_in']] <=> [ChatFollowUp::rank($b['c']['segment']), -$b['last_in']]);
         $people = $owners->salespeople($t);
         $summary = [];                                      // recipient => lines: ONE alert per salesperson per run
-        foreach ($due as $d) {
+        foreach ($due as $i => $d) {
             ['phone' => $phone, 'last_in' => $lastIn, 'touch' => $touch, 'c' => $c, 'q' => $q] = $d;
             if ($usedToday + $sent >= $cap) {
-                $this->line("  daily cap {$cap} reached — " . (count($due) - $sent) . ' more are due and wait for the next day');
+                // Codex on #172: what is left stays due only until 14 days after the customer's last message.
+                $left = array_slice($due, $i);
+                $last = count(array_filter($left, fn ($x) => intdiv($nowTs - $x['last_in'], 86400) >= ChatFollowUp::MAX_DAYS));
+                $this->line("  daily cap {$cap} reached — " . count($left) . ' more did not fit today'
+                    . ($last ? "; {$last} of them reach 14 days today and will not be followed up" : '; they stay due for the next run'));
                 break;
             }
 

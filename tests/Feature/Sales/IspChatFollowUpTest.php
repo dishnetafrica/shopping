@@ -187,7 +187,7 @@ class IspChatFollowUpTest extends TestCase
         $this->line($t, 'out', 'Great! Where is the office?', 49.9, '211911000103');
 
         $this->artisan('isp:quote-followup', ['--tenant' => $t->id, '--no-pause' => true])
-            ->expectsOutputToContain('daily cap 2 reached — 1 more are due')
+            ->expectsOutputToContain('daily cap 2 reached — 1 more did not fit today; they stay due for the next run')
             ->assertSuccessful();
 
         $this->assertSame(['211911000103', '211911000102'], array_column($this->gw->sent, 0), 'hot, then the price question; the hello waits');
