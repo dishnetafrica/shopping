@@ -163,8 +163,9 @@ class IspChatFollowUpTest extends TestCase
 
             $this->artisan('isp:quote-followup', ['--tenant' => $t->id, '--dry' => true, '--no-pause' => true])
                 ->expectsOutputToContain('closed now (Sun 07:20 Africa/Juba, hours: Mon-Sat 9 AM - 6 PM) — PREVIEW')
-                ->expectsOutputToContain('[DRY] quiet chat, touch 1 → +' . self::CUSTOMER)
-                ->expectsOutputToContain('Hello, this is Akol Deng from')   // the salesperson they would get, though a preview assigns nobody
+                // ONE expectation per printed line (each line is matched by one expectation only): the [DRY]
+                // line carries the message, in the name of the salesperson they would get — a preview assigns nobody.
+                ->expectsOutputToContain('Hello, this is Akol Deng from')
                 ->assertSuccessful();
         } finally {
             \Illuminate\Support\Carbon::setTestNow();
