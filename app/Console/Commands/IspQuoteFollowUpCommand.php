@@ -174,6 +174,7 @@ class IspQuoteFollowUpCommand extends Command
         }
         $phones = Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('direction', 'in')->where($live)
             ->where('created_at', '>=', now()->subDays(ChatFollowUp::MAX_DAYS + 1))->distinct()->pluck('customer_phone');
+        $nowTs = now()->getTimestamp();                     // the application clock (tests move it), never time()
         $sent = 0;
         $owed = [];
         foreach ($phones as $phone) {
@@ -194,7 +195,7 @@ class IspQuoteFollowUpCommand extends Command
                 }
             }
             if ($lastIn === 0 || $lastOut <= $lastIn) {
-                if ($lastIn > 0 && $lastIn < time() - 3600) {
+                if ($lastIn > 0 && $lastIn < $nowTs - 3600) {
                     $owed[$phone] = $lastIn;                // they wrote last and nobody answered: shown, never chased
                 }
                 continue;
@@ -206,11 +207,11 @@ class IspQuoteFollowUpCommand extends Command
             $convo = Conversation::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)->orderByDesc('last_message_at')->first();
             $state = (array) ($convo?->state ?? []);
             $done = count(array_filter((array) ($state['isp_chat_followups'] ?? []), fn ($at) => strtotime((string) $at) > $lastIn));
-            $touch = ChatFollowUp::touch(intdiv(time() - $lastIn, 86400), $done);
+            $touch = ChatFollowUp::touch(intdiv($nowTs - $lastIn, 86400), $done);
             if ($touch === null) {
                 continue;
             }
-            $c = Winback::classify($rows, time());
+            $c = Winback::classify($rows, $nowTs);
             $texts = array_map(fn ($r) => $r[2], array_filter($rows, fn ($r) => ! $r[1]));
             $why = $c['skip'] ?? (ChatFollowUp::notACustomer($texts) ? 'not_a_customer'
                 : ($c['segment'] === 'existing_customer' ? 'support_chat'
