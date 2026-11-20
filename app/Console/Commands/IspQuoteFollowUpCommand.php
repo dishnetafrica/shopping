@@ -10,7 +10,10 @@ use App\Models\Quotation;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Bot\TimeContext;
+use App\Services\Isp\CallbackNumber;
+use App\Services\Isp\ChatFollowUp;
 use App\Services\Isp\QuoteFollowUp;
+use App\Services\Isp\Winback;
 use App\Services\Sales\SalesOwnership;
 use App\Services\WhatsApp\WhatsAppManager;
 use App\Support\BotTrace;
@@ -37,13 +40,16 @@ class IspQuoteFollowUpCommand extends Command
     /** Statuses that mean the quotation is waiting on the customer. */
     public const WAITING = ['sent', 'revised'];
 
-    protected $description = 'Internet provider: follow up open quotations the customer has not answered (day 2 and day 5), in office hours';
+    protected $description = 'Internet provider: follow up unanswered quotations (day 2, 5) and enquiries that went quiet (day 1, 4), in office hours';
 
     public function handle(WhatsAppManager $wa, SalesOwnership $owners): int
     {
         $tenants = Tenant::query()->when($this->option('tenant'), fn ($q) => $q->whereKey((int) $this->option('tenant')))->get();
         foreach ($tenants as $t) {
-            if (! SalesOwnership::enabled($t) || ! (bool) $t->setting('isp_quote_followup', false)) {
+            $quotesOn = (bool) $t->setting('isp_quote_followup', false);
+            // Quiet enquiries: on with the quotation follow-up unless switched off on its own.
+            $chatsOn = (bool) $t->setting('isp_chat_followup', $quotesOn);
+            if (! SalesOwnership::enabled($t) || (! $quotesOn && ! $chatsOn)) {
                 continue;
             }
             app(\App\Support\TenantContext::class)->set((int) $t->id);
@@ -53,13 +59,13 @@ class IspQuoteFollowUpCommand extends Command
                 $this->line("{$t->name}: closed (or business hours not set) — nothing sent");
                 continue;
             }
-            $this->run1($t, $wa, $owners);
+            $this->run1($t, $wa, $owners, $quotesOn, $chatsOn);
         }
 
         return self::SUCCESS;
     }
 
-    private function run1(Tenant $t, WhatsAppManager $wa, SalesOwnership $owners): void
+    private function run1(Tenant $t, WhatsAppManager $wa, SalesOwnership $owners, bool $quotesOn = true, bool $chatsOn = false): void
     {
         $digits = fn ($p) => preg_replace('/\D/', '', (string) $p) ?? '';
         $skip = array_flip(array_filter(array_map($digits, array_merge(
@@ -71,8 +77,13 @@ class IspQuoteFollowUpCommand extends Command
         $quotes = Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->whereNull('order_id')->whereNull('accepted_at')
             ->whereIn('status', self::WAITING)
             ->where('created_at', '>=', now()->subDays(60))->orderByDesc('id')->get();
-        $today = now()->toDateString();
-        $sentToday = $quotes->sum(fn ($q) => count(array_filter((array) (($q->meta ?? [])['isp_followups'] ?? []), fn ($at) => str_starts_with((string) $at, $today))));
+        // Every automatic follow-up sent today, quotation or quiet chat: one daily cap for both.
+        $sentToday = Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('direction', 'out')
+            ->where('created_at', '>=', now()->startOfDay())->whereIn('meta->via', ['quote_followup', 'chat_followup'])->count();
+        $openQuotes = $quotes;
+        if (! $quotesOn) {
+            $quotes = collect();
+        }
 
         $seen = [];
         $sent = 0;
@@ -137,6 +148,125 @@ class IspQuoteFollowUpCommand extends Command
             $sent++;
         }
         $this->info("{$t->name}: followed up {$sent} quotation(s)");
+        if ($chatsOn) {
+            $this->chats($t, $wa, $owners, $skip, $cap, $sentToday + $sent, $openQuotes);
+        }
+    }
+
+    /**
+     * Quiet enquiries (ChatFollowUp): WE answered last and the customer went quiet — touch 1 a day after their
+     * last message, touch 2 on day 4. Only live messages count (history copied from the phone is never chased);
+     * only sales enquiries (Winback::classify: no spam, no "stop", no support chat, no vendor or partner); a
+     * quotation sent after their last message is the quotation follow-up's (above), not this.
+     */
+    private function chats(Tenant $t, WhatsAppManager $wa, SalesOwnership $owners, array $skip, int $cap, int $usedToday, $quotes): void
+    {
+        $digits = fn ($p) => preg_replace('/\D/', '', (string) $p) ?? '';
+        $live = fn ($q) => $q->whereNull('meta')->orWhereNull('meta->imported');
+        $quoteOf = [];
+        foreach ($quotes as $q) {
+            $quoteOf[$digits($q->customer_phone)] ??= $q;    // newest open quotation per customer
+        }
+        $phones = Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('direction', 'in')->where($live)
+            ->where('created_at', '>=', now()->subDays(ChatFollowUp::MAX_DAYS + 1))->distinct()->pluck('customer_phone');
+        $sent = 0;
+        $owed = [];
+        foreach ($phones as $phone) {
+            $phone = $digits($phone);
+            if ($phone === '' || isset($skip[$phone])) {
+                continue;
+            }
+            $rows = Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)->where($live)
+                ->where('created_at', '>=', now()->subDays(30))->orderBy('created_at')->orderBy('id')->get(['direction', 'body', 'created_at'])
+                ->map(fn ($m) => [$m->created_at->getTimestamp(), $m->direction === 'out', (string) $m->body])->all();
+            $lastIn = 0;
+            $lastOut = 0;
+            foreach ($rows as $r) {
+                if ($r[1]) {
+                    $lastOut = max($lastOut, $r[0]);
+                } else {
+                    $lastIn = max($lastIn, $r[0]);
+                }
+            }
+            if ($lastIn === 0 || $lastOut <= $lastIn) {
+                if ($lastIn > 0 && $lastIn < time() - 3600) {
+                    $owed[$phone] = $lastIn;                // they wrote last and nobody answered: shown, never chased
+                }
+                continue;
+            }
+            $q = $quoteOf[$phone] ?? null;
+            if ($q && ($q->last_sent_at ?? $q->created_at)->getTimestamp() > $lastIn) {
+                continue;                                   // a quotation they have not answered: the quotation follow-up has it
+            }
+            $convo = Conversation::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)->orderByDesc('last_message_at')->first();
+            $state = (array) ($convo?->state ?? []);
+            $done = count(array_filter((array) ($state['isp_chat_followups'] ?? []), fn ($at) => strtotime((string) $at) > $lastIn));
+            $touch = ChatFollowUp::touch(intdiv(time() - $lastIn, 86400), $done);
+            if ($touch === null) {
+                continue;
+            }
+            $c = Winback::classify($rows, time());
+            $texts = array_map(fn ($r) => $r[2], array_filter($rows, fn ($r) => ! $r[1]));
+            $why = $c['skip'] ?? (ChatFollowUp::notACustomer($texts) ? 'not_a_customer'
+                : ($c['segment'] === 'existing_customer' ? 'support_chat'
+                : (! ChatFollowUp::salesEnquiry($c['segment'], $c['signals']) ? 'no_sales_question' : null)));
+            $why ??= $this->blocked($t, (new \DateTimeImmutable())->setTimestamp($lastIn), $phone, $skip);
+            if ($why !== null) {
+                BotTrace::log($t->id, 'isp_followup', $phone, 'chat_held_' . $why, 'touch ' . $touch);
+                continue;
+            }
+            if ($usedToday + $sent >= $cap) {
+                $this->line("  daily cap {$cap} reached");
+                break;
+            }
+
+            // A dry run changes nothing: it only looks the salesperson up.
+            $owner = $this->option('dry') ? $owners->ownerOf($t, $phone) : $owners->ownerForEnquiry($t, $phone);
+            $name = $q?->customer_name ?: CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', $phone)->value('name');
+            $text = ChatFollowUp::message($touch, (string) $c['segment'], (string) $c['service'], $name, $owner?->name, (string) $t->name, $q?->quote_no);
+            if ($this->option('dry')) {
+                $this->line("  [DRY] quiet chat, touch {$touch} → +{$phone} ({$c['segment']}, {$c['service']}): {$text}");
+                $sent++;
+                continue;
+            }
+            if (($sent > 0 || $usedToday > 0) && ! $this->option('no-pause')) {
+                sleep(random_int(30, 90));                  // human rhythm on an unofficial line
+            }
+            try {
+                $res = $wa->forTenant($t)->sendText((string) $t->whatsapp_instance, $phone, $text);
+                if (is_array($res) && (($res['_ok'] ?? true) === false || isset($res['error']))) {
+                    BotTrace::log($t->id, 'isp_followup', $phone, 'chat_send_failed', 'HTTP ' . ($res['_status'] ?? '?'));
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                BotTrace::log($t->id, 'isp_followup', $phone, 'chat_send_failed', mb_substr($e->getMessage(), 0, 120));
+                continue;
+            }
+            MessageLog::record($t->id, $phone, (string) $t->whatsapp_instance, 'out', 'bot', $text, null, null, ['via' => 'chat_followup', 'touch' => $touch]);
+            $convo = Conversation::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)->orderByDesc('last_message_at')->first();
+            if ($convo) {
+                $st = (array) ($convo->state ?? []);
+                $st['isp_chat_followups'] = array_slice(array_merge((array) ($st['isp_chat_followups'] ?? []), [now()->toIso8601String()]), -6);
+                $st['lg_last_out'] = strtolower(trim((string) preg_replace('/\s+/', ' ', $text)));
+                $convo->state = $st;
+                $convo->save();
+            }
+            CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', $phone)->update(['last_contacted_at' => now()]);
+            $what = ['starlink' => 'Starlink', 'fiber' => 'Fiber', 'both' => 'Starlink and Fiber'][$c['service']] ?? 'internet';
+            $to = $owner && $digits($owner->phone) !== '' ? [$digits($owner->phone)] : $t->ownerAlertNumbers();
+            foreach ($to as $n) {
+                NotifyOwner::dispatch($t->id, "\u{1F4E8} Followed up " . ($name && preg_match('/\p{L}/u', (string) $name) ? $name . ' ' : '') . CallbackNumber::label($t, $phone)
+                    . " — they asked about {$what} on " . date('j M', $lastIn) . " and went quiet (touch {$touch} of 2). If they reply, take it from there.", (string) $n);
+            }
+            BotTrace::log($t->id, 'isp_followup', $phone, 'chat_sent_touch_' . $touch, (string) $c['segment']);
+            $sent++;
+        }
+        $this->info("{$t->name}: followed up {$sent} quiet chat(s)");
+        if ($owed) {
+            asort($owed);
+            $this->warn('  ' . count($owed) . ' chat(s) where the customer wrote last and nobody has answered: '
+                . implode(', ', array_map(fn ($p, $at) => '+' . $p . ' (' . date('j M H:i', $at) . ')', array_keys(array_slice($owed, 0, 10, true)), array_slice($owed, 0, 10, true))));
+        }
     }
 
     /** Why this customer must not get a follow-up now, or null. */
