@@ -177,6 +177,7 @@ class IspQuoteFollowUpCommand extends Command
         $nowTs = now()->getTimestamp();                     // the application clock (tests move it), never time()
         $sent = 0;
         $owed = [];
+        $due = [];
         foreach ($phones as $phone) {
             $phone = $digits($phone);
             if ($phone === '' || isset($skip[$phone])) {
@@ -221,17 +222,33 @@ class IspQuoteFollowUpCommand extends Command
                 BotTrace::log($t->id, 'isp_followup', $phone, 'chat_held', $why . ' · touch ' . $touch);   // stage holds 24 characters
                 continue;
             }
+            $due[] = ['phone' => $phone, 'last_in' => $lastIn, 'touch' => $touch, 'c' => $c, 'q' => $q];
+        }
+
+        // More are due than the daily cap allows: the best leads first (ready to buy, then a price question,
+        // then a hello), the most recent first within each. The rest are still due tomorrow.
+        usort($due, fn ($a, $b) => [ChatFollowUp::rank($a['c']['segment']), -$a['last_in']] <=> [ChatFollowUp::rank($b['c']['segment']), -$b['last_in']]);
+        $people = $owners->salespeople($t);
+        $summary = [];                                      // recipient => lines: ONE alert per salesperson per run
+        foreach ($due as $i => $d) {
+            ['phone' => $phone, 'last_in' => $lastIn, 'touch' => $touch, 'c' => $c, 'q' => $q] = $d;
             if ($usedToday + $sent >= $cap) {
-                $this->line("  daily cap {$cap} reached");
+                // Codex on #172: what is left stays due only until 14 days after the customer's last message.
+                $left = array_slice($due, $i);
+                $last = count(array_filter($left, fn ($x) => intdiv($nowTs - $x['last_in'], 86400) >= ChatFollowUp::MAX_DAYS));
+                $this->line("  daily cap {$cap} reached — " . count($left) . ' more did not fit today'
+                    . ($last ? "; {$last} of them reach 14 days today and will not be followed up" : '; they stay due for the next run'));
                 break;
             }
 
-            // A dry run changes nothing: it only looks the salesperson up.
-            $owner = $this->option('dry') ? $owners->ownerOf($t, $phone) : $owners->ownerForEnquiry($t, $phone);
+            // A dry run changes nothing: it shows the salesperson the customer has, or would get when there is one.
+            $owner = $this->option('dry')
+                ? ($owners->ownerOf($t, $phone) ?? (count($people) === 1 ? $people[0] : null))
+                : $owners->ownerForEnquiry($t, $phone);
             $name = $q?->customer_name ?: CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', $phone)->value('name');
             $text = ChatFollowUp::message($touch, (string) $c['segment'], (string) $c['service'], $name, $owner?->name, (string) $t->name, $q?->quote_no);
             if ($this->option('dry')) {
-                $this->line("  [DRY] quiet chat, touch {$touch} → +{$phone} ({$c['segment']}, {$c['service']}): {$text}");
+                $this->line("  [DRY] quiet chat, touch {$touch} → +{$phone} ({$c['segment']}, {$c['service']}, asked " . date('j M', $lastIn) . "): {$text}");
                 $sent++;
                 continue;
             }
@@ -259,13 +276,17 @@ class IspQuoteFollowUpCommand extends Command
             }
             CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', $phone)->update(['last_contacted_at' => now()]);
             $what = ['starlink' => 'Starlink', 'fiber' => 'Fiber', 'both' => 'Starlink and Fiber'][$c['service']] ?? 'internet';
-            $to = $owner && $digits($owner->phone) !== '' ? [$digits($owner->phone)] : $t->ownerAlertNumbers();
-            foreach ($to as $n) {
-                NotifyOwner::dispatch($t->id, "\u{1F4E8} Followed up " . ($name && preg_match('/\p{L}/u', (string) $name) ? $name . ' ' : '') . CallbackNumber::label($t, $phone)
-                    . " — they asked about {$what} on " . date('j M', $lastIn) . " and went quiet (touch {$touch} of 2). If they reply, take it from there.", (string) $n);
+            $line = '• ' . ($name && preg_match('/\p{L}/u', (string) $name) ? $name . ' ' : '') . CallbackNumber::label($t, $phone)
+                . " — {$what}" . ($q ? " (quotation {$q->quote_no})" : '') . ', asked ' . date('j M', $lastIn) . ($touch > 1 ? ' — 2nd and last follow-up' : '');
+            foreach ($owner && $digits($owner->phone) !== '' ? [$digits($owner->phone)] : $t->ownerAlertNumbers() as $n) {
+                $summary[(string) $n][] = $line;
             }
             BotTrace::log($t->id, 'isp_followup', $phone, 'chat_sent', 'touch ' . $touch . ' · ' . $c['segment']);
             $sent++;
+        }
+        foreach ($summary as $n => $lines) {
+            NotifyOwner::dispatch($t->id, "\u{1F4E8} *Follow-ups sent in your name* (" . count($lines) . "):\n" . implode("\n", $lines)
+                . "\nThese customers asked us something and then went quiet. If they reply, take it from there.", (string) $n);
         }
         $this->info("{$t->name}: followed up {$sent} quiet chat(s)");
         if ($owed) {

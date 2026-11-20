@@ -85,7 +85,7 @@ class IspChatFollowUpTest extends TestCase
         $this->assertSame(self::CUSTOMER, $this->gw->sent[0][0]);
         $this->assertSame('Hello, this is Akol Deng from ' . $t->name . '. I am following up on the Starlink you asked about. Do you have any other questions, or would you like me to prepare a quotation for you?', $this->gw->sent[0][1]);
         $this->assertSame('chat_followup', Message::where('customer_phone', self::CUSTOMER)->where('direction', 'out')->latest('id')->first()->meta['via']);
-        Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'Followed up +' . self::CUSTOMER . ' — they asked about Starlink'));
+        Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, "*Follow-ups sent in your name* (1):\n• +" . self::CUSTOMER . ' — Starlink, asked'));
 
         $this->run1($t);
         $this->assertCount(1, $this->gw->sent, 'never twice: once per touch, nothing within 24 hours of a message from us');
@@ -163,13 +163,36 @@ class IspChatFollowUpTest extends TestCase
 
             $this->artisan('isp:quote-followup', ['--tenant' => $t->id, '--dry' => true, '--no-pause' => true])
                 ->expectsOutputToContain('closed now (Sun 07:20 Africa/Juba, hours: Mon-Sat 9 AM - 6 PM) — PREVIEW')
-                ->expectsOutputToContain('[DRY] quiet chat, touch 1 → +' . self::CUSTOMER)
+                // ONE expectation per printed line (each line is matched by one expectation only): the [DRY]
+                // line carries the message, in the name of the salesperson they would get — a preview assigns nobody.
+                ->expectsOutputToContain('Hello, this is Akol Deng from')
                 ->assertSuccessful();
         } finally {
             \Illuminate\Support\Carbon::setTestNow();
         }
         $this->assertSame([], $this->gw->sent);
         Bus::assertNotDispatched(NotifyOwner::class);
+    }
+
+    /** More due than the daily cap: ready-to-buy first, then price questions, then a hello; ONE alert for the run. */
+    public function test_the_best_leads_go_first_and_the_salesperson_gets_one_summary(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business(['isp_quote_followup_daily_cap' => 2]);
+        $this->line($t, 'in', 'Hello', 26, '211911000101');                                         // only a hello, the newest
+        $this->line($t, 'out', 'Welcome! How can I help?', 25.9, '211911000101');
+        $this->line($t, 'in', 'How much is fiber in Gudele?', 40, '211911000102');                   // a price question
+        $this->line($t, 'out', 'Which area exactly?', 39.9, '211911000102');
+        $this->line($t, 'in', 'I want Starlink installed at my office', 50, '211911000103');        // ready to buy, the oldest
+        $this->line($t, 'out', 'Great! Where is the office?', 49.9, '211911000103');
+
+        $this->artisan('isp:quote-followup', ['--tenant' => $t->id, '--no-pause' => true])
+            ->expectsOutputToContain('daily cap 2 reached — 1 more did not fit today; they stay due for the next run')
+            ->assertSuccessful();
+
+        $this->assertSame(['211911000103', '211911000102'], array_column($this->gw->sent, 0), 'hot, then the price question; the hello waits');
+        Bus::assertDispatchedTimes(NotifyOwner::class, 1);
+        Bus::assertDispatched(NotifyOwner::class, fn ($j) => str_contains($j->text, '(2):') && str_contains($j->text, '+211911000103 — Starlink') && str_contains($j->text, '+211911000102 — Fiber'));
     }
 
     public function test_switched_off_or_closed(): void
