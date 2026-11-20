@@ -305,13 +305,17 @@ class IspQuoteFollowUpCommand extends Command
     /** 'has_order' / 'stage_<stage>' when the customer already bought or the deal is decided; null otherwise. */
     private function alreadyDecided(Tenant $t, string $phone): ?string
     {
-        $stage = \App\Models\Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)
-            ->whereIn('stage', self::DECIDED_STAGES)->orderByDesc('id')->value('stage');
-        if ($stage !== null) {
-            return 'stage_' . $stage;
+        // The pipeline's own reading of a lead (Codex on #173): an older lead has no stage yet, only a status
+        // ("lost", "won"), and Pipeline::stageOf resolves it the same way the pipeline screens do.
+        foreach (\App\Models\Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)->get(['stage', 'status']) as $lead) {
+            $stage = \App\Services\Sales\Pipeline\Pipeline::stageOf($lead->stage, $lead->status);
+            if (in_array($stage, self::DECIDED_STAGES, true)) {
+                return 'stage_' . $stage;
+            }
         }
+        // Orders are stored "Cancelled" / "Rejected" (capitalised); compare without case (Codex on #173).
         $ordered = \App\Models\Order::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)
-            ->whereNotIn('status', ['cancelled', 'void'])->exists();
+            ->whereRaw('LOWER(status) NOT IN (?, ?, ?)', ['cancelled', 'rejected', 'void'])->exists();
 
         return $ordered ? 'has_order' : null;
     }
