@@ -59,6 +59,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('isp_callback.php');
     }
 
+    public function test_a_quiet_enquiry_is_followed_up_twice_without_amounts(): void
+    {
+        $this->harness('isp_chat_followup.php');
+    }
+
     public function test_sales_knowledge_is_governed_and_coverage_defaults_to_survey(): void
     {
         $this->harness('sales_brain.php');

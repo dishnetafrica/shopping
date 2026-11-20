@@ -161,6 +161,9 @@ class MissedCall
                 // From the line the call came in on — the same rule as every live reply.
                 $res = $this->wa->forTenant($t)->sendText(\App\Jobs\ProcessIncomingMessage::replyInstance($t, $instance), $phone, $text);
                 $replied = ! (is_array($res) && ((($res['_ok'] ?? true) === false) || isset($res['error'])));
+                if (! $replied) {
+                    BotTrace::log($t->id, 'call', $phone, 'call_reply_failed', 'WhatsApp did not accept it (HTTP ' . ($res['_status'] ?? '?') . ')');
+                }
             } catch (\Throwable $e) {
                 BotTrace::log($t->id, 'call', $phone, 'call_reply_failed', mb_substr($e->getMessage(), 0, 120));
             }
