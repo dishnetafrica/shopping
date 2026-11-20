@@ -31,6 +31,9 @@ chk('asked about a service or price: chased', [F::salesEnquiry('warm', ['starlin
 chk('only said hello: chased once as a new contact', F::salesEnquiry('cold', []), true);
 chk('no sales question at all: not chased', F::salesEnquiry('warm', []), false);
 
+echo "== who goes first when more are due than the daily cap\n";
+chk('ready to buy, then a price question, then asked about a service, then a hello', [F::rank('hot'), F::rank('price_changed'), F::rank('wanted_cheaper'), F::rank('warm'), F::rank('cold'), F::rank(null)], [0, 1, 1, 2, 3, 3]);
+
 echo "== what the customer reads\n";
 $a = F::message(1, 'warm', 'starlink', 'Peter Deng', 'Justus', 'DishNet Africa Limited');
 chk('touch 1: first name, salesperson, what they asked, one question', $a, 'Hello Peter, this is Justus from DishNet Africa Limited. I am following up on the Starlink you asked about. Do you have any other questions, or would you like me to prepare a quotation for you?');

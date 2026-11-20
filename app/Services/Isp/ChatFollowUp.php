@@ -40,6 +40,17 @@ final class ChatFollowUp
         return $segment === 'cold' || array_intersect($signals, self::SALES_SIGNALS) !== [];
     }
 
+    /** PURE. Who goes first when more are due than the daily cap: ready to buy, then a price question, then a hello. */
+    public static function rank(?string $segment): int
+    {
+        return match ($segment) {
+            'hot'                             => 0,
+            'price_changed', 'wanted_cheaper' => 1,
+            'warm'                            => 2,
+            default                           => 3,
+        };
+    }
+
     /** Which touch is due, or null. $done = touches already sent since their last message. */
     public static function touch(int $daysSinceTheirLast, int $done): ?int
     {
