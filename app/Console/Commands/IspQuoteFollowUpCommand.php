@@ -56,8 +56,13 @@ class IspQuoteFollowUpCommand extends Command
             $tz = TimeContext::zone((string) $t->setting('timezone', ''), (string) $t->setting('city', ''));
             $now = now()->toDateTimeImmutable()->setTimezone(new \DateTimeZone($tz));
             if (TimeContext::isOpen(TimeContext::parseHours((string) $t->setting('business_hours', '')), $now) !== true) {
-                $this->line("{$t->name}: closed (or business hours not set) — nothing sent");
-                continue;
+                $hours = trim((string) $t->setting('business_hours', '')) ?: 'not set';
+                if (! $this->option('dry')) {
+                    $this->line("{$t->name}: closed now ({$now->format('D H:i')} {$tz}, hours: {$hours}) — nothing sent");
+                    continue;
+                }
+                // A preview sends nothing, so it may run at any hour: show what would go out once open.
+                $this->line("{$t->name}: closed now ({$now->format('D H:i')} {$tz}, hours: {$hours}) — PREVIEW of what would go out when open:");
             }
             $this->run1($t, $wa, $owners, $quotesOn, $chatsOn);
         }

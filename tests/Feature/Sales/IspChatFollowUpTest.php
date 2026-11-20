@@ -151,6 +151,27 @@ class IspChatFollowUpTest extends TestCase
         $this->assertSame('Hello Peter, this is Akol Deng from ' . $t->name . '. I hope you are well! Do you have any other questions about your quotation Q-P? When you are ready, I can arrange the site survey and the installation for you.', $this->gw->sent[0][1]);
     }
 
+    /** A preview (--dry) sends nothing, so it shows what would go out even while the office is closed. */
+    public function test_a_preview_works_while_closed_and_sends_nothing(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        \Illuminate\Support\Carbon::setTestNow(\Illuminate\Support\Carbon::parse('2026-11-22 07:20', 'Africa/Juba'));   // Sunday morning
+        try {
+            $t = $this->business(['business_hours' => 'Mon-Sat 9 AM - 6 PM']);
+            $this->line($t, 'in', 'How much is Starlink?', 30);
+            $this->line($t, 'out', 'Which area are you in?', 29.9);
+
+            $this->artisan('isp:quote-followup', ['--tenant' => $t->id, '--dry' => true, '--no-pause' => true])
+                ->expectsOutputToContain('closed now (Sun 07:20 Africa/Juba, hours: Mon-Sat 9 AM - 6 PM) — PREVIEW')
+                ->expectsOutputToContain('[DRY] quiet chat, touch 1 → +' . self::CUSTOMER)
+                ->assertSuccessful();
+        } finally {
+            \Illuminate\Support\Carbon::setTestNow();
+        }
+        $this->assertSame([], $this->gw->sent);
+        Bus::assertNotDispatched(NotifyOwner::class);
+    }
+
     public function test_switched_off_or_closed(): void
     {
         Bus::fake([NotifyOwner::class]);
