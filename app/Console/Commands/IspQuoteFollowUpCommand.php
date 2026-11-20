@@ -217,6 +217,9 @@ class IspQuoteFollowUpCommand extends Command
             $why = $c['skip'] ?? (ChatFollowUp::notACustomer($texts) ? 'not_a_customer'
                 : ($c['segment'] === 'existing_customer' ? 'support_chat'
                 : (! ChatFollowUp::salesEnquiry($c['segment'], $c['signals']) ? 'no_sales_question' : null)));
+            // Already a customer, or a deal that is decided: never asked "shall I prepare your quotation?"
+            // (live, 20 Nov: "It's all been done. The technician is to come back today").
+            $why ??= $this->alreadyDecided($t, $phone);
             $why ??= $this->blocked($t, (new \DateTimeImmutable())->setTimestamp($lastIn), $phone, $skip);
             if ($why !== null) {
                 BotTrace::log($t->id, 'isp_followup', $phone, 'chat_held', $why . ' · touch ' . $touch);   // stage holds 24 characters
@@ -294,6 +297,23 @@ class IspQuoteFollowUpCommand extends Command
             $this->warn('  ' . count($owed) . ' chat(s) where the customer wrote last and nobody has answered: '
                 . implode(', ', array_map(fn ($p, $at) => '+' . $p . ' (' . date('j M H:i', $at) . ')', array_keys(array_slice($owed, 0, 10, true)), array_slice($owed, 0, 10, true))));
         }
+    }
+
+    /** Stages where a sales follow-up no longer fits: decided, being installed, installed, or lost. */
+    public const DECIDED_STAGES = ['won', 'installation', 'active', 'lost'];
+
+    /** 'has_order' / 'stage_<stage>' when the customer already bought or the deal is decided; null otherwise. */
+    private function alreadyDecided(Tenant $t, string $phone): ?string
+    {
+        $stage = \App\Models\Lead::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)
+            ->whereIn('stage', self::DECIDED_STAGES)->orderByDesc('id')->value('stage');
+        if ($stage !== null) {
+            return 'stage_' . $stage;
+        }
+        $ordered = \App\Models\Order::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)
+            ->whereNotIn('status', ['cancelled', 'void'])->exists();
+
+        return $ordered ? 'has_order' : null;
     }
 
     /** Why this customer must not get a follow-up now, or null. */

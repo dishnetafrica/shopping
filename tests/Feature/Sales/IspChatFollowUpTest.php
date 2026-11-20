@@ -195,6 +195,26 @@ class IspChatFollowUpTest extends TestCase
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => str_contains($j->text, '(2):') && str_contains($j->text, '+211911000103 — Starlink') && str_contains($j->text, '+211911000102 — Fiber'));
     }
 
+    /** Live, 20 Nov: "It's all been done. The technician is to come back today" — never ask a buyer "shall I quote?". */
+    public function test_a_customer_who_already_bought_or_whose_deal_is_decided_is_not_chased(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        foreach (['211911000201', '211911000202', '211911000203'] as $p) {
+            $this->line($t, 'in', 'I want fiber installed at my house', 30, $p);
+            $this->line($t, 'out', 'Great! Which area?', 29.9, $p);
+        }
+        \App\Models\Lead::create(['tenant_id' => $t->id, 'customer_phone' => '211911000201', 'source' => 'whatsapp', 'status' => 'assigned', 'stage' => 'installation']);
+        \App\Models\Order::create(['tenant_id' => $t->id, 'order_no' => 'ORD-T' . substr(md5(uniqid('', true)), 0, 6), 'customer_name' => 'Deng', 'customer_phone' => '211911000202', 'total' => 550, 'status' => 'Delivered', 'channel' => 'whatsapp']);
+
+        $this->run1($t);
+
+        $this->assertSame(['211911000203'], array_column($this->gw->sent, 0), 'only the one with no order and no decided deal');
+        $held = \DB::table('bot_events')->where('stage', 'chat_held')->pluck('detail', 'phone')->all();
+        $this->assertStringStartsWith('stage_installation', $held['211911000201'] ?? '');
+        $this->assertStringStartsWith('has_order', $held['211911000202'] ?? '');
+    }
+
     public function test_switched_off_or_closed(): void
     {
         Bus::fake([NotifyOwner::class]);
