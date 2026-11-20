@@ -92,12 +92,14 @@ class IspChatFollowUpTest extends TestCase
 
         // Day 4, still quiet: the second (last) touch. Our follow-up 3 days ago is moved back with the rest.
         Message::where('customer_phone', self::CUSTOMER)->get()->each(fn ($m) => $m->forceFill(['created_at' => $m->created_at->subDays(3)])->save());
+        \App\Models\CustomerProfile::where('phone', self::CUSTOMER)->update(['last_contacted_at' => now()->subDays(3)]);
         $c = Conversation::where('customer_phone', self::CUSTOMER)->first();
         $c->state = ['isp_chat_followups' => [now()->subDays(3)->toIso8601String()]];
         $c->save();
         $this->run1($t);
         $this->assertCount(2, $this->gw->sent);
         $this->assertStringContainsString('I will not disturb you again', $this->gw->sent[1][1]);
+        $this->assertSame(['chat_sent', 'touch 2 · warm'], [\DB::table('bot_events')->where('phone', self::CUSTOMER)->latest('id')->value('stage'), \DB::table('bot_events')->where('phone', self::CUSTOMER)->latest('id')->value('detail')], 'the step log is written');
 
         Message::where('customer_phone', self::CUSTOMER)->get()->each(fn ($m) => $m->forceFill(['created_at' => $m->created_at->subDays(2)])->save());
         $this->run1($t);

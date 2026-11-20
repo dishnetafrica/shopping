@@ -212,7 +212,7 @@ class IspQuoteFollowUpCommand extends Command
                 : (! ChatFollowUp::salesEnquiry($c['segment'], $c['signals']) ? 'no_sales_question' : null)));
             $why ??= $this->blocked($t, (new \DateTimeImmutable())->setTimestamp($lastIn), $phone, $skip);
             if ($why !== null) {
-                BotTrace::log($t->id, 'isp_followup', $phone, 'chat_held_' . $why, 'touch ' . $touch);
+                BotTrace::log($t->id, 'isp_followup', $phone, 'chat_held', $why . ' · touch ' . $touch);   // stage holds 24 characters
                 continue;
             }
             if ($usedToday + $sent >= $cap) {
@@ -258,7 +258,7 @@ class IspQuoteFollowUpCommand extends Command
                 NotifyOwner::dispatch($t->id, "\u{1F4E8} Followed up " . ($name && preg_match('/\p{L}/u', (string) $name) ? $name . ' ' : '') . CallbackNumber::label($t, $phone)
                     . " — they asked about {$what} on " . date('j M', $lastIn) . " and went quiet (touch {$touch} of 2). If they reply, take it from there.", (string) $n);
             }
-            BotTrace::log($t->id, 'isp_followup', $phone, 'chat_sent_touch_' . $touch, (string) $c['segment']);
+            BotTrace::log($t->id, 'isp_followup', $phone, 'chat_sent', 'touch ' . $touch . ' · ' . $c['segment']);
             $sent++;
         }
         $this->info("{$t->name}: followed up {$sent} quiet chat(s)");
