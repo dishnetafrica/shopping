@@ -63,7 +63,7 @@ final class CustomerQuestions
             ['Equipment', 'What if the dish is damaged, struck by lightning or stolen?', 'missing', ''],
             ['Equipment', 'I bought a Starlink kit abroad — can you activate it or give me service on it?', 'missing', ''],
             ['Equipment', 'Is a Wi-Fi router included with Starlink, and does the Wi-Fi reach my whole house or compound?', 'partly', 'fibre includes a router; Starlink and range are not stated'],
-            ['Equipment', 'Can I take the kit with me when I travel or move town?', 'covered', 'Roam plan; Residential address can be updated'],
+            ['Equipment', 'Can I take the kit with me when I travel or move town?', 'covered', 'Residential address can be updated'],
 
             // Contract, documents, cancelling
             ['Contract and sign-up', 'Is there a contract or a minimum period?', 'partly', 'UISP terms draft: 6 months Starlink, 3 months fibre — not yet approved'],

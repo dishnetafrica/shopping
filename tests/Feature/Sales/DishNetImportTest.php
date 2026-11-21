@@ -41,7 +41,7 @@ class DishNetImportTest extends TestCase
         $this->artisan('sales-brain:import-dishnet-bot', ['tenant' => $t->id])->assertExitCode(0);   // second run: nothing new
 
         $products = Product::withoutGlobalScopes()->where('tenant_id', $t->id)->get();
-        $this->assertCount(13, $products);
+        $this->assertCount(12, $products, 'Starlink Roam is discontinued (21 Nov 2026)');
         $this->assertSame([false], $products->pluck('active')->unique()->values()->all(), 'every product is switched off');
         $plan = $products->firstWhere('name', 'Fiber Standard 40 Mbps');
         $this->assertSame(['monthly', 'fiber', 75.0], [$plan->billing, $plan->service_line, (float) $plan->price]);

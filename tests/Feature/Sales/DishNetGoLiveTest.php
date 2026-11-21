@@ -57,7 +57,7 @@ class DishNetGoLiveTest extends TestCase
         $live = $this->live($t);
         $this->assertCount(15, $live);
         $this->assertNotContains('faq/customer-questions', $live, 'customer questions stay a draft');
-        $this->assertSame(13, Product::withoutGlobalScopes()->where('tenant_id', $t->id)->where('active', true)->count());
+        $this->assertSame(12, Product::withoutGlobalScopes()->where('tenant_id', $t->id)->where('active', true)->count());
 
         $brain = app(SalesBrain::class);
         $starlink = collect($brain->quoteTerms($t, ['starlink'])[0]['items'])->pluck('text')->implode(' ');
