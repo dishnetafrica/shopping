@@ -93,14 +93,26 @@ class SalesRetirePlanCommand extends Command
         $published = SalesKnowledgeVersion::withoutGlobalScopes()->where('tenant_id', $t->id)->where('status', 'published')->get();
         $found = 0;
         foreach ($published as $ver) {
+            $entry = SalesKnowledgeEntry::withoutGlobalScopes()->find($ver->entry_id);
+            if (! $entry) {
+                continue;
+            }
             $body = (string) $ver->body;
-            if (! RetireMention::mentions($body, $word)) {
+            // Title, text and structured data (quotation terms print from their items): Codex on #174.
+            if (! RetireMention::entryMentions((string) $entry->title, $body, $ver->data, $word)) {
                 continue;
             }
             $found++;
-            $entry = SalesKnowledgeEntry::withoutGlobalScopes()->find($ver->entry_id);
+            $title = trim(RetireMention::scrub((string) $entry->title, $word));
+            $title = $title !== '' ? rtrim($title, '.') : (string) $entry->title;
             $new = RetireMention::scrub($body, $word);
-            $this->line("  knowledge: {$entry->topic}/{$entry->key} \"{$entry->title}\"");
+            $data = RetireMention::scrubData($ver->data, $word);
+            // Terms whose text is just their numbered items: let the items write it again (SalesBrain does).
+            if ($entry->topic === 'terms' && is_array($ver->data) && trim($body) === \App\Services\Sales\Brain\Knowledge::termsText($ver->data)) {
+                $new = is_array($data) && ! empty($data['items']) ? \App\Services\Sales\Brain\Knowledge::termsText($data) : '';
+            }
+            $empty = trim($new) === '' && (! is_array($data) || $data === [] || (array_key_exists('items', $data) && empty($data['items'])));
+            $this->line("  knowledge: {$entry->topic}/{$entry->key} \"{$entry->title}\"" . ($title !== $entry->title ? " → title \"{$title}\"" : ''));
             $old = explode("\n", $body);
             $now = explode("\n", $new);
             foreach (array_diff($old, $now) as $l) {
@@ -109,10 +121,21 @@ class SalesRetirePlanCommand extends Command
             foreach (array_diff($now, $old) as $l) {
                 $this->line('    + ' . $l);
             }
+            if ($data !== $ver->data) {
+                $this->line('    (its structured items change too)');
+            }
+            if ($empty) {
+                $this->line('    nothing is left: the entry ' . ($apply ? 'is retired' : 'would be retired') . ', not republished');
+            }
             if (! $apply) {
                 continue;
             }
-            $r = $brain->startVersion($t, $by, $entry->topic, $entry->key, $entry->title, $new, $ver->data, "retire:{$word}", [],
+            if ($empty) {
+                $r = $brain->retire($t, $by, (int) $ver->id, "\"{$word}\" discontinued");
+                ($r['ok'] ?? false) ? $this->info('    retired') : $this->warn('    retire refused: ' . ($r['message'] ?? $r['error'] ?? '?'));
+                continue;
+            }
+            $r = $brain->startVersion($t, $by, $entry->topic, $entry->key, $title, $new, $data, "retire:{$word}", [],
                 "Removed \"{$word}\": discontinued.");
             if (! ($r['ok'] ?? false)) {
                 $this->warn('    not changed: ' . ($r['message'] ?? $r['error'] ?? 'refused'));

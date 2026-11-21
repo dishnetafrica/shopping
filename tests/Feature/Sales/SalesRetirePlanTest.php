@@ -82,6 +82,31 @@ class SalesRetirePlanTest extends TestCase
             ->assertSuccessful();
     }
 
+    /** Codex on #174: quotation terms print from their items, the bot reads titles, and an entry may be only the plan. */
+    public function test_terms_items_titles_and_entries_that_were_only_the_plan(): void
+    {
+        [$t, $mgr] = $this->business();
+        $brain = app(SalesBrain::class);
+        $publish = function (string $topic, string $key, string $title, ?string $body, $data = null) use ($brain, $t, $mgr) {
+            $v = $brain->startVersion($t, $mgr, $topic, $key, $title, $body, $data);
+            $this->assertTrue($v['ok'] ?? false, json_encode($v));
+            $brain->approve($t, $mgr, $v['version_id']);
+            $brain->publish($t, $mgr, $v['version_id']);
+        };
+        $publish('terms', 'starlink', 'Starlink terms', null, ['title' => 'Starlink terms', 'items' => [
+            ['label' => 'Plans', 'text' => 'Residential is unlimited.'], ['label' => 'Roam', 'text' => 'Roam plan billed monthly.']]]);
+        $publish('objections', 'moving', 'Residential / Roam moves', 'Tell them the service address can be updated.');
+        $publish('objections', 'roam', 'Roam plan', 'Roam costs more than Residential.');
+
+        $this->artisan('sales:retire-plan', ['tenant' => $t->id, 'word' => 'Roam', '--by' => $mgr->id, '--apply' => true])->assertSuccessful();
+
+        $terms = $brain->published($t, 'terms');
+        $this->assertSame([['label' => 'Plans', 'text' => 'Residential is unlimited.']], $terms[0]['data']['items'], 'the Roam term is gone from what quotations print');
+        $obj = collect($brain->published($t, 'objections'))->keyBy('key');
+        $this->assertSame('Residential moves', $obj['moving']['title'] ?? null, 'a title naming it is cleaned');
+        $this->assertArrayNotHasKey('roam', $obj->all(), 'an entry that was only the plan is retired, not republished empty');
+    }
+
     public function test_only_an_owner_or_manager_may_apply_it(): void
     {
         [$t, , $sales] = $this->business();

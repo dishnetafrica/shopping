@@ -37,7 +37,8 @@ final class RetireMention
                 $out[] = $line;
                 continue;
             }
-            $sentences = preg_split('/(?<=[.!?])\s+/u', trim($line)) ?: [];
+            // Never split after a list number ("2. Roam: …" is one sentence, not "2." and "Roam: …").
+            $sentences = preg_split('/(?<=\D[.!?])\s+/u', trim($line)) ?: [];
             $kept = [];
             foreach ($sentences as $s) {
                 // "for roaming / mobile use" → "for mobile use": drop only the alternative that is retired.
@@ -59,6 +60,39 @@ final class RetireMention
         }
 
         return implode("\n", $out);
+    }
+
+    /**
+     * PURE. Structured knowledge (quotation terms items, lists) without the word: every string is scrubbed, and a
+     * list item left empty — a string, or a term whose text is gone — is dropped (Codex on #174: terms print from
+     * their items, not from the body).
+     */
+    public static function scrubData($data, string $word)
+    {
+        if (is_string($data)) {
+            return self::scrub($data, $word);
+        }
+        if (! is_array($data)) {
+            return $data;
+        }
+        $isList = array_is_list($data);
+        $out = [];
+        foreach ($data as $k => $v) {
+            $v = self::scrubData($v, $word);
+            if ($isList && ($v === '' || (is_array($v) && array_key_exists('text', $v) && trim((string) $v['text']) === ''))) {
+                continue;
+            }
+            $out[$k] = $v;
+        }
+
+        return $isList ? array_values($out) : $out;
+    }
+
+    /** PURE. Does a knowledge entry mention the word anywhere the bot or a quotation reads it — title, text or data? */
+    public static function entryMentions(string $title, ?string $body, $data, string $word): bool
+    {
+        return self::mentions($title, $word) || self::mentions((string) $body, $word)
+            || self::mentions((string) json_encode($data, JSON_UNESCAPED_UNICODE), $word);
     }
 
     /** Capital first letter and a full stop, after parts were cut out. */
