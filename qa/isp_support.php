@@ -32,7 +32,9 @@ chk('training questions are never customer knowledge', C::fromKnowledge([['topic
 echo "== what the model is told\n";
 $r = C::rule($c);
 chk('give the number in the first reply', [str_contains($r, 'In your FIRST reply give them the number now: Technical Support: +211 921 443 002 (Mon–Sun 7 AM – 10 PM)'), str_contains($r, 'call or WhatsApp it')], [true, true]);
-chk('support keeps its own hours: no "outside business hours" / "tomorrow"', [str_contains($r, 'the OFFICE HOURS rule is for sales only'), str_contains($r, 'outside business hours'), str_contains($r, 'unless the time is outside Mon–Sun 7 AM – 10 PM')], [true, true, true]);
+chk('support keeps its own hours: no "outside business hours" / "tomorrow"', [str_contains($r, 'the OFFICE HOURS rule is for sales only'), str_contains($r, 'never say yourself when support is open, closed, "outside business hours" or available tomorrow')], [true, true]);
+chk('…with no exception: support\'s next opening is not the sales office\'s (Codex on #176)', [str_contains($r, 'unless'), str_contains(C::rule(null), 'unless')], [false, false]);
+chk('the hours go with the number, as written', str_contains($r, 'Give the support hours exactly as written with the number'), true);
 chk('no troubleshooting, no "connect you", no "note your request"', [str_contains($r, 'Do not troubleshoot'), str_contains($r, 'do not offer to connect them, pass it on or note their request')], [true, true]);
 chk('no number published: from the knowledge, never invented', str_contains(C::rule(null), 'Technical Support contact written in APPROVED SALES KNOWLEDGE (never make one up)'), true);
 chk('the sales hours rule says it is for sales only', str_contains(S::rules(), 'OFFICE HOURS (sales only; Technical Support keeps its own, see SUPPORT)'), true);

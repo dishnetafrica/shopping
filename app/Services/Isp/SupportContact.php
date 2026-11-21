@@ -52,7 +52,8 @@ final class SupportContact
             : 'give them the Technical Support contact written in APPROVED SALES KNOWLEDGE (never make one up)';
 
         return "- SUPPORT: an existing customer reporting a problem (internet down or slow, Wi-Fi or router not working, red light, password, account, renewal) needs Technical Support, not sales. In your FIRST reply {$give}. "
-            . "Support keeps its own hours: the OFFICE HOURS rule is for sales only, so never tell them support is closed, \"outside business hours\" or available tomorrow" . ($c !== null && $c['hours'] !== '' ? ' unless the time is outside ' . $c['hours'] : '') . '. '
+            // No "available tomorrow" ever: support's next opening is not the sales office's (Codex on #176).
+            . "Support keeps its own hours: the OFFICE HOURS rule is for sales only. Give the support hours exactly as written with the number, and never say yourself when support is open, closed, \"outside business hours\" or available tomorrow. "
             . "Do not troubleshoot, do not ask for their location or account details, and do not offer to connect them, pass it on or note their request. Then ask if there is anything else you can help with.\n";
     }
 
