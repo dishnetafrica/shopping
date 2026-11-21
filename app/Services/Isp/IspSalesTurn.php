@@ -36,7 +36,7 @@ class IspSalesTurn
             $published = [];
         }
 
-        return self::rules() . (IspAutoQuote::enabled($tenant) ? self::quoteRules((bool) $tenant->setting('isp_starlink_plan_needs_kit', true)) : self::HANDOFF_RULE) . self::knowledgeBlock($published);
+        return self::rules() . SupportContact::rule(SupportContact::fromKnowledge($published)) . (IspAutoQuote::enabled($tenant) ? self::quoteRules((bool) $tenant->setting('isp_starlink_plan_needs_kit', true)) : self::HANDOFF_RULE) . self::knowledgeBlock($published);
     }
 
     /**
@@ -56,6 +56,24 @@ class IspSalesTurn
         }
 
         return self::CALLBACK_RULE;
+    }
+
+    /**
+     * Per turn: when the sales office is closed, the exact words for when it opens ("today at 9:00 AM").
+     * Live, 21 Nov 2026: on a Saturday morning before 9 the model turned "Next opening: Saturday, 9:00 AM"
+     * into "tomorrow at 9:00 AM" — a Sunday, when the office is closed. '' while it is open or hours are unset.
+     */
+    public static function openingBlock(Tenant $tenant): string
+    {
+        $opens = self::opensAt($tenant);
+
+        return $opens === null ? '' : self::openingLine($opens);
+    }
+
+    /** PURE. */
+    public static function openingLine(string $opens): string
+    {
+        return "\nSALES OFFICE NOW: closed. It opens {$opens}. When you say when the salesperson will contact them, use exactly \"{$opens}\" — do not work out the day yourself. (Technical Support keeps its own hours: see SUPPORT.)\n";
     }
 
     public const CALLBACK_RULE = "\nCUSTOMER'S PHONE NUMBER: WhatsApp hides this customer's phone number, so their salesperson cannot call them from this chat. The first time you say someone will call, contact or visit them (or they ask for a call), also ask ONE short question: the best phone number to reach them on. Ask only once; if they prefer not to give it, carry on in the chat.\n";
@@ -83,9 +101,15 @@ class IspSalesTurn
                 }
             }
 
-            $this->alertPromise($tenant, $from, $customerText, $g['reply']);
+            // Sent to support without the number (live, 21 Nov 2026): the published number is added.
+            $out = SupportContact::ensure($g['reply'], SupportContact::fromKnowledge($published));
+            if ($out !== $g['reply']) {
+                BotTrace::log($tenant->id, 'isp', $from, 'isp_support_added', 'support number added to the reply');
+            }
 
-            return $g['reply'];
+            $this->alertPromise($tenant, $from, $customerText, $out);
+
+            return $out;
         } catch (\Throwable $e) {
             report($e);
 
@@ -140,7 +164,7 @@ class IspSalesTurn
             . "- ONLY APPROVED INFORMATION: prices, packages, speeds, installation fees, contract terms, coverage and timelines come ONLY from APPROVED SALES KNOWLEDGE and PRODUCTS. If something is not written there, do not guess and do not use general knowledge about other countries or providers: say their salesperson will confirm it.\n"
             . "- COVERAGE: say a place is covered ONLY if COVERAGE below lists it as covered. Anywhere else, say a site survey is needed to confirm. Never say \"we cover your area\" otherwise.\n"
             . "- Never promise a discount, free installation, a speed, an uptime figure or an installation date that is not written below.\n"
-            . "- OFFICE HOURS: when CURRENT TIME says \"Open right now: NO\", never say anyone will call, reply or visit now, shortly or today. Say their salesperson will contact them when the office opens, giving the day and time from \"Next opening\" (e.g. \"tomorrow at 9:00 AM\"). You keep answering their questions meanwhile.\n";
+            . "- OFFICE HOURS (sales only; Technical Support keeps its own, see SUPPORT): when CURRENT TIME says \"Open right now: NO\", never say anyone will call, reply or visit now, shortly or today. Say their salesperson will contact them when the office opens, in the exact words of SALES OFFICE NOW (e.g. \"today at 9:00 AM\"). You keep answering their questions meanwhile.\n";
     }
 
     /**
