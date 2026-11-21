@@ -45,7 +45,7 @@ echo "== prices live in the catalogue only\n";
 $text = implode("\n", array_map(fn ($e) => is_string($e[3]) ? $e[3] : '', $k));
 chk('no money amount in any knowledge text', ReplyGuard::amounts($text), []);
 $p = D::products();
-chk('13 priced products, each one-time or monthly', [count($p), array_values(array_unique(array_map(fn ($x) => in_array($x['billing'], ['one_off', 'monthly'], true), $p)))], [13, [true]]);
+chk('12 priced products (Roam retired), each one-time or monthly', [count($p), array_values(array_unique(array_map(fn ($x) => in_array($x['billing'], ['one_off', 'monthly'], true), $p)))], [12, [true]]);
 chk('no Priority product (the text gives no price)', count(array_filter($p, fn ($x) => stripos($x['name'], 'priority') !== false)), 0);
 chk('prices as written: Mini 400, Standard 550, Residential 50 monthly, Fiber Standard 75 monthly, fibre installation 150', array_map(fn ($n) => [current(array_filter($p, fn ($x) => $x['name'] === $n))['price'], current(array_filter($p, fn ($x) => $x['name'] === $n))['billing']],
     ['Starlink Mini (Gen 4)', 'Starlink Standard', 'Starlink Residential Plan', 'Fiber Standard 40 Mbps', 'Fiber Installation (includes Wi-Fi router)']),
