@@ -64,6 +64,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('isp_chat_followup.php');
     }
 
+    public function test_a_discontinued_plan_leaves_sales_knowledge_and_nothing_else_does(): void
+    {
+        $this->harness('retire_mention.php');
+    }
+
     public function test_sales_knowledge_is_governed_and_coverage_defaults_to_survey(): void
     {
         $this->harness('sales_brain.php');

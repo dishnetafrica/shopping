@@ -31,7 +31,7 @@ final class DishNetBotImport
     private const Q_COVERAGE = 'Confirm this list matches https://dishnetafrica.com/coverage.html today. "Covered" means the bot will tell a customer fibre is available there.';
     private const Q_HANDOVER = 'Handover promise: this text tells the customer "our Sales team will reach out from +211 923 400 000 within the hour". Can the team keep "within the hour" (including evenings and Sundays)?';
 
-    /** Catalogue items with a price in the text. Priority (no price) is not created. */
+    /** Catalogue items with a price in the text. Priority (no price) is not created. Roam: discontinued (21 Nov 2026). */
     public static function products(): array
     {
         return [
@@ -42,8 +42,7 @@ final class DishNetBotImport
             ['name' => 'Starlink Mini (Gen 4)', 'price' => 400, 'billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink hardware', 'description' => 'Individuals, portable use, smaller and most small-business setups. Suggested first.'],
             ['name' => 'Starlink Standard', 'price' => 550, 'billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink hardware', 'description' => 'Households, offices, hotspot setups with 30+ users.'],
             ['name' => 'Starlink Residential Plan', 'price' => 50, 'billing' => 'monthly', 'service_line' => 'starlink', 'category' => 'Starlink plans', 'description' => 'Unlimited. Default plan: personal use, small offices, shops, cafés and hotspots up to about 50 active users.'],
-            ['name' => 'Starlink Roam Plan', 'price' => 80, 'billing' => 'monthly', 'service_line' => 'starlink', 'category' => 'Starlink plans', 'description' => 'For roaming / moving between locations. Separate from Residential.'],
-            ['name' => 'Starlink Car Adaptor with cable', 'price' => 160, 'billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink accessories', 'description' => 'For roaming / mobile use.'],
+            ['name' => 'Starlink Car Adaptor with cable', 'price' => 160, 'billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink accessories', 'description' => 'For mobile use.'],
             ['name' => 'Anker SOLIX C200 DC Power Bank Station', 'price' => 330, 'billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink accessories', 'description' => 'Power bank for the Starlink Mini.'],
             ['name' => 'MikroTik RB951Ui-2HnD Router', 'price' => 150, 'billing' => 'one_off', 'service_line' => null, 'category' => 'Networking', 'description' => 'SOHO router, built-in 2.4GHz Wi-Fi, 5 ports, PoE-out, USB for a 3G/4G modem. Standard client router for homes and small offices.'],
             ['name' => 'Ubiquiti NanoStation M2', 'price' => 150, 'billing' => 'one_off', 'service_line' => null, 'category' => 'Networking', 'description' => 'Outdoor range extension.'],
@@ -101,7 +100,7 @@ TXT, [self::Q_UPTIME, self::Q_EQUIPMENT, self::Q_INSTALL_TIME]],
 
             ['starlink', 'service', 'Starlink service', <<<'TXT'
 Hardware: suggest the Starlink Mini first (lower price, portable, fits individuals and most small-business setups). Suggest the Standard only if the customer asks for it, describes heavy multi-user use (large household, office with many simultaneous video calls) or a hotspot expecting 30+ concurrent users.
-Plans: Residential is the default for almost everyone — personal use, small offices, shops, cafés and hotspots up to about 50 active users, in Juba or outside. Priority plans only for 50+ active users or heavy commercial multi-streaming, or if the customer asks; for a "business plan" question, first ask how many users. Roam is a separate plan for roaming / moving between locations (with the car adaptor for mobile use). Residential is tied to the service address, which can be updated.
+Plans: Residential is the default for almost everyone — personal use, small offices, shops, cafés and hotspots up to about 50 active users, in Juba or outside. Priority plans only for 50+ active users or heavy commercial multi-streaming, or if the customer asks; for a "business plan" question, first ask how many users. Residential is tied to the service address, which can be updated.
 Installation: free in Juba. Outside Juba: free service installation; the customer provides the technician's round-trip travel and accommodation. On-site work takes 1–2 hours.
 Works anywhere with a clear view of the sky; dense canopy or deep valleys may need a site assessment. Reaches all 10 South Sudan states where the sky is clear. Latency typically 25–50 ms.
 TXT, [self::Q_EQUIPMENT, self::Q_ROOF, self::Q_PRIORITY, self::Q_INSTALL_TIME]],
@@ -131,7 +130,7 @@ Upload speed on fibre? Symmetric — the same as download (Fiber 40 = 40 down + 
 Latency? Fibre typically 5–20 ms within Juba; Starlink typically 25–50 ms.
 Static / public IP? Yes — the Public IP add-on (monthly), for CCTV, remote access, hosting.
 Will Starlink work in a remote area? Anywhere with clear sky; dense canopy or deep valleys may need a site assessment.
-Can I move Starlink between locations? Roam plan yes; Residential is tied to the service address but it can be updated.
+Can I move Starlink between locations? Residential is tied to the service address but it can be updated.
 Free trial? No. Hardware is tested at installation/delivery.
 NGO, diplomat or corporate discounts? Same pricing for everyone; we serve NGOs and embassies at standard pricing.
 Authorized Starlink reseller? Yes — https://dishnetafrica.com/about.html
