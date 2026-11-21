@@ -24,6 +24,7 @@ use App\Support\QuotationPipeline;
  *   3. QuotationService draws the Internet-provider PDF (one-time and monthly totals apart, terms only
  *      if published) and saves it, prepared by the customer's salesperson;
  *   4. the customer gets the PDF with a short summary, and the salesperson gets an alert to call.
+ * A Starlink plan without a kit is never quoted (no subscription alone): the bot asks which kit.
  * When it cannot quote (an unknown product, a large job, no PDF engine), nothing is priced: the
  * customer is told their salesperson will prepare it, and the salesperson is alerted with the request.
  * Switch off with the tenant setting isp_auto_quote = false (the marker is then just removed).
@@ -57,7 +58,15 @@ class IspAutoQuote
 
         try {
             $catalogue = $this->catalogue($tenant);
-            $plan = IspQuotePlan::plan(IspQuotePlan::items($block), $catalogue);
+            $plan = IspQuotePlan::plan(IspQuotePlan::items($block), $catalogue, (bool) $tenant->setting('isp_starlink_plan_needs_kit', true));
+            // A Starlink plan with no kit: no subscription alone (DishNet, 21 Nov 2026). The customer chooses
+            // the kit — the bot asks, nothing is priced, nobody needs alerting yet.
+            $kits = IspQuotePlan::kits($catalogue);
+            if ($plan['reason'] === 'no_kit' && $kits) {
+                QuotationPipeline::stage($tenant->id, $from, 'isp_no_kit', false, '', 'plan without a kit: asked which kit');
+
+                return ['reply' => trim(self::withoutQuoteClaims($clean) . "\n\n" . IspQuotePlan::kitQuestion($kits)), 'sent' => false];
+            }
             if (! $plan['ok']) {
                 $asked = implode(', ', array_map(fn ($i) => $i['qty'] . ' x ' . $i['name'], IspQuotePlan::items($block)));
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', $plan['reason'] . ': ' . mb_substr($asked, 0, 200));
@@ -218,7 +227,7 @@ class IspAutoQuote
             if (Visibility::isHidden((string) ($p->category ?? ''), $p->hidden ?? null, $hidden)) {
                 continue;
             }
-            $out[(string) $p->name] = ['billing' => $p->billing, 'service_line' => $p->service_line];
+            $out[(string) $p->name] = ['billing' => $p->billing, 'service_line' => $p->service_line, 'category' => $p->category];
         }
 
         return $out;

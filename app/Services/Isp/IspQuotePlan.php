@@ -12,7 +12,10 @@ namespace App\Services\Isp;
  *   - a Fiber monthly plan is always quoted with the Fiber one-time installation, as the published
  *     plans page shows it ("installation one-time + plan per month"), when there is exactly one such
  *     product — never a different charge;
- *   - a large quantity is a custom job for the salesperson, not an automatic quotation.
+ *   - a large quantity is a custom job for the salesperson, not an automatic quotation;
+ *   - a Starlink monthly plan is never quoted on its own: every plan goes with a Starlink kit (DishNet,
+ *     21 Nov 2026: "we have to submit the quotation with hardware, Standard kit or Mini kit — we don't
+ *     offer subscription only"). Without one the bot asks which kit; it never picks one for them.
  * It never sets a price: prices come from the catalogue when the quotation is priced.
  */
 final class IspQuotePlan
@@ -88,11 +91,12 @@ final class IspQuotePlan
 
     /**
      * @param list<array{name:string,qty:int}> $items  from items()
-     * @param array<string,array{billing:?string,service_line:?string}> $catalogue  visible priced products by exact name
+     * @param array<string,array{billing:?string,service_line:?string,category?:?string}> $catalogue  visible priced products by exact name
+     * @param bool $planNeedsKit  a Starlink plan only with a kit (tenant setting isp_starlink_plan_needs_kit, default on)
      * @return array{ok:bool,reason:string,lines:list<array{name:string,qty:int}>,unknown:string[],added:string[]}
-     *         reason: '' | no_items | unknown | too_many
+     *         reason: '' | no_items | unknown | too_many | no_kit
      */
-    public static function plan(array $items, array $catalogue): array
+    public static function plan(array $items, array $catalogue, bool $planNeedsKit = true): array
     {
         $names = array_keys($catalogue);
         $lines = [];
@@ -127,6 +131,23 @@ final class IspQuotePlan
             }
         }
 
+        // Starlink: no subscription alone. As many kits as plans (each kit has its own plan); never a kit
+        // chosen for the customer here — Mini or Standard is their choice, so the bot asks.
+        if ($planNeedsKit) {
+            $plans = $kits = 0;
+            foreach ($lines as $l) {
+                $p = $catalogue[$l['name']] ?? [];
+                if (($p['service_line'] ?? null) === 'starlink' && ($p['billing'] ?? null) === 'monthly') {
+                    $plans += $l['qty'];
+                } elseif (self::isKit($l['name'], $p)) {
+                    $kits += $l['qty'];
+                }
+            }
+            if ($plans > 0 && $kits < $plans) {
+                return $out(false, 'no_kit');
+            }
+        }
+
         // Fiber: the monthly plan comes with the one-time installation, as on the published plans page.
         // A fiber PLAN is a monthly fiber product named as one ("Fiber Basic 20 Mbps"), so a monthly
         // add-on such as a public IP address never brings an installation with it.
@@ -143,6 +164,47 @@ final class IspQuotePlan
         }
 
         return $out(true, '', $added);
+    }
+
+    /**
+     * PURE. Is this catalogue product a Starlink KIT (the dish: Mini, Standard…), not an accessory sold for
+     * one (car adaptor, power bank, cable, mount)? A one-time Starlink product in a "hardware"/"kit"
+     * category, or named as a kit, Mini or Standard.
+     *
+     * @param array{billing:?string,service_line:?string,category?:?string} $p
+     */
+    public static function isKit(string $name, array $p): bool
+    {
+        if (($p['service_line'] ?? null) !== 'starlink' || ($p['billing'] ?? null) !== 'one_off') {
+            return false;
+        }
+        $category = (string) ($p['category'] ?? '');
+        if (preg_match('/accessor/i', $category)
+            || preg_match('/\b(adapt\w*|power|bank|batter\w*|cables?|mounts?|pipe|brackets?|routers?|mesh|bags?|case|install\w*|extension)\b/i', $name)) {
+            return false;
+        }
+
+        return (bool) preg_match('/hardware|kits?\b/i', $category) || (bool) preg_match('/\b(kits?|mini|standard)\b/i', $name);
+    }
+
+    /**
+     * PURE. The kits the customer can choose from, by exact name.
+     *
+     * @return string[]
+     */
+    public static function kits(array $catalogue): array
+    {
+        return array_values(array_filter(array_keys($catalogue), fn ($n) => self::isKit((string) $n, $catalogue[$n])));
+    }
+
+    /** PURE. What the customer reads when they asked for a Starlink plan without a kit. */
+    public static function kitQuestion(array $kits): string
+    {
+        $k = array_map(fn ($n) => '*' . $n . '*', $kits);
+        $choice = count($k) > 1 ? implode(', ', array_slice($k, 0, -1)) . ' or ' . end($k) : ($k[0] ?? '');
+
+        return 'Our Starlink plans come with a Starlink kit: we do not offer the subscription on its own. '
+            . (count($k) > 1 ? "Which kit would you like on your quotation, the {$choice}?" : "Shall I put the {$choice} on your quotation with the plan?");
     }
 
     /**

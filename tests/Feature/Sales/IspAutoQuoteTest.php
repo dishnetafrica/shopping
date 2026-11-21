@@ -117,6 +117,31 @@ class IspAutoQuoteTest extends TestCase
         $this->assertSame([], $gw->texts, 'no empty sentence is sent');
     }
 
+    /** DishNet, 21 Nov 2026: "we have to submit the quotation with hardware — we don't offer subscription only". */
+    public function test_a_starlink_plan_alone_is_never_quoted_the_bot_asks_which_kit(): void
+    {
+        Bus::fake([NotifyOwner::class]);
+        $t = $this->business();
+        $gw = $this->gateway();
+
+        $r = $this->capture($t, $gw, "Sure — here is your quotation 📄\n<<QUOTE {\"items\":[{\"name\":\"Test Starlink Plan\",\"qty\":1}]}>>");
+
+        $this->assertFalse($r['sent']);
+        $this->assertSame('Our Starlink plans come with a Starlink kit: we do not offer the subscription on its own. Shall I put the *Test Starlink Kit* on your quotation with the plan?',
+            $r['reply'], 'no "here is your quotation" when none is sent; the hidden kit is never offered');
+        $this->assertSame([], $gw->docs);
+        $this->assertSame(0, Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->count(), 'nothing priced');
+        Bus::assertNotDispatched(NotifyOwner::class);
+        $this->assertStringContainsString('isp_no_kit', $this->steps($t));
+
+        // The customer picks the kit: kit + plan is quoted as usual.
+        $this->assertTrue($this->capture($t, $gw, "<<QUOTE {\"items\":[{\"name\":\"Test Starlink Kit\",\"qty\":1},{\"name\":\"Test Starlink Plan\",\"qty\":1}]}>>")['sent'], $this->steps($t));
+
+        // A business that does sell the plan alone switches the rule off.
+        $t->putSetting('isp_starlink_plan_needs_kit', false);
+        $this->assertTrue($this->capture($t->fresh(), $gw, "<<QUOTE {\"items\":[{\"name\":\"Test Starlink Plan\",\"qty\":2}]}>>")['sent'], $this->steps($t));
+    }
+
     public function test_what_cannot_be_quoted_automatically_goes_to_the_salesperson_and_nothing_is_priced(): void
     {
         Bus::fake([NotifyOwner::class]);
