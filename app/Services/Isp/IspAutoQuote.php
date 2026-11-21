@@ -59,6 +59,20 @@ class IspAutoQuote
         try {
             $catalogue = $this->catalogue($tenant);
             $plan = IspQuotePlan::plan(IspQuotePlan::items($block), $catalogue, (bool) $tenant->setting('isp_starlink_plan_needs_kit', true));
+            // A large setup is a custom (Priority) job for the salesperson, whatever the model chose.
+            // Live, 17 Nov 2026: "not like 250 people" was quoted the Residential plan (published for about
+            // 50 users). Read from the customer's own messages, not from the model.
+            // Only a Starlink plan has this ceiling (Residential "up to about 50 active users"; Priority above,
+            // priced by Sales). Fiber's published guidance has no upper limit.
+            // Before the kit question too (Codex on #175): 50+ users never get "which kit?" for a Residential plan.
+            $starlinkPlan = ($plan['ok'] || $plan['reason'] === 'no_kit') && (bool) array_filter($plan['lines'], fn ($l) => ($catalogue[$l['name']]['service_line'] ?? null) === 'starlink' && ($catalogue[$l['name']]['billing'] ?? null) === 'monthly');
+            $users = $starlinkPlan ? IspQuotePlan::users($this->customerTexts($tenant, $from)) : 0;
+            $maxUsers = (int) $tenant->setting('isp_auto_quote_max_users', 50);
+            if ($maxUsers > 0 && $users >= $maxUsers) {
+                QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', "large setup: {$users} users");
+
+                return ['reply' => $this->handoff($tenant, $from, $name, $clean, "has a large setup (about {$users} users) — prepare a custom (Priority) quotation", sprintf(self::LARGE, $users)), 'sent' => false];
+            }
             // A Starlink plan with no kit: no subscription alone (DishNet, 21 Nov 2026). The customer chooses
             // the kit — the bot asks, nothing is priced, nobody needs alerting yet.
             $kits = IspQuotePlan::kits($catalogue);
@@ -72,19 +86,6 @@ class IspAutoQuote
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', $plan['reason'] . ': ' . mb_substr($asked, 0, 200));
 
                 return ['reply' => $this->handoff($tenant, $from, $name, $clean, "asked for a quotation ({$asked}) — prepare it ({$plan['reason']})"), 'sent' => false];
-            }
-            // A large setup is a custom (Priority) job for the salesperson, whatever the model chose.
-            // Live, 17 Nov 2026: "not like 250 people" was quoted the Residential plan (published for about
-            // 50 users). Read from the customer's own messages, not from the model.
-            // Only a Starlink plan has this ceiling (Residential "up to about 50 active users"; Priority above,
-            // priced by Sales). Fiber's published guidance has no upper limit.
-            $starlinkPlan = (bool) array_filter($plan['lines'], fn ($l) => ($catalogue[$l['name']]['service_line'] ?? null) === 'starlink' && ($catalogue[$l['name']]['billing'] ?? null) === 'monthly');
-            $users = $starlinkPlan ? IspQuotePlan::users($this->customerTexts($tenant, $from)) : 0;
-            $maxUsers = (int) $tenant->setting('isp_auto_quote_max_users', 50);
-            if ($maxUsers > 0 && $users >= $maxUsers) {
-                QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', "large setup: {$users} users");
-
-                return ['reply' => $this->handoff($tenant, $from, $name, $clean, "has a large setup (about {$users} users) — prepare a custom (Priority) quotation", sprintf(self::LARGE, $users)), 'sent' => false];
             }
             if (! $this->quotes->available() || ! method_exists($gateway, 'sendDocument')) {
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', 'no PDF engine / gateway cannot send documents');

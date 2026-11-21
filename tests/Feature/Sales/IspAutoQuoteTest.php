@@ -188,6 +188,11 @@ class IspAutoQuoteTest extends TestCase
         $this->assertSame(0, Quotation::withoutGlobalScopes()->where('tenant_id', $t->id)->count());
         Bus::assertDispatched(NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'about 250 users') && str_contains($j->text, 'Peter'));
 
+        // Codex on #175: the plan alone, for 250 users, is the same custom quotation — never "which kit?".
+        $r = $this->capture($t, $gw, "Sure.\n<<QUOTE {\"items\":[{\"name\":\"Test Starlink Plan\",\"qty\":1}]}>>");
+        $this->assertSame("Sure.\n\n" . sprintf(IspAutoQuote::LARGE, 250), $r['reply']);
+        $this->assertStringNotContainsString('isp_no_kit', $this->steps($t));
+
         // Fiber has no such ceiling: the same customer can still get a Fiber quotation.
         $this->assertTrue($this->capture($t, $gw, "<<QUOTE {\"items\":[{\"name\":\"Fiber Test 20 Mbps\",\"qty\":1}]}>>")['sent'], $this->steps($t));
     }
