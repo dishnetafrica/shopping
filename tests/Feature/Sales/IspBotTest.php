@@ -76,6 +76,21 @@ class IspBotTest extends TestCase
         $this->assertStringContainsString('Fiber — Covered: Test Town', $after);
     }
 
+    /** Live, 21 Nov 2026: "The remaining wifi is not working" got "contact our technical support team" — no number. */
+    public function test_a_customer_with_a_problem_gets_the_published_support_number(): void
+    {
+        $t = $this->business('isp');
+        $this->publish($t, 'company', 'test-co', "Departments: Sales +211 900 000 001 (Mon–Sat 9 AM – 6 PM) · Technical Support +211 900 000 002 (Mon–Sun 7 AM – 10 PM).");
+
+        $this->assertStringContainsString('In your FIRST reply give them the number now: Technical Support: +211 900 000 002 (Mon–Sun 7 AM – 10 PM)', $this->prompt($t));
+
+        $turn = app(IspSalesTurn::class);
+        $out = $turn->afterReply($t, '211911000001', 'The remaining wifi is not working',
+            'I understand that your Wi-Fi is not working properly. To assist you better, I recommend contacting our technical support team.');
+        $this->assertStringEndsWith("\u{1F4DE} Technical Support: +211 900 000 002 (Mon–Sun 7 AM – 10 PM)", $out);
+        $this->assertSame('Starlink Mini suits you.', $turn->afterReply($t, '211911000001', 'hi', 'Starlink Mini suits you.'), 'a sales reply is untouched');
+    }
+
     public function test_the_guard_keeps_catalogue_and_published_amounts_and_removes_the_rest(): void
     {
         $t = $this->business('isp');
