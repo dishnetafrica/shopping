@@ -133,10 +133,40 @@ chk('hand-off at night: "shortly" becomes the opening time', A::timed(A::HANDOFF
 chk('…in office hours, unchanged', A::timed(A::HANDOFF, null), A::HANDOFF);
 chk('the rules tell the model not to promise a call now when closed', str_contains(S::rules(), 'when CURRENT TIME says "Open right now: NO", never say anyone will call'), true);
 
+echo "== Starlink: never the subscription alone (DishNet, 21 Nov 2026)\n";
+chk('a plan with no kit is not quoted', P::plan([['name' => 'Starlink Residential Plan', 'qty' => 1]], $cat)['reason'], 'no_kit');
+chk('…nor with only an accessory', P::plan([['name' => 'Starlink Residential Plan', 'qty' => 1], ['name' => 'Car Adaptor', 'qty' => 1]],
+    $cat + ['Car Adaptor' => ['billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink accessories']])['reason'], 'no_kit');
+chk('the Mini kit + plan is quoted', P::plan([['name' => 'Starlink Mini', 'qty' => 1], ['name' => 'Residential', 'qty' => 1]], $cat)['ok'], true);
+chk('the Standard kit + plan is quoted', P::plan([['name' => 'Starlink Standard', 'qty' => 1], ['name' => 'Starlink Residential Plan', 'qty' => 1]], $cat)['ok'], true);
+chk('two plans need two kits', P::plan([['name' => 'Starlink Mini', 'qty' => 1], ['name' => 'Starlink Residential Plan', 'qty' => 2]], $cat)['reason'], 'no_kit');
+chk('…one Mini and one Standard is two kits', P::plan([['name' => 'Starlink Mini', 'qty' => 1], ['name' => 'Starlink Standard', 'qty' => 1], ['name' => 'Starlink Residential Plan', 'qty' => 2]], $cat)['ok'], true);
+chk('no kit is added for them: Mini or Standard is the customer\'s choice', P::plan([['name' => 'Starlink Residential Plan', 'qty' => 1]], $cat)['added'], []);
+chk('a kit alone is still a quotation (hardware only)', P::plan([['name' => 'Starlink Mini', 'qty' => 1]], $cat)['ok'], true);
+chk('Fiber is not affected', P::plan([['name' => 'Fiber Basic 20 Mbps', 'qty' => 1]], $cat)['ok'], true);
+chk('a business that sells the plan alone can switch the rule off', P::plan([['name' => 'Starlink Residential Plan', 'qty' => 1]], $cat, false)['ok'], true);
+$live = [
+    'Starlink Mini (Gen 4)'                  => ['billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink hardware'],
+    'Starlink Standard'                      => ['billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink hardware'],
+    'Starlink Residential Plan'              => ['billing' => 'monthly', 'service_line' => 'starlink', 'category' => 'Starlink plans'],
+    'Starlink Car Adaptor with cable'        => ['billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink accessories'],
+    'Anker SOLIX C200 DC Power Bank Station' => ['billing' => 'one_off', 'service_line' => 'starlink', 'category' => 'Starlink accessories'],
+    'Starlink Pipe Adapter'                  => ['billing' => 'one_off', 'service_line' => 'starlink', 'category' => null],
+    'Fiber Installation (includes Wi-Fi router)' => ['billing' => 'one_off', 'service_line' => 'fiber', 'category' => 'Installation'],
+];
+chk('the kits in the DishNet catalogue: Mini and Standard, no accessory', P::kits($live), ['Starlink Mini (Gen 4)', 'Starlink Standard']);
+chk('a kit named as one, with no category', P::isKit('Test Starlink Kit', ['billing' => 'one_off', 'service_line' => 'starlink']), true);
+chk('the bot asks which kit, naming both', P::kitQuestion(P::kits($live)),
+    'Our Starlink plans come with a Starlink kit: we do not offer the subscription on its own. Which kit would you like on your quotation, the *Starlink Mini (Gen 4)* or *Starlink Standard*?');
+chk('…one kit on offer: it offers that one', str_contains(P::kitQuestion(['Starlink Mini (Gen 4)']), 'Shall I put the *Starlink Mini (Gen 4)* on your quotation with the plan?'), true);
+chk('no amount in the question', preg_match('/\$\s?\d|USD/', P::kitQuestion(P::kits($live))), 0);
+
 echo "== the rules the model is given\n";
 $r = S::quoteRules();
 chk('the model writes the hidden line, never the quotation', [str_contains($r, '<<QUOTE'), str_contains($r, 'Never type a quotation')], [true, true]);
-chk('exact catalogue names; Starlink kit + plan; Fiber installation automatic', [str_contains($r, 'EXACT names from PRODUCTS'), str_contains($r, 'kit AND the monthly plan'), str_contains($r, 'installation is added automatically')], [true, true, true]);
+chk('exact catalogue names; Starlink kit + plan; Fiber installation automatic', [str_contains($r, 'EXACT names from PRODUCTS'), str_contains($r, 'KIT (the Mini or the Standard from PRODUCTS) AND the monthly plan, ALWAYS both'), str_contains($r, 'installation is added automatically')], [true, true, true]);
+chk('no subscription alone: "already have a kit" gets a polite no and the Mini, never "only the plan"', [str_contains($r, 'we do not offer the subscription on its own'), str_contains($r, 'our Starlink plans come only with a kit from us'), str_contains($r, 'only the plan')], [true, true, false]);
+chk('…the old rule only where a business switched it off', str_contains(S::quoteRules(false), 'if they already own a kit, only the plan'), true);
 chk('large and custom jobs go to the salesperson', str_contains($r, 'more than 5 kits'), true);
 chk('50+ users on Starlink: no Residential, a Priority quotation from the salesperson', str_contains($r, 'do NOT recommend the Residential plan'), true);
 chk('the hidden line carries the customer\'s name', str_contains($r, 'customer_name'), true);

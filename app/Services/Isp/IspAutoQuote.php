@@ -24,6 +24,7 @@ use App\Support\QuotationPipeline;
  *   3. QuotationService draws the Internet-provider PDF (one-time and monthly totals apart, terms only
  *      if published) and saves it, prepared by the customer's salesperson;
  *   4. the customer gets the PDF with a short summary, and the salesperson gets an alert to call.
+ * A Starlink plan without a kit is never quoted (no subscription alone): the bot asks which kit.
  * When it cannot quote (an unknown product, a large job, no PDF engine), nothing is priced: the
  * customer is told their salesperson will prepare it, and the salesperson is alerted with the request.
  * Switch off with the tenant setting isp_auto_quote = false (the marker is then just removed).
@@ -57,25 +58,34 @@ class IspAutoQuote
 
         try {
             $catalogue = $this->catalogue($tenant);
-            $plan = IspQuotePlan::plan(IspQuotePlan::items($block), $catalogue);
-            if (! $plan['ok']) {
-                $asked = implode(', ', array_map(fn ($i) => $i['qty'] . ' x ' . $i['name'], IspQuotePlan::items($block)));
-                QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', $plan['reason'] . ': ' . mb_substr($asked, 0, 200));
-
-                return ['reply' => $this->handoff($tenant, $from, $name, $clean, "asked for a quotation ({$asked}) — prepare it ({$plan['reason']})"), 'sent' => false];
-            }
+            $plan = IspQuotePlan::plan(IspQuotePlan::items($block), $catalogue, (bool) $tenant->setting('isp_starlink_plan_needs_kit', true));
             // A large setup is a custom (Priority) job for the salesperson, whatever the model chose.
             // Live, 17 Nov 2026: "not like 250 people" was quoted the Residential plan (published for about
             // 50 users). Read from the customer's own messages, not from the model.
             // Only a Starlink plan has this ceiling (Residential "up to about 50 active users"; Priority above,
             // priced by Sales). Fiber's published guidance has no upper limit.
-            $starlinkPlan = (bool) array_filter($plan['lines'], fn ($l) => ($catalogue[$l['name']]['service_line'] ?? null) === 'starlink' && ($catalogue[$l['name']]['billing'] ?? null) === 'monthly');
+            // Before the kit question too (Codex on #175): 50+ users never get "which kit?" for a Residential plan.
+            $starlinkPlan = ($plan['ok'] || $plan['reason'] === 'no_kit') && (bool) array_filter($plan['lines'], fn ($l) => ($catalogue[$l['name']]['service_line'] ?? null) === 'starlink' && ($catalogue[$l['name']]['billing'] ?? null) === 'monthly');
             $users = $starlinkPlan ? IspQuotePlan::users($this->customerTexts($tenant, $from)) : 0;
             $maxUsers = (int) $tenant->setting('isp_auto_quote_max_users', 50);
             if ($maxUsers > 0 && $users >= $maxUsers) {
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', "large setup: {$users} users");
 
                 return ['reply' => $this->handoff($tenant, $from, $name, $clean, "has a large setup (about {$users} users) — prepare a custom (Priority) quotation", sprintf(self::LARGE, $users)), 'sent' => false];
+            }
+            // A Starlink plan with no kit: no subscription alone (DishNet, 21 Nov 2026). The customer chooses
+            // the kit — the bot asks, nothing is priced, nobody needs alerting yet.
+            $kits = IspQuotePlan::kits($catalogue);
+            if ($plan['reason'] === 'no_kit' && $kits) {
+                QuotationPipeline::stage($tenant->id, $from, 'isp_no_kit', false, '', 'plan without a kit: asked which kit');
+
+                return ['reply' => trim(self::withoutQuoteClaims($clean) . "\n\n" . IspQuotePlan::kitQuestion($kits)), 'sent' => false];
+            }
+            if (! $plan['ok']) {
+                $asked = implode(', ', array_map(fn ($i) => $i['qty'] . ' x ' . $i['name'], IspQuotePlan::items($block)));
+                QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', $plan['reason'] . ': ' . mb_substr($asked, 0, 200));
+
+                return ['reply' => $this->handoff($tenant, $from, $name, $clean, "asked for a quotation ({$asked}) — prepare it ({$plan['reason']})"), 'sent' => false];
             }
             if (! $this->quotes->available() || ! method_exists($gateway, 'sendDocument')) {
                 QuotationPipeline::stage($tenant->id, $from, 'isp_handoff', false, '', 'no PDF engine / gateway cannot send documents');
@@ -218,7 +228,7 @@ class IspAutoQuote
             if (Visibility::isHidden((string) ($p->category ?? ''), $p->hidden ?? null, $hidden)) {
                 continue;
             }
-            $out[(string) $p->name] = ['billing' => $p->billing, 'service_line' => $p->service_line];
+            $out[(string) $p->name] = ['billing' => $p->billing, 'service_line' => $p->service_line, 'category' => $p->category];
         }
 
         return $out;
