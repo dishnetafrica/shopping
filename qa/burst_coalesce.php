@@ -57,5 +57,13 @@ chk('the numbering restarted (stale mark 7): the burst behaves normally', run([1
 chk('the stale mark is replaced, not kept', B::started(1, 7, 2), 1);
 chk('not coalesced (number 0): never silent', B::silent(0, 5, 0), false);
 
+echo "== the count restarts (Codex on #178): one combined answer, never two\n";
+// The webhook clears the mark when it starts a new count, so a new burst starts from 0 …
+chk('new burst after a reset (mark cleared): only the newest replies', run([1, 2], 2, 0), [2]);
+// … and without that clearing, an inherited mark equal to the new count WOULD let both reply — the case fixed:
+chk('(why the webhook clears it: an inherited mark of 2 would make 1 reply too)', run([1, 2], 2, 2), [1, 2]);
+chk('a job left from the earlier burst (number 5, count now 2) leaves the mark alone', B::started(5, 1, 2), 1);
+chk('…and it is not silenced by the new count', B::silent(5, 2, 0), false);
+
 echo "\n" . ($fail ? "FAILURES" : "ALL PASS") . ": $pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

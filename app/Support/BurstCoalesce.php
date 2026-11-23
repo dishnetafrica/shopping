@@ -32,9 +32,17 @@ final class BurstCoalesce
         return $mySeq > 0 && $latest > $mySeq && $started < $latest;
     }
 
-    /** The highest number that has started, after this one starts (a stale higher mark is replaced). */
+    /**
+     * The highest number that has started, after this one starts. A stale higher mark is replaced; a job
+     * from an earlier burst (its number is above the current count) leaves this burst's mark alone. The
+     * webhook also clears the mark whenever it starts a new count (Codex on #178).
+     */
     public static function started(int $mySeq, int $started, int $latest): int
     {
+        if ($mySeq > $latest) {
+            return $started;
+        }
+
         return $started > $latest ? $mySeq : max($mySeq, $started);
     }
 }
