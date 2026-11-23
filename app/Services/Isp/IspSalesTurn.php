@@ -107,6 +107,10 @@ class IspSalesTurn
                 BotTrace::log($tenant->id, 'isp', $from, 'isp_support_added', 'support number added to the reply');
             }
 
+            // Asked for the salesperson (live, 21 Nov: "Connect me to the sales person" got the office line):
+            // their own salesperson's name and number, and that salesperson is told.
+            $out = $this->salesperson($tenant, $from, $customerText, $out);
+
             $this->alertPromise($tenant, $from, $customerText, $out);
 
             return $out;
@@ -114,6 +118,50 @@ class IspSalesTurn
             report($e);
 
             return $reply;
+        }
+    }
+
+    /**
+     * The customer asked for a salesperson (SalesContact::asks): give THEIR salesperson's number (a new customer
+     * gets one, in turn — the same single writer as a quotation) and alert that salesperson. Not when the reply
+     * sends them to Technical Support: a problem with a service is not a sale.
+     */
+    private function salesperson(Tenant $tenant, string $from, string $customerText, string $reply): string
+    {
+        if (! SalesContact::asks($customerText) || SupportContact::sendsToSupport($reply)) {
+            return $reply;
+        }
+        $owner = app(\App\Services\Sales\SalesOwnership::class)->ownerForEnquiry($tenant, $from);
+        $phone = SalesContact::phone($owner?->phone);
+        if (! $owner || $phone === '') {
+            return $reply;                                  // nobody to name: the published sales line stands
+        }
+        $opens = self::opensAt($tenant);
+        $out = SalesContact::ensure($reply, $customerText, (string) $owner->name, $phone, $opens);
+        // One alert per customer per 2 hours, shared with the "promised a follow-up" alert.
+        if (\Illuminate\Support\Facades\Cache::add("isp_promise:{$tenant->id}:{$from}", 1, now()->addHours(2))) {
+            $text = "\u{1F64B} *Customer asked to speak to you* — " . CallbackNumber::label($tenant, $from) . "\n"
+                . 'Customer: "' . mb_substr(IspQuotePlan::plain($customerText), 0, 200) . "\"\n"
+                . 'The bot gave them your number. Please call them' . ($opens !== null ? " when the office opens ({$opens}) \u{1F319}" : ' now') . '.';
+            \App\Jobs\NotifyOwner::dispatch($tenant->id, $text, preg_replace('/\D/', '', (string) $owner->phone) ?? '');
+        }
+        BotTrace::log($tenant->id, 'isp', $from, 'isp_sales_asked', 'to user ' . $owner->id . ($out !== $reply ? ', number added' : ''));
+
+        return $out;
+    }
+
+    /** Per turn: who this customer's salesperson is, when they have one with a number. '' otherwise. */
+    public static function salesBlock(Tenant $tenant, string $from): string
+    {
+        try {
+            $owner = app(\App\Services\Sales\SalesOwnership::class)->ownerOf($tenant, $from);
+            $phone = SalesContact::phone($owner?->phone);
+
+            return $owner && $phone !== '' ? SalesContact::rule((string) $owner->name, $phone) : '';
+        } catch (\Throwable $e) {
+            report($e);
+
+            return '';
         }
     }
 

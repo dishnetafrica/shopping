@@ -69,6 +69,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('isp_support.php');
     }
 
+    public function test_a_customer_who_asks_for_the_salesperson_gets_their_own(): void
+    {
+        $this->harness('isp_sales_contact.php');
+    }
+
     public function test_a_discontinued_plan_leaves_sales_knowledge_and_nothing_else_does(): void
     {
         $this->harness('retire_mention.php');
