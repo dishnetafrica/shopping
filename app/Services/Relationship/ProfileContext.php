@@ -16,9 +16,14 @@ class ProfileContext
     {
         try {
             if (! (bool) $tenant->setting('relationship_memory', false)) return '';
+            // Internet providers (DishNet, 23 Nov 2026): the same memory, worded for a service, not a delivery.
+            $isp = \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP;
             $p = CustomerProfile::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('phone', preg_replace('/[^0-9]/', '', $phone))
                 ->first();
+            if (! $p && $isp) {
+                return '';                                  // the INTERNET SALES rules already say how to qualify
+            }
             if (! $p) {
                 // BRAND-NEW customer — the first-impressions moment. In Juba trade the
                 // relationship IS the sale: knowing their name and shop/area turns an
@@ -46,6 +51,7 @@ class ProfileContext
             if ($p->stage) $bits[] = 'Relationship stage: '.$p->stage;
             if ($p->lang)  $bits[] = 'Preferred language: '.$p->lang;
             foreach ((array) ($p->facts ?? []) as $k => $v) {
+                if ($isp && $k === IspMemory::SITE) continue;   // shown below, as the place to confirm
                 if (is_array($v)) $v = implode(', ', array_map('strval', $v));
                 $bits[] = str_replace('_', ' ', $k).': '.mb_substr((string) $v, 0, 120);
                 if (count($bits) >= 14) break;
@@ -62,6 +68,7 @@ class ProfileContext
                 'DORMANT' => 'Warm and light; no guilt, no pressure, one easy re-entry.',
                 'LOST' => 'Courteous and minimal; do not sell.',
             ][strtoupper((string) $p->stage)] ?? null;
+            if ($isp) $playbook = IspMemory::playbook((string) $p->stage, $playbook);
             if ($playbook) $bits[] = 'Playbook for this stage: '.$playbook;
 
             // Progressive profiling: surface what we STILL don't know, so the bot can
@@ -72,6 +79,19 @@ class ProfileContext
             // back and let them correct it; a customer confirming an address is faster, and far
             // less irritating, than a customer typing one.
             $where = trim((string) $p->address) ?: trim((string) $p->city);
+            if ($isp) {
+                // Only a place they gave for the SERVICE — never the record's general city or address.
+                $site = trim((string) (((array) ($p->facts ?? []))[IspMemory::SITE] ?? ''));
+                if ($site !== '') {
+                    $bits[] = IspMemory::locationLine($site);
+                }
+                $gaps = IspMemory::gaps($p->name, $site);
+                $bits[] = $gaps ? IspMemory::gapsLine($gaps) : 'Greet and refer to them BY NAME — being remembered is half the relationship.';
+                if ($p->ai_summary) $bits[] = "Relationship summary:\n".$p->ai_summary;
+                $bits[] = IspMemory::NO_OLD_PRICES;
+
+                return "\n\nCUSTOMER PROFILE (from past interactions — use naturally, never recite):\n".implode("\n", $bits);
+            }
             if ($where !== '') {
                 $bits[] = 'We have delivered to them at: ' . $where
                     . '. When delivery comes up, OFFER this back for confirmation ("same place — ' . $where . '?") '

@@ -124,6 +124,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('burst_coalesce.php');
     }
 
+    public function test_an_internet_customer_is_remembered_by_service_and_place_never_by_a_price(): void
+    {
+        $this->harness('isp_memory.php');
+    }
+
     public function test_a_missed_reply_is_recovered_only_when_the_bot_never_finished(): void
     {
         $this->harness('missed_reply.php');
