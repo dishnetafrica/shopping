@@ -43,6 +43,17 @@ chk('a person took over (genuine skip)', M::botFinished([['stage' => 'skipped', 
 chk('nothing logged at all (job lost)', M::botFinished([]), false);
 chk('already recovered once', M::botFinished([['stage' => 'missed_replied', 'detail' => null]]), true);
 
+echo "== paused for someone on the phone (DishNet, 23 Nov 2026: an email sent by a customer ready to pay waited two days)\n";
+$heldLog = [['stage' => 'queued', 'detail' => null], ['stage' => 'started', 'detail' => null], ['stage' => 'email_captured', 'detail' => 'seralomin@gmail.com'], ['stage' => 'skipped', 'detail' => M::HELD]];
+chk('the live step log: a pause, not an answer', [M::botFinished($heldLog), M::held($heldLog)], [false, true]);
+chk('the exact words the message job logs', M::HELD, 'owner is handling this chat (recent manual reply)');
+chk('a Take over is still a person handling it (finished, not held)', [M::botFinished([['stage' => 'skipped', 'detail' => 'a person is handling this chat (Take over)']]), M::held([['stage' => 'skipped', 'detail' => 'a person is handling this chat (Take over)']])], [true, false]);
+chk('a muted number is still a genuine skip', M::botFinished([['stage' => 'skipped', 'detail' => 'number is muted (no auto-reply)']]), true);
+chk('held, while the pause lasts: wait', $w(['human_until' => $now + 300, 'bot_finished' => false]), 'replied from the phone recently');
+chk('held, the pause is over and nobody replied: answer it late', $w(['human_until' => $now - 60, 'bot_finished' => false]), null);
+chk('held and recovered once: never twice', $w(['human_until' => $now - 60, 'done_for' => $now - 600]), 'already recovered');
+chk('nothing to read in it ("[image]"): left for the person', $w(['human_until' => $now - 60, 'text' => '[image]']), 'no text to answer');
+
 echo "== settings\n";
 chk('window can be shortened (2 h)', M::skipReason(['last_inbound_at' => $now - 3 * 3600] + $base, $now, ['window_min' => 120]), 'too old');
 chk('wait can be longer (15 min)', M::skipReason($base, $now, ['wait_min' => 15]), 'too recent — the normal reply may still be on its way');
