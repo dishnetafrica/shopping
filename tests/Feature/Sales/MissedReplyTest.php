@@ -167,6 +167,87 @@ class MissedReplyTest extends TestCase
         $this->assertSame($t->whatsapp_instance, $t->fresh()->whatsapp_instance, 'the business itself is not changed');
     }
 
+    /**
+     * DishNet, 23 Nov 2026: someone asked from the phone "Please share your email address", the customer sent it
+     * a minute later, the bot stood down for the person (MissedReply::HELD) — and nobody ever answered.
+     */
+    private function heldChat(Tenant $t, string $phone, string $text, int $pauseEndsInMinutes): Conversation
+    {
+        $c = $this->lostReply($t, $phone, $text, 20, ['queued', 'started', 'email_captured']);
+        DB::table('bot_events')->insert(['tenant_id' => $t->id, 'trace' => 'WA' . $t->id . '-' . substr(md5($phone . $t->whatsapp_instance . $text), 0, 12),
+            'phone' => $phone, 'stage' => 'skipped', 'detail' => \App\Services\Bot\MissedReply::HELD, 'created_at' => now()->subMinutes(20)->addSeconds(5)]);
+        // The person's own reply came BEFORE the customer's message, and paused the bot.
+        DB::table('messages')->insert(['tenant_id' => $t->id, 'customer_phone' => $phone, 'instance' => $c->instance, 'direction' => 'out',
+            'sender' => 'human', 'body' => 'Please share your email address', 'created_at' => now()->subMinutes(21), 'updated_at' => now()->subMinutes(21)]);
+        $c->state = ['human_until' => time() + $pauseEndsInMinutes * 60];
+        $c->unread = 0;                                  // someone opened the chat in the panel: that is not a reply
+        $c->save();
+
+        return $c;
+    }
+
+    public function test_a_message_held_for_a_person_who_never_replied_is_answered_when_the_pause_ends(): void
+    {
+        $this->line('open');
+        $t = $this->business();
+
+        $this->heldChat($t, '211929577612', 'Seralomin@gmail.com', 5);
+        $this->artisan('bot:recover-missed')->assertSuccessful();
+        $this->assertSame([], self::$calls, 'while the pause lasts, the person has it');
+
+        $c = Conversation::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', '211929577612')->first();
+        $c->state = ['human_until' => time() - 60];
+        $c->save();
+        $this->artisan('bot:recover-missed')->assertSuccessful();
+        $this->assertCount(1, self::$calls, 'the pause is over and nobody replied');
+        $this->assertSame('Seralomin@gmail.com', self::$calls[0]['text']);
+        $this->assertTrue(self::$calls[0]['media']['late'] ?? false, 'it opens with an apology');
+
+        $this->artisan('bot:recover-missed')->assertSuccessful();
+        $this->assertCount(1, self::$calls, 'never twice');
+    }
+
+    public function test_a_held_message_the_person_did_answer_is_left_alone(): void
+    {
+        $this->line('open');
+        $t = $this->business();
+        $c = $this->heldChat($t, '211900000007', 'Can you install today?', -1);
+        DB::table('messages')->insert(['tenant_id' => $t->id, 'customer_phone' => '211900000007', 'instance' => $c->instance, 'direction' => 'out',
+            'sender' => 'human', 'body' => 'Yes, at 3 PM', 'created_at' => now()->subMinutes(15), 'updated_at' => now()->subMinutes(15)]);
+
+        $this->artisan('bot:recover-missed')->assertSuccessful();
+
+        $this->assertSame([], self::$calls, 'the person replied after the customer: nothing from the bot');
+    }
+
+    /** Codex on #177: the reply was typed on the phone while the customer's message waited to be processed. */
+    public function test_a_phone_reply_logged_before_the_delayed_message_still_counts_as_the_answer(): void
+    {
+        $this->line('open');
+        $t = $this->business();
+        $c = $this->heldChat($t, '211900000008', 'Is it available today?', -1);
+        // The message ARRIVED (webhook "queued") before the person's reply at -21 min, though it was stamped at -20.
+        DB::table('bot_events')->where('tenant_id', $t->id)->where('phone', '211900000008')->where('stage', 'queued')
+            ->update(['created_at' => now()->subMinutes(22)]);
+
+        $this->artisan('bot:recover-missed')->assertSuccessful();
+
+        $this->assertSame([], self::$calls, 'the person answered it: no second reply from the bot');
+    }
+
+    /** Codex on #177: an old pause on a chat whose latest message was not held never takes a place in the batch. */
+    public function test_a_stale_pause_is_not_a_candidate(): void
+    {
+        $this->line('open');
+        $t = $this->business();
+        $c = $this->lostReply($t, '211900000009', 'Thanks', 10, ['started', 'ai_no_reply']);
+        $c->state = ['human_until' => time() - 3600];
+        $c->unread = 0;
+        $c->save();
+
+        $this->artisan('bot:recover-missed', ['--dry-run' => true])->doesntExpectOutputToContain('211900000009')->assertSuccessful();
+    }
+
     public function test_with_no_fallback_it_waits_for_the_number_the_customer_wrote_to(): void
     {
         $t = $this->business();

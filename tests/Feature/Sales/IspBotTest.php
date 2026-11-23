@@ -91,6 +91,25 @@ class IspBotTest extends TestCase
         $this->assertSame('Starlink Mini suits you.', $turn->afterReply($t, '211911000001', 'hi', 'Starlink Mini suits you.'), 'a sales reply is untouched');
     }
 
+    /** Live, 21 Nov 2026: "Connect me to the sales person" got the office line; their salesperson never heard. */
+    public function test_a_customer_who_asks_for_the_salesperson_gets_theirs_and_the_salesperson_is_told(): void
+    {
+        \Illuminate\Support\Facades\Bus::fake([\App\Jobs\NotifyOwner::class]);
+        $t = $this->business('isp');
+        User::create(['tenant_id' => $t->id, 'name' => 'Akol Deng', 'role' => 'sales', 'phone' => '211922000001', 'email' => 'akol' . $t->id . '@t.test', 'password' => 'secret']);
+        $turn = app(IspSalesTurn::class);
+
+        $out = $turn->afterReply($t, '211911000009', 'Connect me to the sales person', 'Of course! You can reach our sales team at +211 923 400 000.');
+
+        $this->assertStringEndsWith("\u{1F4DE} Your salesperson is *Akol Deng* (+211922000001): you can call or WhatsApp them directly.", $out);
+        \Illuminate\Support\Facades\Bus::assertDispatched(\App\Jobs\NotifyOwner::class, fn ($j) => $j->to === '211922000001' && str_contains($j->text, 'Customer asked to speak to you') && str_contains($j->text, 'Connect me to the sales person'));
+        $this->assertStringContainsString("THIS CUSTOMER'S SALESPERSON: Akol Deng (+211922000001)", IspSalesTurn::salesBlock($t, '211911000009'), 'and from now on the bot knows who it is');
+
+        $turn->afterReply($t, '211911000009', 'Please call me', 'Sure.');
+        \Illuminate\Support\Facades\Bus::assertDispatchedTimes(\App\Jobs\NotifyOwner::class, 1);
+        $this->assertSame('The Mini suits you.', $turn->afterReply($t, '211911000009', 'Which kit?', 'The Mini suits you.'), 'no ask, no change');
+    }
+
     public function test_the_guard_keeps_catalogue_and_published_amounts_and_removes_the_rest(): void
     {
         $t = $this->business('isp');

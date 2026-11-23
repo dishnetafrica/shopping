@@ -14,12 +14,21 @@ namespace App\Services\Bot;
  * holds words to answer. Each customer message is retried at most `max_tries` times.
  *
  * "Unread" alone is not enough: the bot may have CHOSEN not to answer ("ok thanks", a muted number, a
- * chat a person took over). So a late reply is sent only when the bot's processing of that message
- * never finished (`bot_finished` false — no ai_replied / ai_no_reply / genuine skip in its step log).
+ * chat a person took over). A message that came in while the bot was paused for someone replying from the
+ * phone (HELD) is different: once the pause ends with no reply from anyone, it is answered late too.
+ * So a late reply is sent only when the bot's processing of that message never finished (`bot_finished`
+ * false — no ai_replied / ai_no_reply / genuine skip in its step log).
  */
 final class MissedReply
 {
     public const DEFAULTS = ['wait_min' => 3, 'window_min' => 1440, 'max_tries' => 3];
+
+    /**
+     * The bot stood down because someone replied from the phone moments before (human_until). That is a
+     * pause, not an answer: if nobody replies before the pause ends, the customer is answered late (DishNet,
+     * 23 Nov 2026 — "Seralomin@gmail.com", sent by a customer ready to pay cash, waited two days).
+     */
+    public const HELD = 'owner is handling this chat (recent manual reply)';
 
     /**
      * Why this chat must NOT get a late reply now — or null when it should.
@@ -84,7 +93,20 @@ final class MissedReply
             if (in_array($stage, ['ai_replied', 'ai_no_reply', 'paused', 'missed_replied'], true)) {
                 return true;
             }
-            if ($stage === 'skipped' && (string) ($e['detail'] ?? '') !== 'duplicate message id') {
+            // A pause for a person on the phone is not an answer (HELD): the pause and "answered since" decide.
+            if ($stage === 'skipped' && ! in_array((string) ($e['detail'] ?? ''), ['duplicate message id', self::HELD], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Did the bot stand down for this message only because someone had just replied from the phone? */
+    public static function held(array $events): bool
+    {
+        foreach ($events as $e) {
+            if ((string) ($e['stage'] ?? '') === 'skipped' && (string) ($e['detail'] ?? '') === self::HELD) {
                 return true;
             }
         }

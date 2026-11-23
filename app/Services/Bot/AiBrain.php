@@ -127,8 +127,8 @@ class AiBrain
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($tenant, $channel)
             .\App\Services\Relationship\ProfileContext::block($tenant, $from)
             // Internet providers: WhatsApp hides this customer's number — ask for one to call them on.
-            // …and the exact words for when the sales office opens, when it is closed.
-            .(\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP ? \App\Services\Isp\IspSalesTurn::contactBlock($tenant, $from) . \App\Services\Isp\IspSalesTurn::openingBlock($tenant) : '')
+            // …the exact words for when the sales office opens, when it is closed; and who their salesperson is.
+            .(\App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP ? \App\Services\Isp\IspSalesTurn::contactBlock($tenant, $from) . \App\Services\Isp\IspSalesTurn::openingBlock($tenant) . \App\Services\Isp\IspSalesTurn::salesBlock($tenant, $from) : '')
             // Travel Vertical (M1): TRAVEL TENANTS ONLY — the customer's stored trip and earlier trips.
             .($isTravel ? app(\App\Services\Travel\Conversation\TravelTurn::class)->contextBlock($tenant, $convo, $from, $channel) : '')
             .$this->outstandingQuoteBlock($tenant, $from)
