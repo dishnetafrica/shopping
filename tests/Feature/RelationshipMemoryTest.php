@@ -203,22 +203,34 @@ class RelationshipMemoryTest extends TestCase
         $x = new class extends RelationshipExtractor {
             public string $system = '';
             public function __construct() {}
-            protected function callAi(string $s, string $tr): ?array { $this->system = $s; return ['customer' => ['summary' => 'Wants Fiber at home.']]; }
+            protected function callAi(string $s, string $tr): ?array { $this->system = $s; return ['customer' => ['summary' => 'Wants Fiber at home.', 'shop_area' => 'Gudele 2']]; }
         };
         $x->process($t, $c);
         $this->assertStringContainsString('Internet provider in South Sudan', $x->system);
         $this->assertStringNotContainsString('WhatsApp commerce shop', $x->system);
+        $saved = CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', '211900000011')->first();
+        $this->assertSame('Gudele 2', $saved->facts['service_location'] ?? null, 'where the service is wanted: its own fact (Codex on #179)');
+        $this->assertSame('', trim((string) $saved->address), 'the record\'s address stays what a person typed');
 
         $this->assertSame('', ProfileContext::block($t, '211900000099'), 'a new Internet customer: the sales rules qualify them');
 
         CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', '211900000011')
-            ->update(['name' => 'Lomin', 'address' => 'Gudele 2', 'ai_summary' => 'Wants Fiber Basic at home. Ready to pay cash.']);
+            ->update(['name' => 'Lomin', 'ai_summary' => 'Wants Fiber Basic at home. Ready to pay cash.']);
         $block = ProfileContext::block($t, '211900000011');
         $this->assertStringContainsString('Name: Lomin', $block);
         $this->assertStringContainsString('Where they want the service (from earlier chats): Gudele 2', $block);
         $this->assertStringContainsString('Ready to pay cash.', $block);
         $this->assertStringContainsString('never sets a price or a plan', $block);
         $this->assertDoesNotMatchRegularExpression('/deliver|shop/i', $block, 'no shop wording for an Internet provider');
+
+        // Codex on #179: a record's general city is not the service site, and a buyer gets service aftercare.
+        CustomerProfile::withoutGlobalScopes()->create(['tenant_id' => $t->id, 'phone' => '211900000012', 'name' => 'Deng',
+            'city' => 'Juba', 'stage' => 'PURCHASED']);
+        $buyer = ProfileContext::block($t, '211900000012');
+        $this->assertStringNotContainsString('Where they want the service', $buyer, 'a city on the record is not where the service is wanted');
+        $this->assertStringContainsString('where they want the service (area + a landmark)', $buyer, 'so it is still asked, when needed');
+        $this->assertStringContainsString('any problem goes to Technical Support', $buyer);
+        $this->assertDoesNotMatchRegularExpression('/deliver|shop/i', $buyer, 'no retail aftercare for an Internet customer');
 
         // Every other business keeps the shop wording.
         $shop = Tenant::factory()->create();

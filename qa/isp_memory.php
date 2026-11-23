@@ -31,5 +31,10 @@ chk('one question, only when needed, never before answering', [str_contains(M::g
 chk('the memory never sets a price or plan (Roam was discontinued)', [str_contains(M::NO_OLD_PRICES, 'never sets a price or a plan'), str_contains(M::NO_OLD_PRICES, 'discontinued')], [true, true]);
 chk('nothing in the bot lines about delivery or shops', preg_match('/deliver|shop/i', M::locationLine('X') . M::gapsLine(M::gaps('', '')) . M::NO_OLD_PRICES), 0);
 
+echo "== stage advice (Codex on #179)\n";
+chk('a buyer: their service, Technical Support — not delivery', [str_contains((string) M::playbook('PURCHASED', 'Aftercare tone: delivery'), 'Technical Support'), preg_match('/deliver/i', (string) M::playbook('purchased', 'Aftercare tone: delivery'))], [true, 0]);
+chk('other stages keep the shared advice', M::playbook('QUOTED', 'Reference the open quotation.'), 'Reference the open quotation.');
+chk('the service site is its own fact', M::SITE, 'service_location');
+
 echo "\n" . ($fail ? "FAILURES" : "ALL PASS") . ": $pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

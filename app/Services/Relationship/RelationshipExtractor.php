@@ -106,10 +106,14 @@ class RelationshipExtractor
         $cn = trim((string) ($cust['customer_name'] ?? ''));
         if ($cn !== '' && ! trim((string) $profile->name)) $profile->name = mb_substr($cn, 0, 120);
         $sa = trim((string) ($cust['shop_area'] ?? ''));
-        if ($sa !== '' && ! trim((string) $profile->address)) $profile->address = mb_substr($sa, 0, 200);
+        // Internet providers: where the SERVICE is wanted is its own fact, the latest place they gave — the
+        // record's address stays what a person typed (Codex on #179).
+        $isp = \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP;
+        if (! $isp && $sa !== '' && ! trim((string) $profile->address)) $profile->address = mb_substr($sa, 0, 200);
 
         // facts: merge (AI supplies deltas; humans can always overwrite via the 360 later)
         $facts = (array) ($profile->facts ?? []);
+        if ($isp && $sa !== '') $facts[IspMemory::SITE] = mb_substr($sa, 0, 160);
         foreach ((array) ($cust['facts'] ?? []) as $k => $v) {
             $k = substr(preg_replace('/[^a-z0-9_]/', '', strtolower((string) $k)), 0, 40);
             if ($k === '' || $v === null || $v === '') continue;

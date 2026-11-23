@@ -51,6 +51,7 @@ class ProfileContext
             if ($p->stage) $bits[] = 'Relationship stage: '.$p->stage;
             if ($p->lang)  $bits[] = 'Preferred language: '.$p->lang;
             foreach ((array) ($p->facts ?? []) as $k => $v) {
+                if ($isp && $k === IspMemory::SITE) continue;   // shown below, as the place to confirm
                 if (is_array($v)) $v = implode(', ', array_map('strval', $v));
                 $bits[] = str_replace('_', ' ', $k).': '.mb_substr((string) $v, 0, 120);
                 if (count($bits) >= 14) break;
@@ -67,6 +68,7 @@ class ProfileContext
                 'DORMANT' => 'Warm and light; no guilt, no pressure, one easy re-entry.',
                 'LOST' => 'Courteous and minimal; do not sell.',
             ][strtoupper((string) $p->stage)] ?? null;
+            if ($isp) $playbook = IspMemory::playbook((string) $p->stage, $playbook);
             if ($playbook) $bits[] = 'Playbook for this stage: '.$playbook;
 
             // Progressive profiling: surface what we STILL don't know, so the bot can
@@ -78,10 +80,12 @@ class ProfileContext
             // less irritating, than a customer typing one.
             $where = trim((string) $p->address) ?: trim((string) $p->city);
             if ($isp) {
-                if ($where !== '') {
-                    $bits[] = IspMemory::locationLine($where);
+                // Only a place they gave for the SERVICE — never the record's general city or address.
+                $site = trim((string) (((array) ($p->facts ?? []))[IspMemory::SITE] ?? ''));
+                if ($site !== '') {
+                    $bits[] = IspMemory::locationLine($site);
                 }
-                $gaps = IspMemory::gaps($p->name, $where);
+                $gaps = IspMemory::gaps($p->name, $site);
                 $bits[] = $gaps ? IspMemory::gapsLine($gaps) : 'Greet and refer to them BY NAME — being remembered is half the relationship.';
                 if ($p->ai_summary) $bits[] = "Relationship summary:\n".$p->ai_summary;
                 $bits[] = IspMemory::NO_OLD_PRICES;

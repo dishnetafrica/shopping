@@ -69,6 +69,19 @@ SYS;
         return $g;
     }
 
-    /** PURE. The memory never overrides today's prices or plans. */
+    /** The fact that holds where the service is wanted — not the CRM's general city or address (Codex on #179). */
+    public const SITE = 'service_location';
+
+    /** PURE. The stage playbook, where the shop wording does not fit an Internet provider (Codex on #179). */
+    public static function playbook(string $stage, ?string $shop): ?string
+    {
+        return match (strtoupper($stage)) {
+            'PURCHASED' => 'Existing customer: make sure their service works well; any problem goes to Technical Support; offer extra equipment or an upgrade only if they ask.',
+            'REPEAT'    => 'Existing customer who came back: familiar and efficient; they know us, skip the basics.',
+            default     => $shop,
+        };
+    }
+
+        /** PURE. The memory never overrides today's prices or plans. */
     public const NO_OLD_PRICES = 'This memory never sets a price or a plan: an older chat may mention one that has changed or been discontinued. Prices and plans come ONLY from PRODUCTS and APPROVED SALES KNOWLEDGE.';
 }
