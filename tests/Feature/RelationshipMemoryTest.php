@@ -166,4 +166,63 @@ class RelationshipMemoryTest extends TestCase
         $t->putSetting('relationship_memory', false);
         $this->assertSame('', ProfileContext::block($t, '211900000004'), 'flag OFF = zero context, zero risk');
     }
+
+    /** DishNet, 23 Nov 2026: a long chat was summarised from its OLDEST 40 messages, the rest skipped for good. */
+    public function test_a_long_chat_is_summarised_from_its_latest_messages(): void
+    {
+        $t = $this->tenant();
+        $c = Conversation::withoutGlobalScope('tenant')->create([
+            'tenant_id' => $t->id, 'customer_phone' => '211900000010', 'instance' => 'i1',
+            'state' => [], 'cart' => [], 'last_message_at' => now()->subHour(),
+        ]);
+        for ($i = 1; $i <= 50; $i++) {
+            Message::withoutGlobalScope('tenant')->forceCreate([
+                'tenant_id' => $t->id, 'customer_phone' => '211900000010', 'instance' => 'i1', 'direction' => 'in',
+                'sender' => 'customer', 'body' => "message {$i} end", 'created_at' => now()->subHours(3)->addMinutes($i),
+            ]);
+        }
+        $x = new class extends RelationshipExtractor {
+            public string $seen = '';
+            public function __construct() {}
+            protected function callAi(string $s, string $tr): ?array { $this->seen = $tr; return ['customer' => ['summary' => 'ok']]; }
+        };
+
+        $this->assertTrue($x->process($t, $c));
+        $this->assertStringContainsString('message 50 end', $x->seen, 'the newest message is read');
+        $this->assertStringContainsString('message 11 end', $x->seen, 'the latest 40');
+        $this->assertStringNotContainsString('message 10 end', $x->seen, 'not the oldest');
+        $this->assertLessThan(strpos($x->seen, 'message 50 end'), strpos($x->seen, 'message 11 end'), 'oldest first, as a transcript reads');
+    }
+
+    /** DishNet, 23 Nov 2026: "can the bot remember the questions asked in previous chats, so it replies like a human?" */
+    public function test_an_internet_provider_remembers_service_and_place_never_a_delivery_or_a_price(): void
+    {
+        $t = $this->tenant();
+        $t->putSetting('vertical', 'isp');
+        $c = $this->settledConvo($t, '211900000011');
+        $x = new class extends RelationshipExtractor {
+            public string $system = '';
+            public function __construct() {}
+            protected function callAi(string $s, string $tr): ?array { $this->system = $s; return ['customer' => ['summary' => 'Wants Fiber at home.']]; }
+        };
+        $x->process($t, $c);
+        $this->assertStringContainsString('Internet provider in South Sudan', $x->system);
+        $this->assertStringNotContainsString('WhatsApp commerce shop', $x->system);
+
+        $this->assertSame('', ProfileContext::block($t, '211900000099'), 'a new Internet customer: the sales rules qualify them');
+
+        CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', '211900000011')
+            ->update(['name' => 'Lomin', 'address' => 'Gudele 2', 'ai_summary' => 'Wants Fiber Basic at home. Ready to pay cash.']);
+        $block = ProfileContext::block($t, '211900000011');
+        $this->assertStringContainsString('Name: Lomin', $block);
+        $this->assertStringContainsString('Where they want the service (from earlier chats): Gudele 2', $block);
+        $this->assertStringContainsString('Ready to pay cash.', $block);
+        $this->assertStringContainsString('never sets a price or a plan', $block);
+        $this->assertDoesNotMatchRegularExpression('/deliver|shop/i', $block, 'no shop wording for an Internet provider');
+
+        // Every other business keeps the shop wording.
+        $shop = Tenant::factory()->create();
+        $shop->putSetting('relationship_memory', true);
+        $this->assertStringContainsString('Which shop and area', ProfileContext::block($shop, '211900000098'));
+    }
 }

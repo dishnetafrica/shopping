@@ -16,9 +16,14 @@ class ProfileContext
     {
         try {
             if (! (bool) $tenant->setting('relationship_memory', false)) return '';
+            // Internet providers (DishNet, 23 Nov 2026): the same memory, worded for a service, not a delivery.
+            $isp = \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP;
             $p = CustomerProfile::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)->where('phone', preg_replace('/[^0-9]/', '', $phone))
                 ->first();
+            if (! $p && $isp) {
+                return '';                                  // the INTERNET SALES rules already say how to qualify
+            }
             if (! $p) {
                 // BRAND-NEW customer — the first-impressions moment. In Juba trade the
                 // relationship IS the sale: knowing their name and shop/area turns an
@@ -72,6 +77,17 @@ class ProfileContext
             // back and let them correct it; a customer confirming an address is faster, and far
             // less irritating, than a customer typing one.
             $where = trim((string) $p->address) ?: trim((string) $p->city);
+            if ($isp) {
+                if ($where !== '') {
+                    $bits[] = IspMemory::locationLine($where);
+                }
+                $gaps = IspMemory::gaps($p->name, $where);
+                $bits[] = $gaps ? IspMemory::gapsLine($gaps) : 'Greet and refer to them BY NAME — being remembered is half the relationship.';
+                if ($p->ai_summary) $bits[] = "Relationship summary:\n".$p->ai_summary;
+                $bits[] = IspMemory::NO_OLD_PRICES;
+
+                return "\n\nCUSTOMER PROFILE (from past interactions — use naturally, never recite):\n".implode("\n", $bits);
+            }
             if ($where !== '') {
                 $bits[] = 'We have delivered to them at: ' . $where
                     . '. When delivery comes up, OFFER this back for confirmation ("same place — ' . $where . '?") '

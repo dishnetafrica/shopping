@@ -57,8 +57,10 @@ class RelationshipExtractor
                 ->where('tenant_id', $tenant->id)
                 ->where('customer_phone', $c->customer_phone)
                 ->when($since, fn ($q) => $q->where('created_at', '>', $since))
-                ->orderBy('created_at')->limit(40)
-                ->get(['direction', 'sender', 'body', 'created_at']);
+                // The LATEST 40, oldest first (DishNet, 23 Nov 2026): taking the first 40 summarised a long
+                // chat's oldest messages, then the stamp below skipped everything after them for good.
+                ->orderByDesc('created_at')->orderByDesc('id')->limit(40)
+                ->get(['direction', 'sender', 'body', 'created_at'])->reverse()->values();
             if ($msgs->where('direction', 'in')->isEmpty()) {
                 $c->summarized_at = now();
                 $c->save();
@@ -84,7 +86,7 @@ class RelationshipExtractor
                 return $who.': '.mb_substr((string) $m->body, 0, 300);
             })->implode("\n");
 
-            $out = $this->callAi($this->prompt($profile), $transcript);
+            $out = $this->callAi($this->prompt($profile, $tenant), $transcript);
             if (! is_array($out)) return false;
 
             $this->apply($tenant, $profile, $c, $out);
@@ -161,12 +163,16 @@ class RelationshipExtractor
         $c->save();
     }
 
-    private function prompt(CustomerProfile $p): string
+    private function prompt(CustomerProfile $p, ?Tenant $tenant = null): string
     {
         $known = json_encode([
             'name' => $p->name, 'segment' => $p->segment, 'stage' => $p->stage ?: 'NEW',
             'facts' => $p->facts ?: (object) [], 'summary' => $p->ai_summary ?: '',
         ], JSON_UNESCAPED_UNICODE);
+        // Internet providers: remembered by service, place and need — never "which shop, so we deliver".
+        if ($tenant && \App\Support\Vertical::of($tenant) === \App\Support\Vertical::ISP) {
+            return IspMemory::extractorPrompt((string) $known);
+        }
 
         return <<<SYS
 You are the relationship analyst for a WhatsApp commerce shop in East Africa (customers often write Juba Arabic or mixed English). Analyze the NEW portion of one customer conversation and reply with ONLY valid JSON, no markdown:
