@@ -220,6 +220,34 @@ class MissedReplyTest extends TestCase
         $this->assertSame([], self::$calls, 'the person replied after the customer: nothing from the bot');
     }
 
+    /** Codex on #177: the reply was typed on the phone while the customer's message waited to be processed. */
+    public function test_a_phone_reply_logged_before_the_delayed_message_still_counts_as_the_answer(): void
+    {
+        $this->line('open');
+        $t = $this->business();
+        $c = $this->heldChat($t, '211900000008', 'Is it available today?', -1);
+        // The message ARRIVED (webhook "queued") before the person's reply at -21 min, though it was stamped at -20.
+        DB::table('bot_events')->where('tenant_id', $t->id)->where('phone', '211900000008')->where('stage', 'queued')
+            ->update(['created_at' => now()->subMinutes(22)]);
+
+        $this->artisan('bot:recover-missed')->assertSuccessful();
+
+        $this->assertSame([], self::$calls, 'the person answered it: no second reply from the bot');
+    }
+
+    /** Codex on #177: an old pause on a chat whose latest message was not held never takes a place in the batch. */
+    public function test_a_stale_pause_is_not_a_candidate(): void
+    {
+        $this->line('open');
+        $t = $this->business();
+        $c = $this->lostReply($t, '211900000009', 'Thanks', 10, ['started', 'ai_no_reply']);
+        $c->state = ['human_until' => time() - 3600];
+        $c->unread = 0;
+        $c->save();
+
+        $this->artisan('bot:recover-missed', ['--dry-run' => true])->doesntExpectOutputToContain('211900000009')->assertSuccessful();
+    }
+
     public function test_with_no_fallback_it_waits_for_the_number_the_customer_wrote_to(): void
     {
         $t = $this->business();

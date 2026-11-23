@@ -70,7 +70,12 @@ class BotRecoverMissedCommand extends Command
             ->where('tenant_id', $t->id)
             // Unread, or paused for someone on the phone — opening a chat in the panel clears "unread", so a
             // paused chat someone only looked at still counts. Either way: nothing sent since their message.
-            ->where(fn ($q) => $q->where('unread', '>', 0)->orWhereNotNull('state->human_until'))
+            // Only chats whose latest message was really HELD (Codex on #177: a stale pause must not fill the batch).
+            ->where(fn ($q) => $q->where('unread', '>', 0)->orWhereExists(fn ($e) => $e->select(DB::raw(1))->from('bot_events')
+                ->whereColumn('bot_events.tenant_id', 'conversations.tenant_id')
+                ->whereColumn('bot_events.phone', 'conversations.customer_phone')
+                ->where('bot_events.stage', 'skipped')->where('bot_events.detail', MissedReply::HELD)
+                ->whereColumn('bot_events.created_at', '>=', 'conversations.last_inbound_at')))
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('messages')
                 ->whereColumn('messages.tenant_id', 'conversations.tenant_id')
                 ->whereColumn('messages.customer_phone', 'conversations.customer_phone')
@@ -100,12 +105,21 @@ class BotRecoverMissedCommand extends Command
             // phone's steps since the message — the step log does not record which number it came in on.
             $eq = DB::table('bot_events')->where('tenant_id', $t->id);
             $waId !== '' ? $eq->where('trace', $waId) : $eq->where('phone', $from)->where('created_at', '>=', $c->last_inbound_at);
-            $events = $eq->orderBy('id')->limit(200)->get(['stage', 'detail'])
-                ->map(fn ($e) => ['stage' => (string) $e->stage, 'detail' => $e->detail])->all();
+            $rows = $eq->orderBy('id')->limit(200)->get(['stage', 'detail', 'created_at']);
+            $events = $rows->map(fn ($e) => ['stage' => (string) $e->stage, 'detail' => $e->detail])->all();
+            // When the message ARRIVED (the webhook's "queued" step): a reply typed on the phone while the
+            // message waited to be processed is logged before it, yet answers it (Codex on #177).
+            $queued = $rows->firstWhere('stage', 'queued')?->created_at;
+            $arrived = $queued !== null && $c->last_inbound_at !== null
+                ? min(\Illuminate\Support\Carbon::parse($queued), $c->last_inbound_at) : $c->last_inbound_at;
 
             // Paused for someone on the phone (HELD): "unread" may be cleared by just opening the chat; the
             // query already checked that nothing was sent since their message.
             $held = MissedReply::held($events);
+            if ($held && $this->answeredSince($t, $c, $arrived)) {
+                $this->line("  {$from}: skip — answered");
+                continue;
+            }
             $why = MissedReply::skipReason([
                 'unread' => $held ? 1 : (int) $c->unread, 'agent_active' => (bool) $c->agent_active, 'last_inbound_at' => $in,
                 'human_until' => (int) ($st['human_until'] ?? 0), 'muted' => in_array($from, $muted, true), 'text' => $text,
@@ -141,7 +155,7 @@ class BotRecoverMissedCommand extends Command
             }
             try {
                 $c->refresh();
-                if ($c->agent_active || (! $held && (int) $c->unread <= 0) || $this->answeredSince($t, $c)) {
+                if ($c->agent_active || ($held ? $this->answeredSince($t, $c, $arrived) : (int) $c->unread <= 0)) {
                     continue;                                   // answered while we were looking
                 }
                 $trace = $waId !== '' ? $waId : 'recover';
@@ -162,11 +176,11 @@ class BotRecoverMissedCommand extends Command
         }
     }
 
-    /** Has anything been sent to this chat since the customer's last message (bot, staff, phone)? */
-    private function answeredSince(Tenant $t, Conversation $c): bool
+    /** Has anything been sent to this chat since the customer's last message arrived (bot, staff, phone)? */
+    private function answeredSince(Tenant $t, Conversation $c, ?\DateTimeInterface $since): bool
     {
-        return $c->last_inbound_at !== null && DB::table('messages')->where('tenant_id', $t->id)->where('customer_phone', $c->customer_phone)
-            ->where('instance', $c->instance)->where('direction', 'out')->where('created_at', '>=', $c->last_inbound_at)->exists();
+        return $since !== null && DB::table('messages')->where('tenant_id', $t->id)->where('customer_phone', $c->customer_phone)
+            ->where('instance', $c->instance)->where('direction', 'out')->where('created_at', '>=', $since)->exists();
     }
 
         /** Remember the attempt on the chat itself (fresh read, so the AI's own state changes are kept). */
