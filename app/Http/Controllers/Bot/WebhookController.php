@@ -95,7 +95,10 @@ class WebhookController
         }
         if ($coalesce > 0) {
             $ck = 'coal:' . $tenant->id . ':' . preg_replace('/[^0-9]/', '', (string) $incoming['from']);
-            \Illuminate\Support\Facades\Cache::add($ck, 0, 300);
+            // A new count starts a new burst: the last burst's "started" mark goes with it (Codex on #178).
+            if (\Illuminate\Support\Facades\Cache::add($ck, 0, 300)) {
+                \Illuminate\Support\Facades\Cache::forget($ck . ':started');
+            }
             $incoming['coal_seq'] = (int) \Illuminate\Support\Facades\Cache::increment($ck);
             ProcessIncomingMessage::dispatch($tenant->id, $driver, $incoming)->delay(now()->addSeconds($coalesce));
         } else {
