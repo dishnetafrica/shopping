@@ -119,6 +119,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('dishnet_decisions.php');
     }
 
+    public function test_a_burst_of_messages_never_leaves_one_unanswered_whatever_order_they_run_in(): void
+    {
+        $this->harness('burst_coalesce.php');
+    }
+
     public function test_a_missed_reply_is_recovered_only_when_the_bot_never_finished(): void
     {
         $this->harness('missed_reply.php');

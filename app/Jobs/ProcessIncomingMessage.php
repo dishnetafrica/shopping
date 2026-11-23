@@ -411,13 +411,19 @@ class ProcessIncomingMessage implements ShouldQueue
         // seconds; here, if a NEWER text from this customer has already arrived, this message
         // stays silent — it is logged above (so the newest reply sees it in history) and the
         // newest message answers the whole burst once.
+        // Only while the newer message has NOT started (BurstCoalesce): one that already ran never saw this one.
         $mySeq = (int) ($this->incoming['coal_seq'] ?? 0);
         if ($mySeq > 0) {
             $ck = 'coal:' . $this->tenantId . ':' . preg_replace('/[^0-9]/', '', $from);
-            if ((int) \Illuminate\Support\Facades\Cache::get($ck, $mySeq) > $mySeq) {
+            $sk = $ck . ':started';
+            $started = (int) \Illuminate\Support\Facades\Cache::get($sk, 0);
+            $latest = (int) \Illuminate\Support\Facades\Cache::get($ck, $mySeq);
+            if (\App\Support\BurstCoalesce::silent($mySeq, $latest, $started)) {
                 BotTrace::log($this->tenantId, $trace, $from, 'coalesced', 'superseded by a newer message in the burst');
                 return;
             }
+            // Jobs of one chat never run side by side (WithoutOverlapping), so a plain read-then-write is safe.
+            \Illuminate\Support\Facades\Cache::put($sk, \App\Support\BurstCoalesce::started($mySeq, $started, $latest), 300);
         }
 
         // Staff lead claim: "CLAIM 1045" from a configured recipient → atomic first-wins.
