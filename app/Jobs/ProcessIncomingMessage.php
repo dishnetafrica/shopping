@@ -144,6 +144,12 @@ class ProcessIncomingMessage implements ShouldQueue
             // Internet providers: WhatsApp hides this customer's number (an "@lid" chat). Remember that, and
             // the real number when WhatsApp attaches it, so salesperson alerts carry a number they can call.
             \App\Services\Isp\CallbackNumber::fromIncoming($tenant, $convo, $this->incoming);
+            // …and a customer who first writes to a salesperson's own number becomes theirs (Aida's line).
+            try {
+                app(\App\Services\Sales\SalesOwnership::class)->ownerForLine($tenant, $from, (string) ($this->incoming['instance'] ?? ''));
+            } catch (\Throwable $e) {
+                report($e);
+            }
             $body   = trim((string) ($this->incoming['text'] ?? ''));
 
             if ($body !== '' && \App\Services\Comms\Marketing\OptOutKeywords::isStop($body)) {

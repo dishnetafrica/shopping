@@ -145,6 +145,7 @@ class MissedCall
         }
         $instance = (string) (($call['instance'] ?? '') ?: $t->whatsapp_instance);
         $name = CustomerProfile::withoutGlobalScopes()->where('tenant_id', $t->id)->where('phone', $phone)->value('name');
+        $this->owners->ownerForLine($t, $phone, $instance);       // a call to a salesperson's own number: theirs
         $owner = $this->owners->ownerForEnquiry($t, $phone, $name ?: null);
         $opens = IspSalesTurn::opensAt($t);
         $last = Message::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)->where('direction', 'in')

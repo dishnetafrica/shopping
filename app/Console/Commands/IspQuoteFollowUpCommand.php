@@ -130,7 +130,8 @@ class IspQuoteFollowUpCommand extends Command
                 sleep(random_int(30, 90));                  // human rhythm on an unofficial line
             }
             try {
-                $res = $wa->forTenant($t)->sendText((string) $t->whatsapp_instance, $phone, $text);
+                [$chatLine, $sendLine] = $this->lineFor($t, $phone);
+                $res = $wa->forTenant($t)->sendText($sendLine, $phone, $text);
                 if (is_array($res) && (($res['_ok'] ?? true) === false || isset($res['error']))) {
                     BotTrace::log($t->id, 'isp_followup', $phone, 'send_failed', (string) $q->quote_no);
                     continue;
@@ -139,7 +140,7 @@ class IspQuoteFollowUpCommand extends Command
                 BotTrace::log($t->id, 'isp_followup', $phone, 'send_failed', mb_substr($e->getMessage(), 0, 120));
                 continue;
             }
-            MessageLog::record($t->id, $phone, (string) $t->whatsapp_instance, 'out', 'bot', $text, null, null, ['via' => 'quote_followup', 'quote_no' => $q->quote_no, 'touch' => $touch]);
+            MessageLog::record($t->id, $phone, $chatLine, 'out', 'bot', $text, null, null, ['via' => 'quote_followup', 'quote_no' => $q->quote_no, 'touch' => $touch]);
             $meta = (array) ($q->meta ?? []);
             $meta['isp_followups'] = array_merge((array) ($meta['isp_followups'] ?? []), [now()->toIso8601String()]);
             $q->meta = $meta;
@@ -259,7 +260,8 @@ class IspQuoteFollowUpCommand extends Command
                 sleep(random_int(30, 90));                  // human rhythm on an unofficial line
             }
             try {
-                $res = $wa->forTenant($t)->sendText((string) $t->whatsapp_instance, $phone, $text);
+                [$chatLine, $sendLine] = $this->lineFor($t, $phone);
+                $res = $wa->forTenant($t)->sendText($sendLine, $phone, $text);
                 if (is_array($res) && (($res['_ok'] ?? true) === false || isset($res['error']))) {
                     BotTrace::log($t->id, 'isp_followup', $phone, 'chat_send_failed', 'HTTP ' . ($res['_status'] ?? '?'));
                     continue;
@@ -268,7 +270,7 @@ class IspQuoteFollowUpCommand extends Command
                 BotTrace::log($t->id, 'isp_followup', $phone, 'chat_send_failed', mb_substr($e->getMessage(), 0, 120));
                 continue;
             }
-            MessageLog::record($t->id, $phone, (string) $t->whatsapp_instance, 'out', 'bot', $text, null, null, ['via' => 'chat_followup', 'touch' => $touch]);
+            MessageLog::record($t->id, $phone, $chatLine, 'out', 'bot', $text, null, null, ['via' => 'chat_followup', 'touch' => $touch]);
             $convo = Conversation::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)->orderByDesc('last_message_at')->first();
             if ($convo) {
                 $st = (array) ($convo->state ?? []);
@@ -353,5 +355,20 @@ class IspQuoteFollowUpCommand extends Command
         }
 
         return null;
+    }
+
+    /**
+     * The customer's own chat line, and the number to send on (the same routing as a live reply): a customer who
+     * writes to Aida's number hears from Aida's number, not the main line (DishNet, 25 Nov 2026).
+     *
+     * @return array{0:string,1:string} [the chat's number, the number to send from]
+     */
+    private function lineFor(\App\Models\Tenant $t, string $phone): array
+    {
+        $chat = (string) Conversation::withoutGlobalScopes()->where('tenant_id', $t->id)->where('customer_phone', $phone)
+            ->orderByDesc('last_message_at')->value('instance');
+        $chat = $chat !== '' ? $chat : (string) $t->whatsapp_instance;
+
+        return [$chat, \App\Jobs\ProcessIncomingMessage::replyInstance($t, $chat)];
     }
 }

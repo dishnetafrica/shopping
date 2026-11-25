@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class WhatsappChannel extends Model
 {
     protected $fillable = [
-        'tenant_id', 'instance', 'number', 'driver', 'label', 'is_primary', 'active',
+        'tenant_id', 'instance', 'number', 'driver', 'label', 'is_primary', 'active', 'owner_user_id',
     ];
 
     protected $casts = [
@@ -35,7 +35,20 @@ class WhatsappChannel extends Model
         return $row?->tenant_id;
     }
 
-    /** True when this instance is an active channel of the given tenant (reply-on-same-number guard). */
+    /**
+     * The salesperson this number belongs to (owner_user_id), or null. A customer who first writes to it
+     * becomes theirs (SalesOwnership::ownerForLine). Null before the column exists.
+     */
+    public static function ownerIdFor(int $tenantId, string $instance): ?int
+    {
+        static $hasColumn = null;
+        $hasColumn ??= \Illuminate\Support\Facades\Schema::hasColumn('whatsapp_channels', 'owner_user_id');
+        if ($instance === '' || ! $hasColumn) return null;
+        $id = static::query()->where('tenant_id', $tenantId)->where('instance', $instance)->where('active', true)->value('owner_user_id');
+        return $id ? (int) $id : null;
+    }
+
+        /** True when this instance is an active channel of the given tenant (reply-on-same-number guard). */
     public static function isTenantInstance(int $tenantId, string $instance): bool
     {
         if ($instance === '') return false;
