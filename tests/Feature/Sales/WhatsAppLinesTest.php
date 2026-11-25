@@ -39,6 +39,7 @@ class WhatsAppLinesTest extends TestCase
         app(TenantContext::class)->set($this->t->id);
         $this->owner = User::create(['tenant_id' => $this->t->id, 'name' => 'Bhavin', 'role' => 'owner', 'email' => 'o' . $this->t->id . '@t.test', 'password' => 'secret']);
         $this->aida = User::create(['tenant_id' => $this->t->id, 'name' => 'Aida', 'role' => 'sales', 'phone' => '211921443004', 'email' => 'a' . $this->t->id . '@t.test', 'password' => 'secret']);
+        User::create(['tenant_id' => $this->t->id, 'name' => 'Justus', 'role' => 'sales', 'phone' => '211922000001', 'email' => 'j' . $this->t->id . '@t.test', 'password' => 'secret']);
 
         $main = (string) $this->t->whatsapp_instance;
         $evo = Mockery::mock(EvolutionAdmin::class);
@@ -69,8 +70,10 @@ class WhatsAppLinesTest extends TestCase
         $muted = (array) $this->t->fresh()->setting('bot_muted', []);
         $this->assertContains('211921443004', $muted, 'a line of the business never gets bot replies (no two lines answering each other)');
         $this->assertContains('211900000777', $muted, 'what was muted stays muted');
+        $this->assertContains('211922000001', $muted, 'every salesperson is muted, not only the number\'s owner (Codex on #181)');
 
         $screen = json_encode($this->getJson('/api/v1/workspace/settings')->assertOk()->json(), JSON_UNESCAPED_UNICODE);
+        $this->assertSame('211923400000', (string) $this->t->fresh()->whatsapp_number, 'the main line\'s linked number is copied to the business, which the connection card reads (Codex on #181)');
         foreach (['WhatsApp numbers', '+211923400000 · main', '+211921443004', 'Aida', 'Waiting for the phone', 'Connected', 'ABCD-1234 — on that phone', 'Add a WhatsApp number', 'New link code', 'Who a number belongs to'] as $want) {
             $this->assertStringContainsString($want, $screen, $want);
         }

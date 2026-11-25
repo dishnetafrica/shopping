@@ -41,6 +41,10 @@ class WhatsAppLines
                 $c->number = $live;                        // the linked phone is the truth (as the classic screen did)
                 $c->save();
             }
+            if ($live !== '' && $c->is_primary && $live !== (string) $t->whatsapp_number) {
+                $t->whatsapp_number = $live;               // the connection card and contact links read it (Codex on #181)
+                $t->save();
+            }
             $state = $c->driver === 'evolution' ? strtolower((string) ($info['state'] ?? 'unknown')) : 'n/a';
             $owner = $c->owner_user_id ? (string) (User::where('tenant_id', $t->id)->whereKey($c->owner_user_id)->value('name') ?? '') : '';
             $out[] = [
@@ -196,7 +200,9 @@ class WhatsAppLines
     private function muteOwnNumbers(Tenant $t, array $numbers): void
     {
         $d = fn ($p) => preg_replace('/\D/', '', (string) $p) ?? '';
-        $own = array_merge($numbers, WhatsappChannel::where('tenant_id', $t->id)->where('active', true)->pluck('number')->all());
+        // Every salesperson, not only this number's owner: any of them may answer an alert (Codex on #181).
+        $own = array_merge($numbers, WhatsappChannel::where('tenant_id', $t->id)->where('active', true)->pluck('number')->all(),
+            array_map(fn ($u) => (string) $u->phone, $this->owners->salespeople($t)));
         $muted = array_values(array_unique(array_filter(array_map($d, array_merge((array) $t->setting('bot_muted', []), $own)), fn ($p) => strlen($p) >= 9)));
         $t->putSetting('bot_muted', $muted);
     }
