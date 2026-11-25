@@ -49,6 +49,8 @@ Schedule::command('bot:digest')->hourly()->withoutOverlapping()->onOneServer();
 // Reliability: catch dropped WhatsApp connections fast (a down number silently kills orders),
 // nudge a reconnect, and arm the in-panel banner. Also watches Evolution capacity for self-serve growth.
 Schedule::command('wa:watchdog')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+// A line that says "open" but receives messages late (DishNet, 24 Nov 2026: 7 hours) — alert, once per 2 hours.
+Schedule::command('wa:delivery-check')->everyTenMinutes()->withoutOverlapping()->onOneServer();
 
 // Trial + subscription lifecycle: reminders before a trial ends, expiry notice, lapsed-payment dunning.
 // Notifications only — feature enforcement is already automatic via Tenant::effectivePlan().

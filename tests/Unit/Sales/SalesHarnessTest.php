@@ -129,6 +129,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('isp_memory.php');
     }
 
+    public function test_a_line_that_receives_messages_late_is_noticed_without_false_alarms(): void
+    {
+        $this->harness('delivery_lag.php');
+    }
+
     public function test_a_missed_reply_is_recovered_only_when_the_bot_never_finished(): void
     {
         $this->harness('missed_reply.php');

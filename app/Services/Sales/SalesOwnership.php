@@ -84,6 +84,29 @@ class SalesOwnership
     }
 
     /**
+     * A customer who writes to a number that belongs to a salesperson (DishNet, 25 Nov 2026: Aida's own work
+     * number) becomes that salesperson's customer — unless they already have one, who keeps them. Returns the
+     * customer's owner afterwards, or null (a number of the business itself: ownership is decided as before).
+     * The number's owner must still be a salesperson with a WhatsApp number.
+     */
+    public function ownerForLine(Tenant $tenant, string $phone, string $instance): ?User
+    {
+        if (! self::enabled($tenant) || self::digits($phone) === '') {
+            return null;
+        }
+        if ($existing = $this->ownerOf($tenant, $phone)) {
+            return $existing;
+        }
+        $id = \App\Models\WhatsappChannel::ownerIdFor((int) $tenant->id, $instance);
+        $seller = $id ? collect($this->salespeople($tenant))->firstWhere('id', $id) : null;
+        if (! $seller) {
+            return null;
+        }
+        // Two messages at the same moment: only the first write wins.
+        return $this->setOwnerIfUnowned($tenant, $phone, $seller) ? $seller : $this->ownerOf($tenant, $phone);
+    }
+
+        /**
      * May this user act on (reply to, open) this customer? A salesperson may act on their own and on
      * unassigned customers; replying to an unassigned one makes it theirs ($claim).
      *
