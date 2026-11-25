@@ -160,6 +160,35 @@ final class SettingsCapability implements ProcessCapability
             ['Status', $waStatus],
             ['Setup', $waLinked ? 'Use “Manage WhatsApp connection” to re-scan or switch number.' : 'Use “Connect WhatsApp” above to scan the QR code and go live.'],
         ]];
+        // --- WhatsApp numbers: every line, who it belongs to, its status and a link code (DishNet, 25 Nov 2026) ---
+        $lines = [];
+        try {
+            $lines = app(\App\Services\WhatsApp\WhatsAppLines::class)->lines($t);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        $linesCard = ['kind' => 'table', 'title' => 'WhatsApp numbers', 'sub' => count($lines) . ' ' . (count($lines) === 1 ? 'number' : 'numbers'),
+            'columns' => [['label' => 'Number'], ['label' => 'Belongs to'], ['label' => 'Status'], ['label' => 'Link code']],
+            'rows' => array_map(fn ($l) => ['cells' => [
+                ($l['number'] !== '' ? '+' . $l['number'] : '(not linked yet)') . ($l['main'] ? ' · main' : ''),
+                $l['owner'],
+                $l['status'],
+                $l['code'] ? $l['code'] . ' — on that phone: WhatsApp → Linked devices → Link a device → Link with phone number instead' : '—',
+            ], 'link' => null], $lines),
+            'empty' => 'No WhatsApp number yet — use “Connect WhatsApp”.'];
+        $sellers = app(\App\Services\Sales\SalesOwnership::class)->salespeople($t);
+        $ownerCombo = 'combo:' . implode('|', array_merge(['The business'], array_map(fn ($u) => $u->id . ' — ' . $u->name, $sellers)));
+        $lineCombo = 'combo:' . implode('|', array_map(fn ($l) => $l['instance'] . ' — ' . ($l['number'] !== '' ? '+' . $l['number'] : 'not linked') . ' (' . $l['owner'] . ')', $lines));
+        $addNumber = ['key' => 'wa_add_number', 'label' => 'Add a WhatsApp number', 'method' => 'POST', 'endpoint' => $ep . '/wa_add_number', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['number' => 'text', 'label' => 'text', 'belongs_to' => $ownerCombo],
+            'labels' => ['number' => 'WhatsApp number with country code (e.g. 211921443004)', 'label' => 'Name for this number (optional)', 'belongs_to' => 'Belongs to'],
+            'prefill' => ['belongs_to' => 'The business']];
+        $newCode = ['key' => 'wa_new_code', 'label' => 'New link code', 'method' => 'POST', 'endpoint' => $ep . '/wa_new_code', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['line' => $lineCombo], 'labels' => ['line' => 'Number to link']];
+        $lineOwner = ['key' => 'wa_line_owner', 'label' => 'Who a number belongs to', 'method' => 'POST', 'endpoint' => $ep . '/wa_line_owner', 'actor' => 'human', 'tone' => 'default',
+            'schema' => ['line' => $lineCombo, 'belongs_to' => $ownerCombo], 'labels' => ['line' => 'Number', 'belongs_to' => 'Belongs to']];
+        $lineActions = $lines ? [$addNumber, $newCode, $lineOwner] : [$addNumber];
+
         $trunc = fn (string $v, int $n = 60) => $v === '' ? '—' : (mb_strlen($v) > $n ? mb_substr($v, 0, $n) . '…' : $v);
         $botCard = ['kind' => 'dl', 'title' => 'Bot messages', 'rows' => [
             ['Greeting', $trunc($s('bot_greeting'))],
@@ -287,7 +316,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'mode', 'label' => 'Report mode', 'value' => $mode === 'original' ? 'Original' : 'Consolidated'],
                 ['key' => 'terms', 'label' => 'Payment terms', 'value' => ($s('invoice_terms_days', '0') ?: '0') . ' days'],
             ])
-            ->quickActions([$editProfile, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $editAutomation, $addMember])
+            ->quickActions(array_merge([$editProfile, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa], $lineActions, [$editBot, $editAutomation, $addMember]))
             ->overviewCards([$profileCard, $currencyCard, $invoiceCard])
             ->tabSections([
                 'business' => [$profileCard],
@@ -296,7 +325,7 @@ final class SettingsCapability implements ProcessCapability
                 'documents' => [$documentsCard],
                 'inventory' => [$stockCard],
                 'storefront' => [$sfCard],
-                'whatsapp' => [$connCard, $botCard, $automationCard],
+                'whatsapp' => [$connCard, $linesCard, $botCard, $automationCard],
                 'team' => [$teamCard, $teamNote],
             ])
             ->tabs([
@@ -311,7 +340,7 @@ final class SettingsCapability implements ProcessCapability
                 ['key' => 'team', 'label' => 'Team', 'count' => $members->count()],
             ])
             ->actions([$editProfile])
-            ->more([$editStorefront, $editStock, $editAutomation, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa, $editBot, $addMember])
+            ->more(array_merge([$editStorefront, $editStock, $editAutomation, $editCurrency, $editRates, $editInvoicing, $editDocuments, $connectWa], $lineActions, [$editBot, $addMember]))
             ->meta(['capability' => 'settings', 'ttl' => 20, 'layout' => 'record', 'listKey' => 'settings', 'permissions' => []]);
     }
 
@@ -323,11 +352,32 @@ final class SettingsCapability implements ProcessCapability
     public function command(CapabilityContext $ctx, string $action, array $input): array
     {
         $svc = app(SettingsWriteService::class);
+        if (str_starts_with($action, 'wa_')) {
+            return $this->lineCommand($ctx, $action, $input);
+        }
 
         return match ($action) {
             'save_settings' => $svc->apply($ctx->tenant, $input),
             'mode_base' => $svc->apply($ctx->tenant, ['report_currency_mode' => 'base']),
             'mode_original' => $svc->apply($ctx->tenant, ['report_currency_mode' => 'original']),
+            default => ['ok' => false, 'error' => 'unknown_action'],
+        };
+    }
+
+    /** The WhatsApp numbers section: owners and managers only (WhatsAppLines does the work). */
+    private function lineCommand(CapabilityContext $ctx, string $action, array $input): array
+    {
+        if (! \App\Services\Sales\SalesOwnership::canManage($ctx->user)) {
+            return ['ok' => false, 'message' => 'Only an owner or manager can change the WhatsApp numbers.'];
+        }
+        $lines = app(\App\Services\WhatsApp\WhatsAppLines::class);
+        $W = \App\Services\WhatsApp\WhatsAppLines::class;
+        $instance = trim((string) strtok((string) ($input['line'] ?? ''), ' '));
+
+        return match ($action) {
+            'wa_add_number' => $lines->add($ctx->tenant, (string) ($input['number'] ?? ''), (string) ($input['label'] ?? ''), $W::pickedId($input['belongs_to'] ?? null)),
+            'wa_new_code' => $lines->newCode($ctx->tenant, $instance),
+            'wa_line_owner' => $lines->setOwner($ctx->tenant, $instance, $W::pickedId($input['belongs_to'] ?? null)),
             default => ['ok' => false, 'error' => 'unknown_action'],
         };
     }
