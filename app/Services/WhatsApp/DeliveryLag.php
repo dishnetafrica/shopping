@@ -11,8 +11,8 @@ namespace App\Services\WhatsApp;
  * message that it holds but ShopBot never received (no "queued" step for its id) after LATE_MINUTES is
  * late. MIN_MISSING or more in the last WINDOW_HOURS = the line is late: alert the business.
  *
- * Only plain customer text counts — what the webhook always passes on. Stickers, reactions, edits, groups,
- * statuses and our own messages are never counted, so they can never raise a false alarm.
+ * Only plain customer text counts — what the webhook always passes on. Stickers, reactions, edits, disappearing
+ * messages, groups, statuses and our own messages are never counted, so they can never raise a false alarm.
  */
 final class DeliveryLag
 {
@@ -21,6 +21,28 @@ final class DeliveryLag
     public const WINDOW_HOURS = 3;
 
     public const MIN_MISSING = 2;
+
+    /** Most pages of the line's store read per check (Codex on #180: a busy line has more than one). */
+    public const MAX_PAGES = 8;
+
+    /**
+     * PURE. Read another page? Only while the page was full of records and its newest is still inside the
+     * window (the store lists newest first).
+     *
+     * @param list<array> $page
+     */
+    public static function morePages(array $page, int $pageSize, int $now): bool
+    {
+        if (count($page) < $pageSize) {
+            return false;
+        }
+        $newest = 0;
+        foreach ($page as $m) {
+            $newest = max($newest, is_array($m) ? self::seconds($m['messageTimestamp'] ?? null) : 0);
+        }
+
+        return $newest >= $now - self::WINDOW_HOURS * 3600;
+    }
 
     /**
      * PURE. The customers' plain text messages in the line's store.
@@ -39,10 +61,9 @@ final class DeliveryLag
             if ($jid === '' || ! empty($m['key']['fromMe']) || str_contains($jid, '@g.us') || str_contains($jid, 'broadcast') || str_contains($jid, '@newsletter')) {
                 continue;
             }
+            // Exactly what the webhook reads (EvolutionGateway::parseIncoming): top-level text only. A disappearing
+            // message wraps its text, the webhook never passes it on, so it must not count (Codex on #180).
             $msg = is_array($m['message'] ?? null) ? $m['message'] : [];
-            if (isset($msg['ephemeralMessage']['message']) && is_array($msg['ephemeralMessage']['message'])) {
-                $msg = $msg['ephemeralMessage']['message'];
-            }
             $text = $msg['conversation'] ?? $msg['extendedTextMessage']['text'] ?? null;
             $id = (string) ($m['key']['id'] ?? '');
             $ts = self::seconds($m['messageTimestamp'] ?? null);

@@ -58,11 +58,21 @@ class WaDeliveryCheckCommand extends Command
             if ($evo->state($line) !== 'open') {
                 return;                                     // a line that is down is the connection watchdog's job
             }
-            $messages = DeliveryLag::customerTexts($evo->findMessages($line, 1, 250));
+            // Every page that still reaches into the window (Codex on #180: a busy line has more than 250).
+            $records = [];
+            $now = now()->getTimestamp();
+            for ($page = 1; $page <= DeliveryLag::MAX_PAGES; $page++) {
+                $batch = $evo->findMessages($line, $page, 250);
+                $records = array_merge($records, $batch);
+                if (! DeliveryLag::morePages($batch, 250, $now)) {
+                    break;
+                }
+            }
+            $messages = DeliveryLag::customerTexts($records);
             $ids = array_column($messages, 'id');
             $received = $ids ? array_fill_keys(DB::table('bot_events')->where('tenant_id', $t->id)->where('stage', 'queued')
                 ->whereIn('trace', $ids)->pluck('trace')->all(), true) : [];
-            $a = DeliveryLag::assess($messages, $received, now()->getTimestamp());
+            $a = DeliveryLag::assess($messages, $received, $now);
             $this->line("  #{$t->id} {$line}: {$a['checked']} checked, {$a['missing']} not received" . ($a['missing'] ? " (oldest {$a['oldest_min']} min)" : ''));
             if (! DeliveryLag::late($a)) {
                 return;
