@@ -105,7 +105,23 @@ class EvolutionAdmin
         return $out;
     }
 
-    public function disconnect(string $instance): void
+    /**
+     * An 8-character code to link the number by typing it on the phone (WhatsApp → Linked devices → Link a device →
+     * Link with phone number instead) — no QR to scan. Null when Evolution gives none (then scan the QR).
+     */
+    public function pairingCode(string $instance, string $number): ?string
+    {
+        try {
+            $d = $this->http()->get("/instance/connect/{$instance}", ['number' => preg_replace('/\D/', '', $number)])->json() ?? [];
+            $code = (string) (data_get($d, 'pairingCode') ?? data_get($d, 'qrcode.pairingCode') ?? '');
+
+            return $code !== '' ? $code : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+        public function disconnect(string $instance): void
     {
         try {
             $this->http()->delete("/instance/logout/{$instance}");

@@ -134,6 +134,11 @@ class SalesHarnessTest extends TestCase
         $this->harness('delivery_lag.php');
     }
 
+    public function test_the_whatsapp_numbers_section_names_lines_and_reads_choices(): void
+    {
+        $this->harness('wa_lines.php');
+    }
+
     public function test_a_missed_reply_is_recovered_only_when_the_bot_never_finished(): void
     {
         $this->harness('missed_reply.php');
